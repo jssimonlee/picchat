@@ -18,6 +18,7 @@ class NetworkManager {
         this.onPeerJoin = callbacks.onPeerJoin || (() => {});
         this.onPeerLeave = callbacks.onPeerLeave || (() => {});
         this.onCursorMove = callbacks.onCursorMove || (() => {});
+        this.onPresence = callbacks.onPresence || (() => {});
         this.onError = callbacks.onError || (() => {});
         this.onReady = callbacks.onReady || (() => {});
 
@@ -238,8 +239,9 @@ class NetworkManager {
                 if (info) {
                     info.nickname = data.nickname;
                     info.color = data.color;
+                    info.isAway = false;
                 }
-                this.onPeerJoin(fromPeerId, data.nickname, data.color);
+                this.onPeerJoin(fromPeerId, data.nickname, data.color, false);
 
                 // If host, notify all other peers about the new user
                 if (this.isHost) {
@@ -251,10 +253,10 @@ class NetworkManager {
                     }, fromPeerId);
 
                     // Send existing user list to the new peer
-                    const users = [{ nickname: this.nickname, color: this.myColor, peerId: this.myPeerId }];
+                    const users = [{ nickname: this.nickname, color: this.myColor, peerId: this.myPeerId, isAway: false }];
                     this.connections.forEach((info, pid) => {
                         if (pid !== fromPeerId) {
-                            users.push({ nickname: info.nickname, color: info.color, peerId: pid });
+                            users.push({ nickname: info.nickname, color: info.color, peerId: pid, isAway: info.isAway || false });
                         }
                     });
                     const conn = this.connections.get(fromPeerId);
@@ -266,7 +268,7 @@ class NetworkManager {
             }
 
             case 'user-joined':
-                this.onPeerJoin(data.peerId, data.nickname, data.color);
+                this.onPeerJoin(data.peerId, data.nickname, data.color, false);
                 break;
 
             case 'user-left':
@@ -276,7 +278,7 @@ class NetworkManager {
             case 'user-list':
                 if (data.users) {
                     data.users.forEach(u => {
-                        this.onPeerJoin(u.peerId, u.nickname, u.color);
+                        this.onPeerJoin(u.peerId, u.nickname, u.color, u.isAway || false);
                     });
                 }
                 break;
@@ -342,6 +344,16 @@ class NetworkManager {
                 this.onCursorMove(fromPeerId, data.x, data.y, data.nickname, data.color);
                 if (this.isHost) this._broadcast(data, fromPeerId);
                 break;
+
+            case 'presence': {
+                const info = this.connections.get(fromPeerId);
+                if (info) {
+                    info.isAway = data.isAway;
+                }
+                this.onPresence(fromPeerId, data.isAway);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+            }
         }
     }
 
@@ -457,6 +469,17 @@ class NetworkManager {
             nickname: this.nickname,
             color: this.myColor
         };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendPresence(isAway) {
+        const data = { type: 'presence', isAway };
         if (this.isHost) {
             this._broadcast(data);
         } else {

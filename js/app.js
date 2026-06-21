@@ -61,6 +61,7 @@
 
     function init() {
         setupLobbyEvents();
+        setupPresenceTracking();
         // Auto-fill nickname from localStorage
         const savedNick = localStorage.getItem('piccomm-nickname');
         if (savedNick) $nickname.value = savedNick;
@@ -70,6 +71,37 @@
             let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
             if (v.length > 3) v = v.slice(0, 3) + '-' + v.slice(3, 6);
             e.target.value = v;
+        });
+    }
+
+    /* ---------- Presence Focus/Blur Tracking ---------- */
+
+    function setupPresenceTracking() {
+        const $awayOverlay = document.getElementById('awayOverlay');
+        const $btnResume = document.getElementById('btnResume');
+
+        window.addEventListener('blur', () => {
+            if (network && network.myPeerId && !$studio.hidden) {
+                $awayOverlay.hidden = false;
+                network.sendPresence(true);
+                const me = knownParticipants.get(network.myPeerId);
+                if (me) {
+                    me.isAway = true;
+                    updateParticipantsUI();
+                }
+            }
+        });
+
+        $btnResume.addEventListener('click', () => {
+            if (network && network.myPeerId) {
+                $awayOverlay.hidden = true;
+                network.sendPresence(false);
+                const me = knownParticipants.get(network.myPeerId);
+                if (me) {
+                    me.isAway = false;
+                    updateParticipantsUI();
+                }
+            }
         });
     }
 
@@ -199,14 +231,21 @@
                 updateModificationHandles();
                 showToast('📥 캔버스 상태를 동기화했습니다');
             },
-            onPeerJoin: (peerId, peerNickname, color) => {
-                knownParticipants.set(peerId, { nickname: peerNickname, color });
+            onPeerJoin: (peerId, peerNickname, color, isAway) => {
+                knownParticipants.set(peerId, { nickname: peerNickname, color, isAway: isAway || false });
                 updateParticipantsUI();
                 showToast(`🟢 ${peerNickname}님이 참여했습니다`);
 
                 // If host and this is the first peer, enter studio
                 if (network.isHost && $lobby.classList.contains('active')) {
                     enterStudio(network.roomCode);
+                }
+            },
+            onPresence: (peerId, isAway) => {
+                const participant = knownParticipants.get(peerId);
+                if (participant) {
+                    participant.isAway = isAway;
+                    updateParticipantsUI();
                 }
             },
             onPeerLeave: (peerId, peerNickname) => {
@@ -282,7 +321,8 @@
         // Add self to participants
         knownParticipants.set(network.myPeerId, {
             nickname: network.nickname + ' (나)',
-            color: network.myColor
+            color: network.myColor,
+            isAway: false
         });
         updateParticipantsUI();
     }
@@ -1392,10 +1432,14 @@
         $participants.innerHTML = '';
         knownParticipants.forEach((info, peerId) => {
             const tag = document.createElement('div');
-            tag.className = 'participant-tag';
+            tag.className = 'participant-tag' + (info.isAway ? ' away' : '');
+            let nicknameDisplay = escapeHtml(info.nickname);
+            if (info.isAway) {
+                nicknameDisplay += ' (자리비움)';
+            }
             tag.innerHTML = `
-                <span class="participant-dot" style="background:${info.color}"></span>
-                <span>${escapeHtml(info.nickname)}</span>
+                <span class="participant-dot" style="background:${info.isAway ? '#777' : info.color}"></span>
+                <span>${nicknameDisplay}</span>
             `;
             $participants.appendChild(tag);
         });
@@ -1447,6 +1491,9 @@
             network = null;
         }
         canvas = null;
+
+        // Hide away overlay if active
+        document.getElementById('awayOverlay').hidden = true;
 
         // Clear state
         knownParticipants.clear();

@@ -189,6 +189,17 @@
             </div>
             <div class="setting-divider"></div>
             <div class="setting-item">
+                <label>크기 <span id="sizeValue" class="setting-value">3</span></label>
+                <input type="range" id="sizeSlider" min="1" max="50" value="3" class="slider">
+                <div class="size-preview"><div id="sizePreviewDot" class="size-dot"></div></div>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+                <label>투명도 <span id="opacityValue" class="setting-value">100%</span></label>
+                <input type="range" id="opacitySlider" min="5" max="100" value="100" class="slider">
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
                 <label>배경</label>
                 <div class="color-section">
                     <input type="color" id="bgColorPicker" value="#f4eedb" class="color-input">
@@ -200,17 +211,15 @@
                     </div>
                 </div>
             </div>
-            <div class="setting-divider"></div>
-            <div class="setting-item">
-                <label>크기 <span id="sizeValue" class="setting-value">3</span></label>
-                <input type="range" id="sizeSlider" min="1" max="50" value="3" class="slider">
-                <div class="size-preview"><div id="sizePreviewDot" class="size-dot"></div></div>
-            </div>
-            <div class="setting-divider"></div>
-            <div class="setting-item">
-                <label>투명도 <span id="opacityValue" class="setting-value">100%</span></label>
-                <input type="range" id="opacitySlider" min="5" max="100" value="100" class="slider">
-            </div>
+        </div>
+    </div>
+
+    <!-- Away Overlay -->
+    <div id="awayOverlay" class="away-overlay" hidden>
+        <div class="away-content">
+            <h2>💤 자리비움 중</h2>
+            <p>대화가 일시 중지되었습니다. 다시 시작하려면 아래 버튼을 누르세요.</p>
+            <button id="btnResume" class="btn-resume">다시 시작하기</button>
         </div>
     </div>
 
