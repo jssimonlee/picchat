@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>PicComm - 그림으로 대화하기</title>
+    <meta name="description" content="친구와 실시간으로 그림을 그리며 대화하는 협업 드로잉 앱">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ===== LOBBY SCREEN ===== -->
+    <div id="lobby" class="screen active">
+        <div class="lobby-bg">
+            <div class="blob blob-1"></div>
+            <div class="blob blob-2"></div>
+            <div class="blob blob-3"></div>
+        </div>
+        <div class="lobby-card">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                        <defs>
+                            <linearGradient id="logoGrad" x1="0" y1="0" x2="48" y2="48">
+                                <stop offset="0%" stop-color="#7c5cff"/>
+                                <stop offset="100%" stop-color="#00d4ff"/>
+                            </linearGradient>
+                        </defs>
+                        <rect x="4" y="4" width="40" height="40" rx="10" fill="url(#logoGrad)" opacity="0.15"/>
+                        <path d="M14 34 C14 34 16 18 22 16 C28 14 24 28 30 26 C36 24 34 34 34 34" stroke="url(#logoGrad)" stroke-width="3" stroke-linecap="round" fill="none"/>
+                        <circle cx="16" cy="16" r="3" fill="#ff6b9d"/>
+                        <circle cx="34" cy="14" r="2.5" fill="#00d4ff"/>
+                        <circle cx="26" cy="36" r="2" fill="#7c5cff"/>
+                    </svg>
+                </div>
+                <h1>PicComm</h1>
+                <p class="tagline">그림으로 대화하기</p>
+            </div>
+
+            <div class="input-group">
+                <label for="nickname">닉네임</label>
+                <input type="text" id="nickname" placeholder="이름을 입력하세요" maxlength="12" autocomplete="off">
+            </div>
+
+            <div class="lobby-actions">
+                <button id="btnCreateRoom" class="btn btn-primary">
+                    <span class="btn-icon">✦</span>
+                    새 방 만들기
+                </button>
+
+                <div id="roomCreated" class="room-created" hidden>
+                    <p class="room-created-label">방 코드를 친구에게 공유하세요!</p>
+                    <div class="room-code-display">
+                        <span id="roomCode"></span>
+                        <button id="btnCopyCode" class="btn-copy" title="복사">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
+                    <p class="waiting-text">
+                        친구를 기다리는 중<span class="dot-animation">...</span>
+                    </p>
+                </div>
+
+                <div class="divider"><span>또는</span></div>
+
+                <div class="join-section">
+                    <div class="input-group">
+                        <label for="joinCode">방 코드</label>
+                        <input type="text" id="joinCode" placeholder="방 코드를 입력하세요" maxlength="7" autocomplete="off">
+                    </div>
+                    <button id="btnJoinRoom" class="btn btn-secondary">참여하기</button>
+                </div>
+            </div>
+
+            <div id="lobbyStatus" class="status-message" hidden></div>
+        </div>
+    </div>
+
+    <!-- ===== STUDIO SCREEN ===== -->
+    <div id="studio" class="screen" hidden>
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <span class="app-name">🎨 PicComm</span>
+                <div class="room-badge" id="studioRoomBadge">
+                    <span id="studioRoomCode"></span>
+                    <button id="btnCopyCode2" class="btn-copy-sm" title="코드 복사">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="top-bar-center">
+                <div id="participants" class="participants"></div>
+            </div>
+            <div class="top-bar-right">
+                <button id="btnLeaveRoom" class="btn-leave" title="나가기">나가기</button>
+            </div>
+        </header>
+
+        <!-- Canvas Area -->
+        <div id="canvasContainer" class="canvas-container">
+            <canvas id="mainCanvas"></canvas>
+            <canvas id="tempCanvas"></canvas>
+            <div id="cursors" class="cursors-layer"></div>
+            <textarea id="textInput" class="text-overlay-input" hidden></textarea>
+        </div>
+
+        <!-- Floating Toolbar (Left) -->
+        <aside class="toolbar" id="toolbar">
+            <div class="tool-section">
+                <button class="tool-btn active" data-tool="pen" title="펜 (P)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                </button>
+                <button class="tool-btn" data-tool="brush" title="브러시 (B)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.37 2.63a2.12 2.12 0 0 1 3 3L14 13l-4 1 1-4Z"/><path d="M9 14.5A3.5 3.5 0 0 0 5.5 18c-1.2 0-2.6.5-3.5 1 .9-2.4 2.9-4 5.5-4Z"/></svg>
+                </button>
+                <button class="tool-btn" data-tool="eraser" title="지우개 (E)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section">
+                <button class="tool-btn" data-tool="line" title="직선 (L)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+                </button>
+                <button class="tool-btn" data-tool="rectangle" title="사각형 (R)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                </button>
+                <button class="tool-btn" data-tool="circle" title="원 (C)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                </button>
+                <button class="tool-btn" data-tool="arrow" title="화살표 (A)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="10 5 19 5 19 14"/></svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section">
+                <button class="tool-btn" data-tool="text" title="텍스트 (T)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9.5" y1="20" x2="14.5" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section">
+                <button class="tool-btn" id="btnUploadImage" title="이미지 업로드 (I)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                </button>
+                <input type="file" id="imageInput" accept="image/*" hidden>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section">
+                <button class="tool-btn" id="btnUndo" title="실행취소 (Ctrl+Z)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                </button>
+                <button class="tool-btn" id="btnRedo" title="다시실행 (Ctrl+Y)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+                </button>
+            </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section">
+                <button class="tool-btn" id="btnClear" title="전체 지우기">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+                <button class="tool-btn" id="btnDownload" title="다운로드 (Ctrl+S)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Settings Panel (Bottom) -->
+        <div class="settings-panel" id="settingsPanel">
+            <div class="setting-item">
+                <label>색상</label>
+                <div class="color-section">
+                    <input type="color" id="colorPicker" value="#ffffff" class="color-input">
+                    <div class="color-presets" id="colorPresets">
+                        <button class="color-dot active" data-color="#ffffff" style="background:#ffffff" title="흰색"></button>
+                        <button class="color-dot" data-color="#ff4757" style="background:#ff4757" title="빨강"></button>
+                        <button class="color-dot" data-color="#ff7f50" style="background:#ff7f50" title="주황"></button>
+                        <button class="color-dot" data-color="#ffd32a" style="background:#ffd32a" title="노랑"></button>
+                        <button class="color-dot" data-color="#2ed573" style="background:#2ed573" title="초록"></button>
+                        <button class="color-dot" data-color="#1e90ff" style="background:#1e90ff" title="파랑"></button>
+                        <button class="color-dot" data-color="#a855f7" style="background:#a855f7" title="보라"></button>
+                        <button class="color-dot" data-color="#ff6b9d" style="background:#ff6b9d" title="핑크"></button>
+                        <button class="color-dot" data-color="#000000" style="background:#000000;border:1px solid #555" title="검정"></button>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+                <label>배경</label>
+                <div class="color-section">
+                    <input type="color" id="bgColorPicker" value="#1a1a2e" class="color-input">
+                    <div class="color-presets" id="bgColorPresets">
+                        <button class="color-dot active" data-color="#1a1a2e" style="background:#1a1a2e; color:#1a1a2e; border:1px solid #555" title="다크블루"></button>
+                        <button class="color-dot" data-color="#ffffff" style="background:#ffffff; color:#ffffff; border:1px solid #ddd" title="흰색"></button>
+                        <button class="color-dot" data-color="#000000" style="background:#000000; color:#000000; border:1px solid #555" title="검정"></button>
+                        <button class="color-dot" data-color="#f4eedb" style="background:#f4eedb; color:#f4eedb; border:1px solid #ddd" title="갱지색"></button>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+                <label>크기 <span id="sizeValue" class="setting-value">3</span></label>
+                <input type="range" id="sizeSlider" min="1" max="50" value="3" class="slider">
+                <div class="size-preview"><div id="sizePreviewDot" class="size-dot"></div></div>
+            </div>
+            <div class="setting-divider"></div>
+            <div class="setting-item">
+                <label>투명도 <span id="opacityValue" class="setting-value">100%</span></label>
+                <input type="range" id="opacitySlider" min="5" max="100" value="100" class="slider">
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/network.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
