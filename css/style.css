@@ -771,8 +771,8 @@ input, button, textarea {
     height: 28px;
 }
 .size-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--text-primary);
     transition: all 0.15s;

@@ -463,12 +463,18 @@
 
         // Download
         $btnDownload.addEventListener('click', () => {
+            isSelectingFile = true;
             const dataUrl = canvas.exportImage();
             const link = document.createElement('a');
             link.download = `piccomm-${Date.now()}.png`;
             link.href = dataUrl;
             link.click();
             showToast('💾 이미지가 다운로드되었습니다');
+
+            // Clear flag after 2 seconds as fallback for silent downloads
+            setTimeout(() => {
+                isSelectingFile = false;
+            }, 2000);
         });
 
         // Image Upload

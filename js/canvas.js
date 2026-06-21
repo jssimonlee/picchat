@@ -26,7 +26,7 @@ class DrawingCanvas {
         // Current tool settings
         this.currentTool = 'pen';
         this.currentColor = '#000000';
-        this.currentSize = 7;
+        this.currentSize = 6;
         this.currentOpacity = 1;
 
         // Drawing state
