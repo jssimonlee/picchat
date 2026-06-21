@@ -504,11 +504,11 @@ input, button, textarea {
     flex: 1;
     position: relative;
     overflow: hidden;
-    background: #1a1a2e;
+    background: #f4eedb;
     /* Grid pattern */
     background-image:
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+        linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px);
     background-size: 40px 40px;
 }
 
@@ -527,6 +527,9 @@ input, button, textarea {
 
 #mainCanvas {
     pointer-events: none;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.12); /* Soft shadow for depth */
+    border-left: 1px solid rgba(0, 0, 0, 0.08); /* Left boundary */
+    border-right: 1px solid rgba(0, 0, 0, 0.08); /* Right boundary */
 }
 
 /* Cursors Layer */

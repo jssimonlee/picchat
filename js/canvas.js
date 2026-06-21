@@ -19,7 +19,7 @@ class DrawingCanvas {
         this.redoStack = [];
         this.backgroundImage = null;   // HTMLImageElement
         this.backgroundDataUrl = null; // For sync
-        this.backgroundColor = '#1a1a2e';
+        this.backgroundColor = '#f4eedb';
         this.imageCache = new Map();
         this.editingActionId = null;
 
@@ -569,7 +569,7 @@ class DrawingCanvas {
     async loadState(state) {
         this.actions = [];
         this.redoStack = [];
-        this.backgroundColor = state.backgroundColor || '#1a1a2e';
+        this.backgroundColor = state.backgroundColor || '#f4eedb';
 
         if (state.actions) {
             this.actions = [...state.actions];
