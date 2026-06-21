@@ -1033,3 +1033,35 @@ input, button, textarea {
 .btn-menu-close:hover {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* ========== TEXT PLACER & EDITING ========== */
+.placer-text-preview {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    white-space: pre-wrap;
+    word-break: break-all;
+    text-align: left;
+    user-select: none;
+    pointer-events: none;
+}
+
+.inline-text-editor {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    background: rgba(30, 30, 46, 0.95);
+    border: 2px solid #00d4ff;
+    outline: none;
+    resize: none;
+    padding: 4px;
+    z-index: 10;
+    white-space: pre-wrap;
+    word-break: break-all;
+}

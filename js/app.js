@@ -156,19 +156,19 @@
         network = new NetworkManager({
             onAction: (action) => {
                 canvas.replayAction(action);
-                updateImageHandles();
+                updateModificationHandles();
             },
             onUndo: () => {
                 canvas.undo();
-                updateImageHandles();
+                updateModificationHandles();
             },
             onRedo: () => {
                 canvas.redo();
-                updateImageHandles();
+                updateModificationHandles();
             },
             onClear: () => {
                 canvas.clearAll();
-                updateImageHandles();
+                updateModificationHandles();
                 showToast('🗑️ 캔버스가 초기화되었습니다');
             },
             onBackground: async (dataUrl) => {
@@ -184,11 +184,11 @@
             },
             onUpdateAction: (action) => {
                 canvas.updateAction(action);
-                updateImageHandles();
+                updateModificationHandles();
             },
             onDeleteAction: (id) => {
                 canvas.deleteAction(id);
-                updateImageHandles();
+                updateModificationHandles();
             },
             onStateReceived: async (state) => {
                 await canvas.loadState(state);
@@ -196,7 +196,7 @@
                 $bgColorPicker.value = bg;
                 updateActiveBgColorDot(bg);
                 $canvasContainer.style.backgroundColor = bg;
-                updateImageHandles();
+                updateModificationHandles();
                 showToast('📥 캔버스 상태를 동기화했습니다');
             },
             onPeerJoin: (peerId, peerNickname, color) => {
@@ -250,7 +250,7 @@
             textInputEl: $textInput,
             onAction: (action) => {
                 network.sendAction(action);
-                updateImageHandles();
+                updateModificationHandles();
             },
             onCursorMove: (x, y) => {
                 // Throttle cursor updates to ~30fps
@@ -266,7 +266,7 @@
         canvas.resize();
         window.addEventListener('resize', () => {
             canvas.resize();
-            updateImageHandles();
+            updateModificationHandles();
         });
 
         // Setup initial background color UI state
@@ -709,9 +709,31 @@
 
     /* ---------- Placed Image Modification Handles & Edit Menu ---------- */
 
+    /* ---------- Placed Image & Text Modification Handles & Edit Menu ---------- */
+
     let activeEditMenu = null;
 
-    function updateImageHandles() {
+    function getTextSize(text, fontSize) {
+        if (!canvas || !canvas.mainCtx) return { width: 100, height: 30 };
+        const ctx = canvas.mainCtx;
+        ctx.save();
+        ctx.font = `${fontSize}px 'Inter', sans-serif`;
+        ctx.textBaseline = 'top';
+        const lines = (text || '').split('\n');
+        let maxWidth = 0;
+        lines.forEach(line => {
+            const metrics = ctx.measureText(line);
+            if (metrics.width > maxWidth) {
+                maxWidth = metrics.width;
+            }
+        });
+        const lineHeight = fontSize * 1.3;
+        const height = lines.length * lineHeight;
+        ctx.restore();
+        return { width: maxWidth, height };
+    }
+
+    function updateModificationHandles() {
         // Remove existing handles
         document.querySelectorAll('.image-handle-el').forEach(el => el.remove());
         if (activeEditMenu) {
@@ -721,28 +743,40 @@
 
         if (!canvas || !network) return;
 
-        // Loop through all image actions
+        // Loop through all image and text actions
         canvas.actions.forEach(action => {
-            if (action.type !== 'image') return;
+            if (action.type !== 'image' && action.type !== 'text') return;
 
-            // Compute screen position of top-right corner of image
+            // Compute screen position of top-right corner of action
             const rect = $tempCanvas.getBoundingClientRect();
             const containerRect = $canvasContainer.getBoundingClientRect();
 
             const scaleX = rect.width / canvas.CANVAS_WIDTH;
             const scaleY = rect.height / canvas.CANVAS_HEIGHT;
 
-            const imgRight = action.x + action.width;
-            const imgTop = action.y;
+            let width, height;
+            if (action.type === 'image') {
+                width = action.width;
+                height = action.height;
+            } else {
+                const size = getTextSize(action.text, action.fontSize || 24);
+                width = size.width;
+                height = size.height;
+            }
 
-            const screenX = imgRight * scaleX + (rect.left - containerRect.left);
-            const screenY = imgTop * scaleY + (rect.top - containerRect.top);
+            const right = action.x + width;
+            const top = action.y;
+
+            const screenX = right * scaleX + (rect.left - containerRect.left);
+            const screenY = top * scaleY + (rect.top - containerRect.top);
 
             // Create handle element
             const $handle = document.createElement('div');
             $handle.className = 'image-handle-el';
             $handle.dataset.actionId = action.id;
-            $handle.title = '드래그: 이동 / 클릭: 크기·삭제 메뉴';
+            $handle.title = action.type === 'image' 
+                ? '드래그: 이동 / 클릭: 크기·삭제 메뉴' 
+                : '드래그: 이동 / 클릭: 크기·내용수정·삭제 메뉴';
             $handle.innerHTML = `<span class="image-handle-icon">✥</span>`;
 
             // Position it
@@ -848,10 +882,17 @@
             const id = $handle.dataset.actionId;
             const action = canvas.actions.find(a => a.id === id);
             if (action) {
-                const imgRight = action.x + action.width;
-                const imgTop = action.y;
-                const screenX = imgRight * scaleX + (rect.left - containerRect.left);
-                const screenY = imgTop * scaleY + (rect.top - containerRect.top);
+                let width;
+                if (action.type === 'image') {
+                    width = action.width;
+                } else {
+                    const size = getTextSize(action.text, action.fontSize || 24);
+                    width = size.width;
+                }
+                const right = action.x + width;
+                const top = action.y;
+                const screenX = right * scaleX + (rect.left - containerRect.left);
+                const screenY = top * scaleY + (rect.top - containerRect.top);
                 $handle.style.left = screenX + 'px';
                 $handle.style.top = screenY + 'px';
             }
@@ -862,11 +903,11 @@
         // Clear active menu/placer if any
         if (activeEditMenu) activeEditMenu.remove();
 
-        // 1. Hide the original image on canvas by setting canvas.editingActionId
+        // 1. Hide the original action on canvas by setting canvas.editingActionId
         canvas.editingActionId = action.id;
         canvas.redrawAll();
 
-        // 2. Hide all image edit handle icons during editing
+        // 2. Hide all edit handle icons during editing
         document.querySelectorAll('.image-handle-el').forEach(el => el.style.display = 'none');
 
         // 3. Create the resizable/draggable editor wrapper
@@ -874,11 +915,55 @@
         $editor.id = 'imageEditor';
         $editor.className = 'image-placer'; // Reuse styling of image-placer!
 
-        // Add the image
-        const $img = document.createElement('img');
-        $img.src = action.dataUrl;
-        $img.className = 'placer-img';
-        $editor.appendChild($img);
+        // Map logical canvas coordinates to screen coordinates relative to container
+        const rect = $tempCanvas.getBoundingClientRect();
+        const containerRect = $canvasContainer.getBoundingClientRect();
+
+        const scaleX = rect.width / canvas.CANVAS_WIDTH;
+        const scaleY = rect.height / canvas.CANVAS_HEIGHT;
+
+        // Calculate dimensions
+        let actionWidth, actionHeight;
+        let $textDiv = null;
+
+        if (action.type === 'image') {
+            actionWidth = action.width;
+            actionHeight = action.height;
+
+            // Add the image
+            const $img = document.createElement('img');
+            $img.src = action.dataUrl;
+            $img.className = 'placer-img';
+            $editor.appendChild($img);
+        } else {
+            // Text action
+            const startTextSize = getTextSize(action.text, action.fontSize || 24);
+            actionWidth = startTextSize.width;
+            actionHeight = startTextSize.height;
+
+            $textDiv = document.createElement('div');
+            $textDiv.className = 'placer-text-preview';
+            $textDiv.textContent = action.text;
+            
+            // Set styles to match canvas drawing
+            $textDiv.style.position = 'absolute';
+            $textDiv.style.left = '0';
+            $textDiv.style.top = '0';
+            $textDiv.style.width = '100%';
+            $textDiv.style.height = '100%';
+            $textDiv.style.boxSizing = 'border-box';
+            $textDiv.style.color = action.color;
+            $textDiv.style.fontSize = (action.fontSize || 24) * scaleY + 'px';
+            $textDiv.style.fontFamily = "'Inter', sans-serif";
+            $textDiv.style.lineHeight = '1.3';
+            $textDiv.style.whiteSpace = 'pre-wrap';
+            $textDiv.style.wordBreak = 'break-all';
+            $textDiv.style.textAlign = 'left';
+            $textDiv.style.userSelect = 'none';
+            $textDiv.style.pointerEvents = 'none';
+            
+            $editor.appendChild($textDiv);
+        }
 
         // Add resize handles
         const handles = ['nw', 'ne', 'sw', 'se'];
@@ -888,13 +973,28 @@
             $editor.appendChild($h);
         });
 
-        // Add toolbar with "적용" (Apply), "삭제" (Delete), "취소" (Cancel)
+        // Add toolbar with "적용" (Apply), "수정" (Edit Content if Text), "삭제" (Delete), "취소" (Cancel)
         const $toolbar = document.createElement('div');
         $toolbar.className = 'placer-toolbar';
         
         const $btnApply = document.createElement('button');
         $btnApply.className = 'btn-placer btn-placer-apply';
         $btnApply.textContent = '적용';
+
+        let $btnEditText = null;
+        if (action.type === 'text') {
+            $btnEditText = document.createElement('button');
+            $btnEditText.className = 'btn-placer btn-placer-edit';
+            $btnEditText.textContent = '수정';
+            $btnEditText.style.background = 'linear-gradient(135deg, #00d4ff 0%, #00bc8c 100%)';
+            $btnEditText.style.color = '#fff';
+            $btnEditText.style.borderRadius = '6px';
+            $btnEditText.style.padding = '6px 12px';
+            $btnEditText.style.fontSize = '12px';
+            $btnEditText.style.fontWeight = '600';
+            $btnEditText.style.cursor = 'pointer';
+            $btnEditText.style.border = 'none';
+        }
 
         const $btnDelete = document.createElement('button');
         $btnDelete.className = 'btn-placer btn-menu-delete'; // Red styling for delete
@@ -910,19 +1010,15 @@
         $btnCancel.textContent = '취소';
 
         $toolbar.appendChild($btnApply);
+        if ($btnEditText) {
+            $toolbar.appendChild($btnEditText);
+        }
         $toolbar.appendChild($btnDelete);
         $toolbar.appendChild($btnCancel);
         $editor.appendChild($toolbar);
 
-        // Map logical canvas coordinates to screen coordinates relative to container
-        const rect = $tempCanvas.getBoundingClientRect();
-        const containerRect = $canvasContainer.getBoundingClientRect();
-
-        const scaleX = rect.width / canvas.CANVAS_WIDTH;
-        const scaleY = rect.height / canvas.CANVAS_HEIGHT;
-
-        const startWidth = action.width * scaleX;
-        const startHeight = action.height * scaleY;
+        let startWidth = actionWidth * scaleX;
+        let startHeight = actionHeight * scaleY;
         const startLeft = action.x * scaleX + (rect.left - containerRect.left);
         const startTop = action.y * scaleY + (rect.top - containerRect.top);
 
@@ -940,7 +1036,7 @@
         let activeHandle = null;
         let startPointerX, startPointerY;
         let initW, initH, initL, initT;
-        const imgAspect = action.height / action.width;
+        let imgAspect = actionHeight / actionWidth;
 
         const onPointerDown = (clientX, clientY, target) => {
             if (target.classList.contains('placer-handle')) {
@@ -954,7 +1050,7 @@
                 initT = parseFloat(getComputedStyle($editor).top);
                 return true;
             }
-            if (target === $editor || target === $img) {
+            if (target === $editor || target === $textDiv || target.classList.contains('placer-img')) {
                 isDragging = true;
                 startPointerX = clientX;
                 startPointerY = clientY;
@@ -1015,6 +1111,13 @@
                 if (newWidth > 30) {
                     $editor.style.width = newWidth + 'px';
                     $editor.style.height = (newWidth * imgAspect) + 'px';
+
+                    if (action.type === 'text') {
+                        // Calculate new font size
+                        const currentScale = newWidth / startWidth;
+                        const newFontSize = (action.fontSize || 24) * currentScale;
+                        $textDiv.style.fontSize = newFontSize * scaleY + 'px';
+                    }
                 }
             }
         };
@@ -1051,8 +1154,14 @@
 
             action.x = (editorRect.left - currentRect.left) * cScaleX;
             action.y = (editorRect.top - currentRect.top) * cScaleY;
-            action.width = editorRect.width * cScaleX;
-            action.height = editorRect.height * cScaleY;
+
+            if (action.type === 'text') {
+                const currentScale = editorRect.width / startWidth;
+                action.fontSize = Math.max(10, Math.round((action.fontSize || 24) * currentScale));
+            } else {
+                action.width = editorRect.width * cScaleX;
+                action.height = editorRect.height * cScaleY;
+            }
 
             // Commit change
             canvas.editingActionId = null;
@@ -1062,7 +1171,7 @@
             network.sendUpdateAction(action);
 
             // Re-render handles
-            updateImageHandles();
+            updateModificationHandles();
             $editor.remove();
             activeEditMenu = null;
         };
@@ -1072,13 +1181,14 @@
 
         // Delete click
         $btnDelete.addEventListener('click', () => {
-            if (confirm('이 이미지를 삭제하시겠습니까?')) {
+            const confirmMsg = action.type === 'text' ? '이 텍스트를 삭제하시겠습니까?' : '이 이미지를 삭제하시겠습니까?';
+            if (confirm(confirmMsg)) {
                 cleanupListeners();
                 canvas.editingActionId = null;
                 canvas.deleteAction(action.id);
                 network.sendDeleteAction(action.id);
                 
-                updateImageHandles();
+                updateModificationHandles();
                 $editor.remove();
                 activeEditMenu = null;
             }
@@ -1090,14 +1200,14 @@
             canvas.editingActionId = null;
             canvas.redrawAll();
 
-            updateImageHandles();
+            updateModificationHandles();
             $editor.remove();
             activeEditMenu = null;
         });
 
         // Handle clicking outside to apply changes automatically
         const onOutsideClick = (e) => {
-            if (!$editor.contains(e.target)) {
+            if (!$editor.contains(e.target) && !e.target.closest('.inline-text-editor')) {
                 applyChanges();
             }
         };
@@ -1105,6 +1215,97 @@
         setTimeout(() => {
             document.addEventListener('mousedown', onOutsideClick);
         }, 50);
+
+        // Text editing feature
+        if ($btnEditText) {
+            $btnEditText.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if ($editor.querySelector('.inline-text-editor')) return;
+
+                const $textarea = document.createElement('textarea');
+                $textarea.className = 'inline-text-editor';
+                $textarea.value = action.text;
+                
+                // Style properties
+                $textarea.style.position = 'absolute';
+                $textarea.style.left = '0';
+                $textarea.style.top = '0';
+                $textarea.style.width = '100%';
+                $textarea.style.height = '100%';
+                $textarea.style.boxSizing = 'border-box';
+                $textarea.style.background = 'rgba(30, 30, 46, 0.95)';
+                $textarea.style.color = action.color;
+                
+                const currentFontSize = parseFloat($textDiv.style.fontSize);
+                $textarea.style.fontSize = currentFontSize + 'px';
+                $textarea.style.fontFamily = "'Inter', sans-serif";
+                $textarea.style.lineHeight = '1.3';
+                $textarea.style.border = '2px solid #00d4ff';
+                $textarea.style.outline = 'none';
+                $textarea.style.resize = 'none';
+                $textarea.style.padding = '4px';
+                $textarea.style.zIndex = '10';
+
+                $textDiv.style.visibility = 'hidden';
+                $editor.appendChild($textarea);
+                $textarea.focus();
+
+                $textarea.addEventListener('mousedown', (ev) => ev.stopPropagation());
+                $textarea.addEventListener('touchstart', (ev) => ev.stopPropagation());
+
+                $textarea.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter' && !ev.shiftKey) {
+                        ev.preventDefault();
+                        commitTextEdit();
+                    } else if (ev.key === 'Escape') {
+                        ev.preventDefault();
+                        cancelTextEdit();
+                    }
+                });
+
+                $textarea.addEventListener('blur', () => {
+                    setTimeout(commitTextEdit, 100);
+                });
+
+                function commitTextEdit() {
+                    if (!$textarea.parentElement) return;
+                    const newText = $textarea.value.trim();
+                    if (newText) {
+                        action.text = newText;
+                        $textDiv.textContent = newText;
+                        
+                        const currentScale = parseFloat($editor.style.width) / startWidth;
+                        const currentFontSizeLogical = (action.fontSize || 24) * currentScale;
+                        
+                        const newSizeLogical = getTextSize(newText, currentFontSizeLogical);
+                        
+                        actionWidth = newSizeLogical.width;
+                        actionHeight = newSizeLogical.height;
+                        imgAspect = actionHeight / actionWidth;
+                        
+                        const rect = $tempCanvas.getBoundingClientRect();
+                        const scaleX = rect.width / canvas.CANVAS_WIDTH;
+                        const scaleY = rect.height / canvas.CANVAS_HEIGHT;
+                        
+                        const newW = actionWidth * scaleX;
+                        const newH = actionHeight * scaleY;
+                        $editor.style.width = newW + 'px';
+                        $editor.style.height = newH + 'px';
+                        
+                        action.fontSize = currentFontSizeLogical;
+                        startWidth = newW;
+                        
+                        $textDiv.style.fontSize = currentFontSizeLogical * scaleY + 'px';
+                    }
+                    cancelTextEdit();
+                }
+
+                function cancelTextEdit() {
+                    $textarea.remove();
+                    $textDiv.style.visibility = 'visible';
+                }
+            });
+        }
     }
 
     /* ---------- Keyboard Shortcuts ---------- */
