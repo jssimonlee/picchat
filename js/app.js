@@ -105,6 +105,33 @@
         });
     }
 
+    function showCustomConfirm(message, title = '확인') {
+        return new Promise((resolve) => {
+            const $modal = document.getElementById('confirmModal');
+            const $title = document.getElementById('confirmModalTitle');
+            const $msg = document.getElementById('confirmModalMessage');
+            const $btnOk = document.getElementById('btnConfirmOk');
+            const $btnCancel = document.getElementById('btnConfirmCancel');
+
+            $title.textContent = title;
+            $msg.textContent = message;
+            $modal.hidden = false;
+
+            const cleanup = (value) => {
+                $modal.hidden = true;
+                $btnOk.removeEventListener('click', onOk);
+                $btnCancel.removeEventListener('click', onCancel);
+                resolve(value);
+            };
+
+            const onOk = () => cleanup(true);
+            const onCancel = () => cleanup(false);
+
+            $btnOk.addEventListener('click', onOk);
+            $btnCancel.addEventListener('click', onCancel);
+        });
+    }
+
     /* ---------- Lobby Events ---------- */
 
     function setupLobbyEvents() {
@@ -412,8 +439,8 @@
         });
 
         // Clear
-        $btnClear.addEventListener('click', () => {
-            if (confirm('캔버스를 전체 지우시겠습니까?')) {
+        $btnClear.addEventListener('click', async () => {
+            if (await showCustomConfirm('캔버스를 전체 지우시겠습니까?')) {
                 canvas.clearAll();
                 network.sendClear();
                 showToast('🗑️ 캔버스가 초기화되었습니다');
@@ -435,8 +462,8 @@
         $imageInput.addEventListener('change', handleImageUpload);
 
         // Leave room
-        $btnLeaveRoom.addEventListener('click', () => {
-            if (confirm('방을 나가시겠습니까?')) {
+        $btnLeaveRoom.addEventListener('click', async () => {
+            if (await showCustomConfirm('방을 나가시겠습니까?')) {
                 leaveRoom();
             }
         });
@@ -1220,9 +1247,9 @@
         $btnApply.addEventListener('click', applyChanges);
 
         // Delete click
-        $btnDelete.addEventListener('click', () => {
+        $btnDelete.addEventListener('click', async () => {
             const confirmMsg = action.type === 'text' ? '이 텍스트를 삭제하시겠습니까?' : '이 이미지를 삭제하시겠습니까?';
-            if (confirm(confirmMsg)) {
+            if (await showCustomConfirm(confirmMsg)) {
                 cleanupListeners();
                 canvas.editingActionId = null;
                 canvas.deleteAction(action.id);
