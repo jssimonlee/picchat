@@ -73,6 +73,13 @@
             if (v.length > 3) v = v.slice(0, 3) + '-' + v.slice(3, 6);
             e.target.value = v;
         });
+
+        // Clean disconnect on tab close/reload
+        window.addEventListener('beforeunload', () => {
+            if (network) {
+                network.disconnect();
+            }
+        });
     }
 
     /* ---------- Presence Focus/Blur Tracking ---------- */

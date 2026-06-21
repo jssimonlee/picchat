@@ -214,6 +214,26 @@ class NetworkManager {
         conn.on('close', () => {
             this._handlePeerLeave(peerId);
         });
+
+        // ICE Connection Monitoring for immediate disconnect detection (tab close, network drop, etc.)
+        if (conn.peerConnection) {
+            const pc = conn.peerConnection;
+            const onStateChange = () => {
+                const state = pc.iceConnectionState;
+                if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+                    this._handlePeerLeave(peerId);
+                }
+            };
+            pc.addEventListener('iceconnectionstatechange', onStateChange);
+            
+            const onConnStateChange = () => {
+                const state = pc.connectionState;
+                if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+                    this._handlePeerLeave(peerId);
+                }
+            };
+            pc.addEventListener('connectionstatechange', onConnStateChange);
+        }
     }
 
     _handlePeerLeave(peerId) {
