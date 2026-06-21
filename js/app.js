@@ -2079,36 +2079,14 @@
     }
 
     function proposeSudoku(difficulty) {
-        sudokuState.status = 'proposing';
-        sudokuState.difficulty = difficulty;
-        sudokuState.proposerId = network.myPeerId;
-        sudokuState.proposerNickname = network.nickname;
-
-        sudokuState.participants = [
-            {
-                peerId: network.myPeerId,
-                nickname: network.nickname,
-                color: network.myColor,
-                accepted: true
-            }
-        ];
-
+        // sendSudoku의 로컬 에코로 handleSudokuNetworkMessage가 호출되어 상태 및 UI가 설정됨
         network.sendSudoku({
             action: 'propose',
             difficulty: difficulty,
             proposerId: network.myPeerId,
-            proposerNickname: network.nickname
+            proposerNickname: network.nickname,
+            proposerColor: network.myColor
         });
-
-        $sudokuLobbySetup.hidden = true;
-        $sudokuLobbyWaiting.hidden = false;
-        $sudokuLobbyInvite.hidden = true;
-        $sudokuLobbyWaitingTitle.textContent = '스도쿠 참가 대기 중';
-        
-        $btnSudokuStart.hidden = !network.isHost;
-        $btnSudokuStart.disabled = true;
-
-        updateSudokuProposalListUI();
     }
 
     function guestRespondSudoku(accepted) {
@@ -2145,7 +2123,7 @@
                 {
                     peerId: payload.proposerId,
                     nickname: payload.proposerNickname,
-                    color: getPeerColor(payload.proposerId),
+                    color: payload.proposerColor || getPeerColor(payload.proposerId),
                     accepted: true
                 }
             ];
@@ -2169,9 +2147,16 @@
                 $sudokuProposerName.textContent = payload.proposerNickname;
                 $sudokuProposalDifficulty.textContent = payload.difficulty.toUpperCase();
             }
+
+            // 호스트는 propose를 다른 피어에게 릴레이
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                // 게스트가 보낸 propose를 다른 게스트에게 전파 (자동 브로드캐스트 없으므로)
+                network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
         }
         else if (action === 'join-response') {
-            if (network.isHost) {
+            // 호스트가 join-response를 받으면 participants를 업데이트하고 proposal-sync로 전체 동기화
+            if (network.isHost && fromPeerId !== network.myPeerId) {
                 let p = sudokuState.participants.find(x => x.peerId === payload.peerId);
                 if (p) {
                     p.accepted = payload.accepted;
@@ -2183,6 +2168,7 @@
                         accepted: payload.accepted
                     });
                 }
+                // proposal-sync를 보내면 로컬 에코로 호스트 자신도 UI가 갱신됨
                 network.sendSudoku({
                     action: 'proposal-sync',
                     difficulty: sudokuState.difficulty,
@@ -2190,8 +2176,6 @@
                     proposerNickname: sudokuState.proposerNickname,
                     participants: sudokuState.participants
                 });
-
-                updateSudokuProposalListUI();
             }
         }
         else if (action === 'proposal-sync') {
@@ -2238,23 +2222,35 @@
         }
         else if (action === 'move') {
             applySudokuMove(payload.peerId, payload.r, payload.c, payload.val, payload.isCorrect, payload.elapsedSecs);
+            // 호스트는 move를 다른 피어에게 릴레이
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
         }
         else if (action === 'skip-turn') {
             applySudokuSkipTurn(payload.peerId, payload.elapsedSecs);
+            // 호스트는 skip-turn을 다른 피어에게 릴레이
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
         }
         else if (action === 'cancel') {
             showToast('🛑 스도쿠 게임이 취소되었습니다.');
             resetSudoku();
             $sudokuOverlay.hidden = true;
+
+            // 호스트는 cancel을 다른 피어에게 릴레이
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
         }
     }
 
     function cancelSudokuProposal() {
+        // sendSudoku의 로컬 에코로 cancel 핸들러가 호출되어 상태 및 UI가 처리됨
         network.sendSudoku({
             action: 'cancel'
         });
-        resetSudoku();
-        $sudokuOverlay.hidden = true;
     }
 
     function hostStartSudoku() {
@@ -2286,17 +2282,8 @@
             }
         });
 
-        // Broadcast starting state
+        // sendSudoku의 로컬 에코로 호스트 자신도 start 핸들러가 호출됨
         network.sendSudoku({
-            action: 'start',
-            difficulty: sudokuState.difficulty,
-            puzzle: puzzleData.puzzle,
-            solution: puzzleData.solution,
-            initialBoard: puzzleData.puzzle,
-            players: players
-        });
-
-        handleSudokuNetworkMessage(network.myPeerId, {
             action: 'start',
             difficulty: sudokuState.difficulty,
             puzzle: puzzleData.puzzle,
@@ -2462,7 +2449,10 @@
             elapsedSecs: elapsed
         });
 
-        applySudokuMove(network.myPeerId, r, c, val, isCorrect, elapsed);
+        // 게스트는 로컬 에코가 없으므로 수동으로 적용
+        if (!network.isHost) {
+            applySudokuMove(network.myPeerId, r, c, val, isCorrect, elapsed);
+        }
     }
 
     function applySudokuMove(peerId, r, c, val, isCorrect, elapsed) {
@@ -2843,7 +2833,10 @@
                         peerId: network.myPeerId,
                         elapsedSecs: sudokuState.turnTimeLimit
                     });
-                    applySudokuSkipTurn(network.myPeerId, sudokuState.turnTimeLimit);
+                    // 게스트는 로컬 에코가 없으므로 수동으로 적용
+                    if (!network.isHost) {
+                        applySudokuSkipTurn(network.myPeerId, sudokuState.turnTimeLimit);
+                    }
                 }
             }
         }, 1000);

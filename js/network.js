@@ -378,7 +378,7 @@ class NetworkManager {
 
             case 'sudoku':
                 this.onSudoku(fromPeerId, data.payload);
-                if (this.isHost) this._broadcast(data, fromPeerId);
+                // No automatic broadcast — app logic handles relay via sendSudoku
                 break;
         }
     }
@@ -519,6 +519,8 @@ class NetworkManager {
         const data = { type: 'sudoku', payload };
         if (this.isHost) {
             this._broadcast(data);
+            // Local echo: host also processes its own messages
+            this.onSudoku(this.myPeerId, payload);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
