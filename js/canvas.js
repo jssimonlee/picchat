@@ -20,6 +20,7 @@ class DrawingCanvas {
         this.backgroundImage = null;   // HTMLImageElement
         this.backgroundDataUrl = null; // For sync
         this.backgroundColor = '#1a1a2e';
+        this.imageCache = new Map();
 
         // Current tool settings
         this.currentTool = 'pen';
@@ -346,6 +347,20 @@ class DrawingCanvas {
                 lines.forEach((line, i) => {
                     ctx.fillText(line, action.x, action.y + i * lineHeight);
                 });
+                break;
+
+            case 'image':
+                const img = this.imageCache.get(action.dataUrl);
+                if (img && img.complete && img.naturalWidth !== 0) {
+                    ctx.drawImage(img, action.x, action.y, action.width, action.height);
+                } else {
+                    const newImg = new Image();
+                    newImg.onload = () => {
+                        this.imageCache.set(action.dataUrl, newImg);
+                        this.redrawAll();
+                    };
+                    newImg.src = action.dataUrl;
+                }
                 break;
         }
         ctx.restore();

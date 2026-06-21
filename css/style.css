@@ -854,3 +854,71 @@ input, button, textarea {
 .hidden {
     display: none !important;
 }
+
+/* ========== IMAGE PLACER ========== */
+.image-placer {
+    position: absolute;
+    border: 2px dashed #00d4ff;
+    cursor: move;
+    z-index: 100;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+    touch-action: none;
+}
+.placer-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    user-select: none;
+    pointer-events: none;
+}
+.placer-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border: 2px solid #00d4ff;
+    border-radius: 50%;
+}
+.placer-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.placer-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.placer-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.placer-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+
+.placer-toolbar {
+    position: absolute;
+    top: -45px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    background: rgba(30, 30, 46, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 6px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    pointer-events: auto;
+}
+.btn-placer {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+.btn-placer-apply {
+    background: linear-gradient(135deg, #7c5cff 0%, #00d4ff 100%);
+    color: #fff;
+}
+.btn-placer-apply:hover {
+    box-shadow: 0 0 8px rgba(124, 92, 255, 0.4);
+}
+.btn-placer-cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f1f1f1;
+}
+.btn-placer-cancel:hover {
+    background: rgba(255, 255, 255, 0.2);
+}

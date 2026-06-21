@@ -416,9 +416,7 @@
             // Resize image if too large
             const resized = await resizeImageDataUrl(dataUrl, 1920, 1080);
 
-            await canvas.setBackgroundImage(resized);
-            network.sendBackground(resized);
-            showToast('🖼️ 배경 이미지가 설정되었습니다');
+            startImagePlacer(resized);
         };
         reader.readAsDataURL(file);
         // Reset input so the same file can be selected again
@@ -449,6 +447,248 @@
                 resolve(c.toDataURL('image/jpeg', 0.85));
             };
             img.src = dataUrl;
+        });
+    }
+
+    /* ---------- Image Placement Layer ---------- */
+
+    function startImagePlacer(dataUrl) {
+        // Remove any existing placer
+        const existing = document.getElementById('imagePlacer');
+        if (existing) existing.remove();
+
+        // Create the placer container
+        const $placer = document.createElement('div');
+        $placer.id = 'imagePlacer';
+        $placer.className = 'image-placer';
+
+        // Add the image
+        const $img = document.createElement('img');
+        $img.src = dataUrl;
+        $img.className = 'placer-img';
+        $placer.appendChild($img);
+
+        // Add handles
+        const handles = ['nw', 'ne', 'sw', 'se'];
+        handles.forEach(h => {
+            const $h = document.createElement('div');
+            $h.className = `placer-handle ${h}`;
+            $placer.appendChild($h);
+        });
+
+        // Add toolbar
+        const $toolbar = document.createElement('div');
+        $toolbar.className = 'placer-toolbar';
+        
+        const $btnApply = document.createElement('button');
+        $btnApply.className = 'btn-placer btn-placer-apply';
+        $btnApply.textContent = '적용';
+
+        const $btnFit = document.createElement('button');
+        $btnFit.className = 'btn-placer btn-placer-cancel';
+        $btnFit.textContent = '전체화면';
+        
+        const $btnCancel = document.createElement('button');
+        $btnCancel.className = 'btn-placer btn-placer-cancel';
+        $btnCancel.textContent = '취소';
+
+        $toolbar.appendChild($btnApply);
+        $toolbar.appendChild($btnFit);
+        $toolbar.appendChild($btnCancel);
+        $placer.appendChild($toolbar);
+
+        // Position it in the center of $canvasContainer
+        const containerRect = $canvasContainer.getBoundingClientRect();
+        
+        // Let's set a default size (say, 400px wide, height proportional)
+        $placer.style.width = '400px';
+        $placer.style.left = ((containerRect.width - 400) / 2) + 'px';
+        $placer.style.top = ((containerRect.height - 300) / 2) + 'px'; // Default guess
+
+        // Once the image is loaded, adjust height to maintain aspect ratio
+        $img.onload = () => {
+            const aspect = $img.naturalHeight / $img.naturalWidth;
+            const h = 400 * aspect;
+            $placer.style.height = h + 'px';
+            $placer.style.top = ((containerRect.height - h) / 2) + 'px';
+        };
+
+        // Append to container
+        $canvasContainer.appendChild($placer);
+
+        // Dragging and resizing logic
+        let isDragging = false;
+        let isResizing = false;
+        let activeHandle = null;
+        let startX, startY;
+        let startWidth, startHeight;
+        let startLeft, startTop;
+        let imgAspect = 1;
+
+        $img.addEventListener('load', () => {
+            imgAspect = $img.naturalHeight / $img.naturalWidth;
+        });
+
+        $placer.addEventListener('mousedown', (e) => {
+            // Check if clicked handle
+            if (e.target.classList.contains('placer-handle')) {
+                isResizing = true;
+                activeHandle = e.target.classList[1]; // nw, ne, sw, se
+                startX = e.clientX;
+                startY = e.clientY;
+                startWidth = parseFloat(getComputedStyle($placer).width);
+                startHeight = parseFloat(getComputedStyle($placer).height);
+                startLeft = parseFloat(getComputedStyle($placer).left);
+                startTop = parseFloat(getComputedStyle($placer).top);
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Otherwise, dragging to move
+            if (e.target === $placer || e.target === $img) {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = parseFloat(getComputedStyle($placer).left);
+                startTop = parseFloat(getComputedStyle($placer).top);
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+
+        // Touch events support for mobile
+        $placer.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            if (e.target.classList.contains('placer-handle')) {
+                isResizing = true;
+                activeHandle = e.target.classList[1];
+                startX = touch.clientX;
+                startY = touch.clientY;
+                startWidth = parseFloat(getComputedStyle($placer).width);
+                startHeight = parseFloat(getComputedStyle($placer).height);
+                startLeft = parseFloat(getComputedStyle($placer).left);
+                startTop = parseFloat(getComputedStyle($placer).top);
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            if (e.target === $placer || e.target === $img) {
+                isDragging = true;
+                startX = touch.clientX;
+                startY = touch.clientY;
+                startLeft = parseFloat(getComputedStyle($placer).left);
+                startTop = parseFloat(getComputedStyle($placer).top);
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, { passive: false });
+
+        const onMouseMove = (e) => {
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            if (!clientX || !clientY) return;
+
+            if (isDragging) {
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+                $placer.style.left = (startLeft + dx) + 'px';
+                $placer.style.top = (startTop + dy) + 'px';
+            } else if (isResizing) {
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+                
+                // Resizing maintaining aspect ratio
+                let newWidth = startWidth;
+                
+                if (activeHandle === 'se') {
+                    newWidth = startWidth + dx;
+                } else if (activeHandle === 'sw') {
+                    newWidth = startWidth - dx;
+                    $placer.style.left = (startLeft + dx) + 'px';
+                } else if (activeHandle === 'ne') {
+                    newWidth = startWidth + dx;
+                    const newHeight = newWidth * imgAspect;
+                    $placer.style.top = (startTop + (startHeight - newHeight)) + 'px';
+                } else if (activeHandle === 'nw') {
+                    newWidth = startWidth - dx;
+                    const newHeight = newWidth * imgAspect;
+                    $placer.style.left = (startLeft + dx) + 'px';
+                    $placer.style.top = (startTop + (startHeight - newHeight)) + 'px';
+                }
+
+                if (newWidth > 50) { // Min width 50px
+                    $placer.style.width = newWidth + 'px';
+                    $placer.style.height = (newWidth * imgAspect) + 'px';
+                }
+            }
+        };
+
+        const onMouseUp = () => {
+            isDragging = false;
+            isResizing = false;
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('touchmove', onMouseMove, { passive: false });
+        window.addEventListener('touchend', onMouseUp);
+
+        // Fit / Fullscreen button click
+        $btnFit.addEventListener('click', () => {
+            const rect = $tempCanvas.getBoundingClientRect();
+            const containerRect = $canvasContainer.getBoundingClientRect();
+            $placer.style.left = (rect.left - containerRect.left) + 'px';
+            $placer.style.top = (rect.top - containerRect.top) + 'px';
+            $placer.style.width = rect.width + 'px';
+            $placer.style.height = rect.height + 'px';
+        });
+
+        // Apply button click
+        $btnApply.addEventListener('click', () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            window.removeEventListener('touchmove', onMouseMove);
+            window.removeEventListener('touchend', onMouseUp);
+
+            const rect = $tempCanvas.getBoundingClientRect(); // Canvas bounding box on screen
+            const placerRect = $placer.getBoundingClientRect();
+
+            // Convert to logical canvas coordinates (1920x1080)
+            const scaleX = canvas.CANVAS_WIDTH / rect.width;
+            const scaleY = canvas.CANVAS_HEIGHT / rect.height;
+
+            const canvasX = (placerRect.left - rect.left) * scaleX;
+            const canvasY = (placerRect.top - rect.top) * scaleY;
+            const canvasW = placerRect.width * scaleX;
+            const canvasH = placerRect.height * scaleY;
+
+            // Create image action
+            const action = {
+                type: 'image',
+                dataUrl: dataUrl,
+                x: canvasX,
+                y: canvasY,
+                width: canvasW,
+                height: canvasH
+            };
+
+            // Commit local drawing
+            canvas.replayAction(action);
+            // Send action to peers
+            network.sendAction(action);
+
+            showToast('🖼️ 이미지가 캔버스에 배치되었습니다');
+            $placer.remove();
+        });
+
+        // Cancel button click
+        $btnCancel.addEventListener('click', () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            window.removeEventListener('touchmove', onMouseMove);
+            window.removeEventListener('touchend', onMouseUp);
+            $placer.remove();
         });
     }
 
@@ -521,9 +761,7 @@
                     reader.onload = async (evt) => {
                         const dataUrl = evt.target.result;
                         const resized = await resizeImageDataUrl(dataUrl, 1920, 1080);
-                        await canvas.setBackgroundImage(resized);
-                        network.sendBackground(resized);
-                        showToast('📋 클립보드 이미지가 붙여넣기 되었습니다');
+                        startImagePlacer(resized);
                     };
                     reader.readAsDataURL(blob);
                     break; // Only handle the first image
