@@ -528,6 +528,11 @@ class NetworkManager {
         }
     }
 
+    getHostPeerId() {
+        if (this.isHost) return this.myPeerId;
+        return this.roomCode ? this._roomCodeToPeerId(this.roomCode) : null;
+    }
+
     /* ---------- Getters ---------- */
 
     getParticipants() {

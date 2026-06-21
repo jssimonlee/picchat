@@ -92,6 +92,7 @@
     let network = null;
     let cursorThrottle = 0;
     let isSelectingFile = false;
+    let downloadTimeout = null;
     const remoteCursors = new Map(); // peerId -> DOM element
     const knownParticipants = new Map(); // peerId -> { nickname, color }
 
@@ -155,7 +156,13 @@
         const $btnResume = document.getElementById('btnResume');
 
         window.addEventListener('blur', () => {
-            if (isSelectingFile) return;
+            if (isSelectingFile) {
+                if (downloadTimeout) {
+                    clearTimeout(downloadTimeout);
+                    downloadTimeout = null;
+                }
+                return;
+            }
             if (network && network.myPeerId && !$studio.hidden) {
                 $awayOverlay.hidden = false;
                 network.sendPresence(true);
@@ -562,6 +569,8 @@
         // Download
         $btnDownload.addEventListener('click', () => {
             isSelectingFile = true;
+            if (downloadTimeout) clearTimeout(downloadTimeout);
+
             const dataUrl = canvas.exportImage();
             const link = document.createElement('a');
             link.download = `piccomm-${Date.now()}.png`;
@@ -570,8 +579,9 @@
             showToast('💾 이미지가 다운로드되었습니다');
 
             // Clear flag after 2 seconds as fallback for silent downloads
-            setTimeout(() => {
+            downloadTimeout = setTimeout(() => {
                 isSelectingFile = false;
+                downloadTimeout = null;
             }, 2000);
         });
 
@@ -1536,6 +1546,12 @@
                     undoSudokuMove();
                     return;
                 }
+                // F / Space / Esc / ` / ~ : 더블클릭과 동일한 자동 채우기
+                if (isSudokuAutoFillShortcut(e)) {
+                    e.preventDefault();
+                    applySudokuShortcutInputToSelectedCell();
+                    return;
+                }
                 // Do not allow canvas shortcuts while playing sudoku
                 return;
             }
@@ -2076,6 +2092,59 @@
             sudokuState.isNotesMode = !sudokuState.isNotesMode;
             $btnSudokuNotes.classList.toggle('notes-active', sudokuState.isNotesMode);
         });
+
+        // Keydown keyboard shortcut event listener
+        document.addEventListener('keydown', (e) => {
+            if ($sudokuOverlay.hidden) return;
+            if (sudokuState.status !== 'playing') return;
+
+            const isSpectator = !sudokuState.turnOrder.includes(network.myPeerId);
+            if (isSpectator) return;
+
+            // Arrow navigation is allowed regardless of turn
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                navigateSudokuArrow(e.key);
+                return;
+            }
+
+            // Input actions require the active player's turn
+            const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
+            const isMyTurn = activePeerId === network.myPeerId;
+
+            if (e.key >= '1' && e.key <= '9') {
+                if (!isMyTurn) {
+                    showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
+                    return;
+                }
+                const val = parseInt(e.key);
+                setSelectedSudokuNumber(val);
+                if (sudokuState.isNotesMode) {
+                    inputSudokuNote(val);
+                } else {
+                    inputSudokuNumber(val);
+                }
+            } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                if (!isMyTurn) {
+                    showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
+                    return;
+                }
+                eraseSudokuCell();
+            } else if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) {
+                if (!isMyTurn) {
+                    showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
+                    return;
+                }
+                undoSudokuMove();
+            } else if (isSudokuAutoFillShortcut(e)) {
+                e.preventDefault();
+                if (!isMyTurn) {
+                    showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
+                    return;
+                }
+                applySudokuShortcutInputToSelectedCell();
+            }
+        });
     }
 
     function proposeSudoku(difficulty) {
@@ -2156,7 +2225,7 @@
         }
         else if (action === 'join-response') {
             // 호스트가 join-response를 받으면 participants를 업데이트하고 proposal-sync로 전체 동기화
-            if (network.isHost && fromPeerId !== network.myPeerId) {
+            if (network.isHost) {
                 let p = sudokuState.participants.find(x => x.peerId === payload.peerId);
                 if (p) {
                     p.accepted = payload.accepted;
@@ -2362,11 +2431,7 @@
                     if (isSpectator) return;
                     if (sudokuState.board[r][c] !== 0) return;
                     if (sudokuState.initialBoard[r][c] !== 0) return;
-                    
-                    const autoVal = getSudokuAutoFillNumber(r, c);
-                    if (autoVal !== null) {
-                        inputSudokuNumber(autoVal);
-                    }
+                    applySudokuShortcutInputToCell(r, c);
                 });
 
                 $sudokuBoard.appendChild(cell);
@@ -2410,7 +2475,7 @@
         if (cellValue !== 0) {
             setSelectedSudokuNumber(cellValue);
         } else {
-            setSelectedSudokuNumber(null);
+            syncSudokuSelectedNumberForCell(r, c);
         }
     }
 
@@ -2591,10 +2656,77 @@
 
     function setSelectedSudokuNumber(val) {
         sudokuState.selectedNumber = val;
+        sudokuState.selectedNumberSource = val !== null ? 'user' : null;
         document.querySelectorAll('.sudoku-num-btn').forEach(btn => {
             const v = parseInt(btn.getAttribute('data-val'));
             btn.classList.toggle('num-selected', v === val);
         });
+    }
+
+    function clearSudokuSelectedNumber(onlyAuto = false) {
+        if (onlyAuto && sudokuState.selectedNumberSource !== 'auto') return;
+        sudokuState.selectedNumber = null;
+        sudokuState.selectedNumberSource = null;
+        document.querySelectorAll('.sudoku-num-btn').forEach(btn => {
+            btn.classList.remove('num-selected');
+        });
+    }
+
+    function syncSudokuSelectedNumberForCell(r, c) {
+        if (sudokuState.isNotesMode) {
+            clearSudokuSelectedNumber(true);
+            return;
+        }
+        const autoVal = getSudokuAutoFillNumber(r, c);
+        if (autoVal !== null) {
+            if (sudokuState.selectedNumberSource !== 'user') {
+                sudokuState.selectedNumber = autoVal;
+                sudokuState.selectedNumberSource = 'auto';
+                document.querySelectorAll('.sudoku-num-btn').forEach(btn => {
+                    const v = parseInt(btn.getAttribute('data-val'));
+                    btn.classList.toggle('num-selected', v === autoVal);
+                });
+            }
+            return;
+        }
+        clearSudokuSelectedNumber(true);
+    }
+
+    function isSudokuAutoFillShortcut(event) {
+        return event.key.toLowerCase() === 'f'
+            || event.key === '`'
+            || event.key === '~'
+            || event.key === 'Escape'
+            || event.code === 'Space';
+    }
+
+    function applySudokuShortcutInputToCell(r, c) {
+        if (sudokuState.board[r][c] !== 0 || sudokuState.initialBoard[r][c] !== 0) return false;
+
+        selectSudokuCell(r, c);
+
+        if (sudokuState.isNotesMode) {
+            if (sudokuState.selectedNumberSource !== 'user' || sudokuState.selectedNumber === null) return false;
+            inputSudokuNote(sudokuState.selectedNumber);
+            return true;
+        }
+
+        const autoVal = getSudokuAutoFillNumber(r, c);
+        if (autoVal !== null) {
+            inputSudokuNumber(autoVal);
+            setSelectedSudokuNumber(autoVal);
+            return true;
+        }
+
+        if (sudokuState.selectedNumber === null) return false;
+        inputSudokuNumber(sudokuState.selectedNumber);
+        return true;
+    }
+
+    function applySudokuShortcutInputToSelectedCell() {
+        if (!sudokuState.selectedCell) return false;
+        const { r, c } = sudokuState.selectedCell;
+        return applySudokuShortcutInputToCell(r, c);
     }
 
     function updateSudokuNumpadState() {
@@ -2961,9 +3093,23 @@
 
     function handleSudokuPeerLeave(peerId) {
         if (sudokuState.status === 'proposing') {
-            sudokuState.participants = sudokuState.participants.filter(p => p.peerId !== peerId);
-            updateSudokuProposalListUI();
+            if (peerId === sudokuState.proposerId) {
+                showToast('🛑 스도쿠 제안자가 퇴장하여 제안이 취소되었습니다.');
+                resetSudoku();
+                $sudokuOverlay.hidden = true;
+            } else {
+                sudokuState.participants = sudokuState.participants.filter(p => p.peerId !== peerId);
+                updateSudokuProposalListUI();
+            }
         } else if (sudokuState.status === 'playing') {
+            const hostId = network.getHostPeerId();
+            if (peerId === hostId) {
+                showToast('⚠️ 방장이 퇴장하여 스도쿠 게임을 종료합니다.');
+                resetSudoku();
+                $sudokuOverlay.hidden = true;
+                return;
+            }
+
             if (sudokuState.turnOrder.includes(peerId)) {
                 showToast(`🔴 참가자 ${escapeHtml(getPeerNickname(peerId))}님이 퇴장했습니다.`);
 
