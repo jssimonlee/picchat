@@ -767,8 +767,8 @@
             const right = action.x + width;
             const top = action.y;
 
-            const screenX = right * scaleX + (rect.left - containerRect.left);
-            const screenY = top * scaleY + (rect.top - containerRect.top);
+            const screenX = right * scaleX + (rect.left - containerRect.left) + 8;
+            const screenY = top * scaleY + (rect.top - containerRect.top) - 8;
 
             // Create handle element
             const $handle = document.createElement('div');
@@ -891,8 +891,8 @@
                 }
                 const right = action.x + width;
                 const top = action.y;
-                const screenX = right * scaleX + (rect.left - containerRect.left);
-                const screenY = top * scaleY + (rect.top - containerRect.top);
+                const screenX = right * scaleX + (rect.left - containerRect.left) + 8;
+                const screenY = top * scaleY + (rect.top - containerRect.top) - 8;
                 $handle.style.left = screenX + 'px';
                 $handle.style.top = screenY + 'px';
             }
