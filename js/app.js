@@ -93,8 +93,8 @@
         });
 
         $btnResume.addEventListener('click', () => {
+            $awayOverlay.hidden = true;
             if (network && network.myPeerId) {
-                $awayOverlay.hidden = true;
                 network.sendPresence(false);
                 const me = knownParticipants.get(network.myPeerId);
                 if (me) {

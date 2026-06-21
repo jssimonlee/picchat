@@ -1086,6 +1086,9 @@ input, button, textarea {
     z-index: 1000;
     animation: fadeIn 0.3s ease-out;
 }
+.away-overlay[hidden] {
+    display: none !important;
+}
 
 .away-content {
     background: rgba(30, 30, 46, 0.95);
