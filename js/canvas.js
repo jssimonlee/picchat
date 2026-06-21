@@ -145,10 +145,12 @@ class DrawingCanvas {
         const point = this._getCanvasPoint(e);
 
         if (this._isFreehandTool()) {
-            // Draw segment directly on main canvas for smoothness
-            this._drawSegment(this.mainCtx, this.lastPoint, point);
             this.currentPath.push(point);
             this.lastPoint = point;
+
+            // Draw path preview on temp canvas to prevent overlapping opacity circles at joints
+            this._clearTemp();
+            this._drawFreehandPath(this.tempCtx, this.currentPath);
         } else {
             // Shape preview on temp canvas
             this._clearTemp();
@@ -163,7 +165,7 @@ class DrawingCanvas {
         const point = this._getCanvasPoint(e);
 
         if (this._isFreehandTool()) {
-            // Save freehand action
+            this._clearTemp(); // Clear temp canvas
             if (this.currentPath.length > 0) {
                 // Simplify path for network efficiency
                 const simplified = this._simplifyPath(this.currentPath);
@@ -176,6 +178,8 @@ class DrawingCanvas {
                     opacity: this.currentTool === 'eraser' ? 1 : this.currentOpacity,
                     isEraser: this.currentTool === 'eraser'
                 };
+                // Commit the completed stroke to the main canvas
+                this._renderAction(this.mainCtx, action);
                 this._addAction(action);
             }
         } else {
@@ -209,16 +213,24 @@ class DrawingCanvas {
 
     /* ---------- Drawing Primitives ---------- */
 
-    _drawSegment(ctx, from, to) {
+    _drawFreehandPath(ctx, path) {
+        if (path.length === 0) return;
         ctx.save();
         ctx.globalAlpha = this.currentTool === 'eraser' ? 1 : this.currentOpacity;
         ctx.strokeStyle = this.currentTool === 'eraser' ? this.backgroundColor : this.currentColor;
         ctx.lineWidth = this.currentTool === 'brush' ? this.currentSize * 2.5 : this.currentSize;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        
         ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
+        ctx.moveTo(path[0].x, path[0].y);
+        if (path.length === 1) {
+            ctx.lineTo(path[0].x, path[0].y);
+        } else {
+            for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(path[i].x, path[i].y);
+            }
+        }
         ctx.stroke();
         ctx.restore();
     }
