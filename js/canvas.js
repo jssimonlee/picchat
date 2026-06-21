@@ -21,6 +21,7 @@ class DrawingCanvas {
         this.backgroundDataUrl = null; // For sync
         this.backgroundColor = '#1a1a2e';
         this.imageCache = new Map();
+        this.editingActionId = null;
 
         // Current tool settings
         this.currentTool = 'pen';
@@ -510,6 +511,7 @@ class DrawingCanvas {
         }
         // Replay all actions
         for (const action of this.actions) {
+            if (this.editingActionId && action.id === this.editingActionId) continue;
             this._renderAction(this.mainCtx, action);
         }
     }

@@ -859,93 +859,249 @@
     }
 
     function openEditMenu(action, $handle) {
+        // Clear active menu/placer if any
         if (activeEditMenu) activeEditMenu.remove();
 
-        const $menu = document.createElement('div');
-        $menu.className = 'image-edit-menu';
+        // 1. Hide the original image on canvas by setting canvas.editingActionId
+        canvas.editingActionId = action.id;
+        canvas.redrawAll();
+
+        // 2. Hide all image edit handle icons during editing
+        document.querySelectorAll('.image-handle-el').forEach(el => el.style.display = 'none');
+
+        // 3. Create the resizable/draggable editor wrapper
+        const $editor = document.createElement('div');
+        $editor.id = 'imageEditor';
+        $editor.className = 'image-placer'; // Reuse styling of image-placer!
+
+        // Add the image
+        const $img = document.createElement('img');
+        $img.src = action.dataUrl;
+        $img.className = 'placer-img';
+        $editor.appendChild($img);
+
+        // Add resize handles
+        const handles = ['nw', 'ne', 'sw', 'se'];
+        handles.forEach(h => {
+            const $h = document.createElement('div');
+            $h.className = `placer-handle ${h}`;
+            $editor.appendChild($h);
+        });
+
+        // Add toolbar with "적용" (Apply), "삭제" (Delete), "취소" (Cancel)
+        const $toolbar = document.createElement('div');
+        $toolbar.className = 'placer-toolbar';
         
-        // Calculate position next to the handle
-        const handleLeft = parseFloat($handle.style.left);
-        const handleTop = parseFloat($handle.style.top);
+        const $btnApply = document.createElement('button');
+        $btnApply.className = 'btn-placer btn-placer-apply';
+        $btnApply.textContent = '적용';
+
+        const $btnDelete = document.createElement('button');
+        $btnDelete.className = 'btn-placer btn-menu-delete'; // Red styling for delete
+        $btnDelete.textContent = '삭제';
+        $btnDelete.style.borderRadius = '6px';
+        $btnDelete.style.padding = '6px 12px';
+        $btnDelete.style.fontSize = '12px';
+        $btnDelete.style.fontWeight = '600';
+        $btnDelete.style.cursor = 'pointer';
         
-        $menu.style.left = (handleLeft + 15) + 'px';
-        $menu.style.top = (handleTop - 10) + 'px';
+        const $btnCancel = document.createElement('button');
+        $btnCancel.className = 'btn-placer btn-placer-cancel';
+        $btnCancel.textContent = '취소';
 
-        const originalAspect = action.height / action.width;
+        $toolbar.appendChild($btnApply);
+        $toolbar.appendChild($btnDelete);
+        $toolbar.appendChild($btnCancel);
+        $editor.appendChild($toolbar);
 
-        $menu.innerHTML = `
-            <div class="menu-item-input">
-                <label>가로 크기 (px)</label>
-                <input type="number" class="menu-width-input" value="${Math.round(action.width)}" min="10" max="2000">
-            </div>
-            <div class="menu-item-input">
-                <label>세로 크기 (px)</label>
-                <input type="number" class="menu-height-input" value="${Math.round(action.height)}" min="10" max="2000">
-            </div>
-            <div class="menu-actions">
-                <button class="btn-menu-action btn-menu-delete">삭제</button>
-                <button class="btn-menu-action btn-menu-close">닫기</button>
-            </div>
-        `;
+        // Map logical canvas coordinates to screen coordinates relative to container
+        const rect = $tempCanvas.getBoundingClientRect();
+        const containerRect = $canvasContainer.getBoundingClientRect();
 
-        const $widthInput = $menu.querySelector('.menu-width-input');
-        const $heightInput = $menu.querySelector('.menu-height-input');
-        const $btnDelete = $menu.querySelector('.btn-menu-delete');
-        const $btnClose = $menu.querySelector('.btn-menu-close');
+        const scaleX = rect.width / canvas.CANVAS_WIDTH;
+        const scaleY = rect.height / canvas.CANVAS_HEIGHT;
 
-        // Link width and height to preserve aspect ratio
-        $widthInput.addEventListener('input', (e) => {
-            const w = parseFloat(e.target.value) || 0;
-            if (w > 0) {
-                const h = Math.round(w * originalAspect);
-                $heightInput.value = h;
-                
-                action.width = w;
-                action.height = h;
-                canvas.redrawAll();
-                updateHandlePositions();
-                network.sendUpdateAction(action);
+        const startWidth = action.width * scaleX;
+        const startHeight = action.height * scaleY;
+        const startLeft = action.x * scaleX + (rect.left - containerRect.left);
+        const startTop = action.y * scaleY + (rect.top - containerRect.top);
+
+        $editor.style.width = startWidth + 'px';
+        $editor.style.height = startHeight + 'px';
+        $editor.style.left = startLeft + 'px';
+        $editor.style.top = startTop + 'px';
+
+        $canvasContainer.appendChild($editor);
+        activeEditMenu = $editor;
+
+        // Interaction logic (dragging and resizing)
+        let isDragging = false;
+        let isResizing = false;
+        let activeHandle = null;
+        let startPointerX, startPointerY;
+        let initW, initH, initL, initT;
+        const imgAspect = action.height / action.width;
+
+        const onPointerDown = (clientX, clientY, target) => {
+            if (target.classList.contains('placer-handle')) {
+                isResizing = true;
+                activeHandle = target.classList[1];
+                startPointerX = clientX;
+                startPointerY = clientY;
+                initW = parseFloat(getComputedStyle($editor).width);
+                initH = parseFloat(getComputedStyle($editor).height);
+                initL = parseFloat(getComputedStyle($editor).left);
+                initT = parseFloat(getComputedStyle($editor).top);
+                return true;
+            }
+            if (target === $editor || target === $img) {
+                isDragging = true;
+                startPointerX = clientX;
+                startPointerY = clientY;
+                initL = parseFloat(getComputedStyle($editor).left);
+                initT = parseFloat(getComputedStyle($editor).top);
+                return true;
+            }
+            return false;
+        };
+
+        $editor.addEventListener('mousedown', (e) => {
+            if (onPointerDown(e.clientX, e.clientY, e.target)) {
+                e.preventDefault();
+                e.stopPropagation();
             }
         });
 
-        $heightInput.addEventListener('input', (e) => {
-            const h = parseFloat(e.target.value) || 0;
-            if (h > 0) {
-                const w = Math.round(h / originalAspect);
-                $widthInput.value = w;
-                
-                action.width = w;
-                action.height = h;
-                canvas.redrawAll();
-                updateHandlePositions();
-                network.sendUpdateAction(action);
+        $editor.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            if (onPointerDown(touch.clientX, touch.clientY, e.target)) {
+                e.preventDefault();
+                e.stopPropagation();
             }
-        });
+        }, { passive: false });
 
+        const onMouseMove = (e) => {
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            if (!clientX || !clientY) return;
+
+            if (isDragging) {
+                const dx = clientX - startPointerX;
+                const dy = clientY - startPointerY;
+                $editor.style.left = (initL + dx) + 'px';
+                $editor.style.top = (initT + dy) + 'px';
+            } else if (isResizing) {
+                const dx = clientX - startPointerX;
+                const dy = clientY - startPointerY;
+
+                let newWidth = initW;
+
+                if (activeHandle === 'se') {
+                    newWidth = initW + dx;
+                } else if (activeHandle === 'sw') {
+                    newWidth = initW - dx;
+                    $editor.style.left = (initL + dx) + 'px';
+                } else if (activeHandle === 'ne') {
+                    newWidth = initW + dx;
+                    const newHeight = newWidth * imgAspect;
+                    $editor.style.top = (initT + (initH - newHeight)) + 'px';
+                } else if (activeHandle === 'nw') {
+                    newWidth = initW - dx;
+                    const newHeight = newWidth * imgAspect;
+                    $editor.style.left = (initL + dx) + 'px';
+                    $editor.style.top = (initT + (initH - newHeight)) + 'px';
+                }
+
+                if (newWidth > 30) {
+                    $editor.style.width = newWidth + 'px';
+                    $editor.style.height = (newWidth * imgAspect) + 'px';
+                }
+            }
+        };
+
+        const onMouseUp = () => {
+            isDragging = false;
+            isResizing = false;
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('touchmove', onMouseMove, { passive: false });
+        window.addEventListener('touchend', onMouseUp);
+
+        // Cleanup function for listeners
+        const cleanupListeners = () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            window.removeEventListener('touchmove', onMouseMove);
+            window.removeEventListener('touchend', onMouseUp);
+            document.removeEventListener('mousedown', onOutsideClick);
+        };
+
+        // Apply changes function
+        const applyChanges = () => {
+            cleanupListeners();
+
+            // Convert editor bounds back to logical canvas coordinates
+            const currentRect = $tempCanvas.getBoundingClientRect();
+            const editorRect = $editor.getBoundingClientRect();
+
+            const cScaleX = canvas.CANVAS_WIDTH / currentRect.width;
+            const cScaleY = canvas.CANVAS_HEIGHT / currentRect.height;
+
+            action.x = (editorRect.left - currentRect.left) * cScaleX;
+            action.y = (editorRect.top - currentRect.top) * cScaleY;
+            action.width = editorRect.width * cScaleX;
+            action.height = editorRect.height * cScaleY;
+
+            // Commit change
+            canvas.editingActionId = null;
+            canvas.redrawAll();
+
+            // Notify peers
+            network.sendUpdateAction(action);
+
+            // Re-render handles
+            updateImageHandles();
+            $editor.remove();
+            activeEditMenu = null;
+        };
+
+        // Apply click
+        $btnApply.addEventListener('click', applyChanges);
+
+        // Delete click
         $btnDelete.addEventListener('click', () => {
             if (confirm('이 이미지를 삭제하시겠습니까?')) {
+                cleanupListeners();
+                canvas.editingActionId = null;
                 canvas.deleteAction(action.id);
                 network.sendDeleteAction(action.id);
+                
                 updateImageHandles();
+                $editor.remove();
+                activeEditMenu = null;
             }
         });
 
-        $btnClose.addEventListener('click', () => {
-            $menu.remove();
+        // Cancel click
+        $btnCancel.addEventListener('click', () => {
+            cleanupListeners();
+            canvas.editingActionId = null;
+            canvas.redrawAll();
+
+            updateImageHandles();
+            $editor.remove();
             activeEditMenu = null;
         });
 
-        $cursors.appendChild($menu);
-        activeEditMenu = $menu;
-
-        // Auto close menu if clicked outside
+        // Handle clicking outside to apply changes automatically
         const onOutsideClick = (e) => {
-            if (!$menu.contains(e.target) && !$handle.contains(e.target)) {
-                $menu.remove();
-                activeEditMenu = null;
-                document.removeEventListener('mousedown', onOutsideClick);
+            if (!$editor.contains(e.target)) {
+                applyChanges();
             }
         };
+
         setTimeout(() => {
             document.addEventListener('mousedown', onOutsideClick);
         }, 50);
