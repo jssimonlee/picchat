@@ -2132,6 +2132,123 @@
         }
     }
 
+    function handleSudokuNetworkMessage(fromPeerId, payload) {
+        console.log('[Sudoku Network]', fromPeerId, payload);
+        const action = payload.action;
+
+        if (action === 'propose') {
+            sudokuState.status = 'proposing';
+            sudokuState.difficulty = payload.difficulty;
+            sudokuState.proposerId = payload.proposerId;
+            sudokuState.proposerNickname = payload.proposerNickname;
+            sudokuState.participants = [
+                {
+                    peerId: payload.proposerId,
+                    nickname: payload.proposerNickname,
+                    color: getPeerColor(payload.proposerId),
+                    accepted: true
+                }
+            ];
+
+            $sudokuOverlay.hidden = false;
+            
+            if (payload.proposerId === network.myPeerId) {
+                showSudokuSubView('lobby');
+                $sudokuLobbySetup.hidden = true;
+                $sudokuLobbyWaiting.hidden = false;
+                $sudokuLobbyInvite.hidden = true;
+                $sudokuLobbyWaitingTitle.textContent = '스도쿠 참가 대기 중';
+                $btnSudokuStart.hidden = !network.isHost;
+                $btnSudokuStart.disabled = true;
+                updateSudokuProposalListUI();
+            } else {
+                showSudokuSubView('lobby');
+                $sudokuLobbySetup.hidden = true;
+                $sudokuLobbyWaiting.hidden = true;
+                $sudokuLobbyInvite.hidden = false;
+                $sudokuProposerName.textContent = payload.proposerNickname;
+                $sudokuProposalDifficulty.textContent = payload.difficulty.toUpperCase();
+            }
+        }
+        else if (action === 'join-response') {
+            if (network.isHost) {
+                let p = sudokuState.participants.find(x => x.peerId === payload.peerId);
+                if (p) {
+                    p.accepted = payload.accepted;
+                } else {
+                    sudokuState.participants.push({
+                        peerId: payload.peerId,
+                        nickname: payload.nickname,
+                        color: payload.color,
+                        accepted: payload.accepted
+                    });
+                }
+                network.sendSudoku({
+                    action: 'proposal-sync',
+                    difficulty: sudokuState.difficulty,
+                    proposerId: sudokuState.proposerId,
+                    proposerNickname: sudokuState.proposerNickname,
+                    participants: sudokuState.participants
+                });
+
+                updateSudokuProposalListUI();
+            }
+        }
+        else if (action === 'proposal-sync') {
+            sudokuState.difficulty = payload.difficulty;
+            sudokuState.proposerId = payload.proposerId;
+            sudokuState.proposerNickname = payload.proposerNickname;
+            sudokuState.participants = payload.participants;
+
+            updateSudokuProposalListUI();
+        }
+        else if (action === 'start') {
+            sudokuState.status = 'playing';
+            sudokuState.difficulty = payload.difficulty;
+            sudokuState.board = payload.puzzle;
+            sudokuState.initialBoard = payload.initialBoard;
+            sudokuState.solution = payload.solution;
+            sudokuState.notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+            sudokuState.selectedCell = null;
+            sudokuState.mistakes = 0;
+            sudokuState.history = [];
+
+            sudokuState.players = payload.players.map(p => ({
+                peerId: p.peerId,
+                nickname: p.nickname,
+                color: p.color,
+                totalTime: 0,
+                correctCount: 0,
+                active: true
+            }));
+
+            sudokuState.turnOrder = payload.players.map(p => p.peerId);
+            sudokuState.currentTurnIndex = 0;
+
+            showSudokuSubView('game');
+            $sudokuGameDiff.textContent = payload.difficulty.toUpperCase();
+            
+            buildSudokuBoardDOM();
+            updateSudokuMistakesDisplay();
+            updateSudokuNumpadState();
+
+            resetSudokuTimers();
+            startSudokuGameTimer();
+            startSudokuTurn();
+        }
+        else if (action === 'move') {
+            applySudokuMove(payload.peerId, payload.r, payload.c, payload.val, payload.isCorrect, payload.elapsedSecs);
+        }
+        else if (action === 'skip-turn') {
+            applySudokuSkipTurn(payload.peerId, payload.elapsedSecs);
+        }
+        else if (action === 'cancel') {
+            showToast('🛑 스도쿠 게임이 취소되었습니다.');
+            resetSudoku();
+            $sudokuOverlay.hidden = true;
+        }
+    }
+
     function cancelSudokuProposal() {
         network.sendSudoku({
             action: 'cancel'
