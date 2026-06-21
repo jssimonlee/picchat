@@ -54,6 +54,7 @@
     let canvas = null;
     let network = null;
     let cursorThrottle = 0;
+    let isSelectingFile = false;
     const remoteCursors = new Map(); // peerId -> DOM element
     const knownParticipants = new Map(); // peerId -> { nickname, color }
 
@@ -81,6 +82,7 @@
         const $btnResume = document.getElementById('btnResume');
 
         window.addEventListener('blur', () => {
+            if (isSelectingFile) return;
             if (network && network.myPeerId && !$studio.hidden) {
                 $awayOverlay.hidden = false;
                 network.sendPresence(true);
@@ -90,6 +92,18 @@
                     updateParticipantsUI();
                 }
             }
+        });
+
+        window.addEventListener('focus', () => {
+            // Reset the file selection flag with a short delay to allow blur events to resolve
+            setTimeout(() => {
+                isSelectingFile = false;
+            }, 300);
+        });
+
+        // Set the flag when clicking the file input
+        $imageInput.addEventListener('click', () => {
+            isSelectingFile = true;
         });
 
         $btnResume.addEventListener('click', () => {
