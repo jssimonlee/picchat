@@ -21,6 +21,7 @@ class NetworkManager {
         this.onPresence = callbacks.onPresence || (() => {});
         this.onError = callbacks.onError || (() => {});
         this.onReady = callbacks.onReady || (() => {});
+        this.onSudoku = callbacks.onSudoku || (() => {});
 
         // State needed for state sync
         this.getCanvasState = callbacks.getCanvasState || (() => ({}));
@@ -374,6 +375,11 @@ class NetworkManager {
                 if (this.isHost) this._broadcast(data, fromPeerId);
                 break;
             }
+
+            case 'sudoku':
+                this.onSudoku(fromPeerId, data.payload);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
         }
     }
 
@@ -500,6 +506,17 @@ class NetworkManager {
 
     sendPresence(isAway) {
         const data = { type: 'presence', isAway };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendSudoku(payload) {
+        const data = { type: 'sudoku', payload };
         if (this.isHost) {
             this._broadcast(data);
         } else {

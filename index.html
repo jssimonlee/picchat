@@ -166,6 +166,15 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
             </div>
+            <div class="tool-divider"></div>
+            <div class="tool-section">
+                <button class="tool-btn" id="btnSudoku" title="스도쿠 게임 (S)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                    </svg>
+                </button>
+            </div>
         </aside>
 
         <!-- Settings Panel (Bottom) -->
@@ -220,6 +229,168 @@
             <h2>💤 자리비움 중</h2>
             <p>대화가 일시 중지되었습니다. 다시 시작하려면 아래 버튼을 누르세요.</p>
             <button id="btnResume" class="btn-resume">다시 시작하기</button>
+        </div>
+    </div>
+
+    <!-- ===== SUDOKU OVERLAY ===== -->
+    <div id="sudokuOverlay" class="sudoku-overlay" hidden>
+        <div class="sudoku-window">
+            <header class="sudoku-header">
+                <div class="sudoku-title">
+                    <span class="sudoku-logo-icon">🧩</span>
+                    <h2>스도쿠 멀티플레이</h2>
+                </div>
+                <div class="sudoku-header-actions">
+                    <button id="btnSudokuClose" class="sudoku-close-btn" title="닫기">&times;</button>
+                </div>
+            </header>
+
+            <!-- Sudoku Lobby (Proposing/Waiting) -->
+            <div id="sudokuLobby" class="sudoku-view">
+                <div class="sudoku-lobby-setup" id="sudokuLobbySetup">
+                    <h3>새 게임 제안</h3>
+                    <p>방에 있는 친구들과 턴제 스도쿠 대결을 펼쳐보세요. 평균 속도가 가장 빠른 사람이 승리합니다!</p>
+                    <div class="sudoku-setup-group">
+                        <label for="sudokuDifficulty">난이도</label>
+                        <select id="sudokuDifficulty">
+                            <option value="easy">Easy (쉬움)</option>
+                            <option value="medium" selected>Medium (보통)</option>
+                            <option value="hard">Hard (어려움)</option>
+                            <option value="expert">Expert (전문가)</option>
+                        </select>
+                    </div>
+                    <button id="btnSudokuPropose" class="btn btn-primary">스도쿠 제안하기</button>
+                </div>
+
+                <div class="sudoku-lobby-waiting" id="sudokuLobbyWaiting" hidden>
+                    <h3 id="sudokuLobbyWaitingTitle">스도쿠 참가 대기 중</h3>
+                    <div class="sudoku-proposal-status">
+                        <p>참가 동의 현황:</p>
+                        <ul id="sudokuProposalList" class="sudoku-proposal-list">
+                            <!-- Populated dynamically -->
+                        </ul>
+                    </div>
+                    <div class="sudoku-lobby-actions">
+                        <button id="btnSudokuCancel" class="btn btn-secondary">제안 취소</button>
+                        <button id="btnSudokuStart" class="btn btn-primary" disabled>게임 시작</button>
+                    </div>
+                </div>
+
+                <!-- Guest Invitation View -->
+                <div class="sudoku-lobby-invite" id="sudokuLobbyInvite" hidden>
+                    <h3>스도쿠 게임 초대</h3>
+                    <p><span id="sudokuProposerName" class="highlight-name"></span>님이 스도쿠 대결을 제안했습니다!</p>
+                    <p>난이도: <span id="sudokuProposalDifficulty" class="highlight-diff">Medium</span></p>
+                    <div class="sudoku-lobby-actions">
+                        <button id="btnSudokuDecline" class="btn btn-secondary">거절</button>
+                        <button id="btnSudokuAccept" class="btn btn-primary">참가</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sudoku Game Playing -->
+            <div id="sudokuGame" class="sudoku-view" hidden>
+                <div class="sudoku-game-layout">
+                    <!-- Left column: Board -->
+                    <div class="sudoku-game-left">
+                        <div class="sudoku-stats-bar">
+                            <div class="sudoku-stat-item">
+                                <span class="label">난이도</span>
+                                <span id="sudokuGameDiff" class="value">Medium</span>
+                            </div>
+                            <div class="sudoku-stat-item">
+                                <span class="label">총 시간</span>
+                                <span id="sudokuGameTimer" class="value">00:00</span>
+                            </div>
+                            <div class="sudoku-stat-item">
+                                <span class="label">공동 실수</span>
+                                <div class="sudoku-health-bars" id="sudokuHealthBars">
+                                    <div class="sudoku-health-bar active"></div>
+                                    <div class="sudoku-health-bar active"></div>
+                                    <div class="sudoku-health-bar active"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="sudoku-board-wrapper">
+                            <div class="sudoku-board" id="piccomm-sudoku-board">
+                                <!-- Generated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right column: Controls & Turn status -->
+                    <div class="sudoku-game-right">
+                        <div class="sudoku-turn-card">
+                            <div class="sudoku-turn-status" id="sudokuTurnStatus">
+                                <!-- e.g., "홍길동 님의 턴! (15초 남음)" -->
+                            </div>
+                            <div class="sudoku-turn-progress-bar">
+                                <div id="sudokuTurnTimerProgress" class="sudoku-progress-fill"></div>
+                            </div>
+                        </div>
+
+                        <!-- Leaderboard -->
+                        <div class="sudoku-leaderboard-card">
+                            <h4>평균 입력 시간 (성공 횟수)</h4>
+                            <div class="sudoku-leaderboard-list" id="sudokuLeaderboardList">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Sudoku controls -->
+                        <div class="sudoku-controls">
+                            <div class="sudoku-numpad">
+                                <button class="sudoku-num-btn" data-val="1">1</button>
+                                <button class="sudoku-num-btn" data-val="2">2</button>
+                                <button class="sudoku-num-btn" data-val="3">3</button>
+                                <button class="sudoku-num-btn" data-val="4">4</button>
+                                <button class="sudoku-num-btn" data-val="5">5</button>
+                                <button class="sudoku-num-btn" data-val="6">6</button>
+                                <button class="sudoku-num-btn" data-val="7">7</button>
+                                <button class="sudoku-num-btn" data-val="8">8</button>
+                                <button class="sudoku-num-btn" data-val="9">9</button>
+                            </div>
+                            <div class="sudoku-action-buttons">
+                                <button class="sudoku-action-btn" id="btnSudokuUndo" title="실행 취소 (Ctrl+Z)">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-15 9 9 0 0 0-6 2.3L3 13"/></svg>
+                                    <span>Undo</span>
+                                </button>
+                                <button class="sudoku-action-btn" id="btnSudokuErase" title="선택 칸 지우기 (Backspace)">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+                                    <span>Erase</span>
+                                </button>
+                                <button class="sudoku-action-btn" id="btnSudokuNotes" title="메모 모드">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                                    <span>Notes</span>
+                                </button>
+                                <button class="sudoku-action-btn new-game-btn" id="btnSudokuQuit" title="포기하고 나가기">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                    <span>Quit</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sudoku Results -->
+            <div id="sudokuResult" class="sudoku-view" hidden>
+                <div class="sudoku-result-card">
+                    <span class="overlay-kicker" id="sudokuResultKicker">게임 결과</span>
+                    <h2 id="sudokuResultTitle">도전 성공!</h2>
+                    <p id="sudokuResultMsg">실수 없이 퍼즐을 완성했습니다.</p>
+                    
+                    <div class="sudoku-final-leaderboard">
+                        <h3>🏆 최종 순위표 (평균 입력 속도)</h3>
+                        <div class="sudoku-leaderboard-list" id="sudokuFinalLeaderboardList">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <button id="btnSudokuResultClose" class="btn btn-primary">로비로 돌아가기</button>
+                </div>
+            </div>
         </div>
     </div>
 
