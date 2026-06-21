@@ -814,6 +814,20 @@
         return { width: maxWidth, height };
     }
 
+    function getContrastBgColor(hexColor) {
+        if (!hexColor || typeof hexColor !== 'string') return '#ffffff';
+        let hex = hexColor.trim().replace('#', '');
+        if (hex.length === 3) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        }
+        if (hex.length !== 6) return '#ffffff';
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+        return yiq > 128 ? '#1e1e2e' : '#ffffff';
+    }
+
     function updateModificationHandles() {
         // Remove existing handles
         document.querySelectorAll('.image-handle-el').forEach(el => el.remove());
@@ -1313,8 +1327,8 @@
                 $textarea.style.top = '0';
                 $textarea.style.width = '100%';
                 $textarea.style.height = '100%';
-                $textarea.style.boxSizing = 'border-box';
-                $textarea.style.background = 'rgba(30, 30, 46, 0.95)';
+                const contrastBg = getContrastBgColor(action.color);
+                $textarea.style.background = contrastBg;
                 $textarea.style.color = action.color;
                 
                 const currentFontSize = parseFloat($textDiv.style.fontSize);
