@@ -489,6 +489,9 @@ class DrawingCanvas {
     /* ---------- Action Management ---------- */
 
     _addAction(action) {
+        if (!action.id) {
+            action.id = 'act-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
         this.actions.push(action);
         this.redoStack = []; // Clear redo on new action
         this.onAction(action);
@@ -614,6 +617,37 @@ class DrawingCanvas {
     setBackgroundColor(color) {
         this.backgroundColor = color;
         this.redrawAll();
+    }
+
+    addImageAction(dataUrl, x, y, width, height) {
+        const action = {
+            id: 'act-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+            type: 'image',
+            dataUrl: dataUrl,
+            x: x,
+            y: y,
+            width: width,
+            height: height
+        };
+        this._renderAction(this.mainCtx, action);
+        this._addAction(action);
+        return action;
+    }
+
+    updateAction(updatedAction) {
+        const idx = this.actions.findIndex(a => a.id === updatedAction.id);
+        if (idx !== -1) {
+            this.actions[idx] = updatedAction;
+            this.redrawAll();
+        }
+    }
+
+    deleteAction(id) {
+        const idx = this.actions.findIndex(a => a.id === id);
+        if (idx !== -1) {
+            this.actions.splice(idx, 1);
+            this.redrawAll();
+        }
     }
 
     /* ---------- Canvas Resize ---------- */

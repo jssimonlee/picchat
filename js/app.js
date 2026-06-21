@@ -156,15 +156,19 @@
         network = new NetworkManager({
             onAction: (action) => {
                 canvas.replayAction(action);
+                updateImageHandles();
             },
             onUndo: () => {
                 canvas.undo();
+                updateImageHandles();
             },
             onRedo: () => {
                 canvas.redo();
+                updateImageHandles();
             },
             onClear: () => {
                 canvas.clearAll();
+                updateImageHandles();
                 showToast('🗑️ 캔버스가 초기화되었습니다');
             },
             onBackground: async (dataUrl) => {
@@ -178,12 +182,21 @@
                 $canvasContainer.style.backgroundColor = color;
                 showToast('🎨 배경색이 변경되었습니다');
             },
+            onUpdateAction: (action) => {
+                canvas.updateAction(action);
+                updateImageHandles();
+            },
+            onDeleteAction: (id) => {
+                canvas.deleteAction(id);
+                updateImageHandles();
+            },
             onStateReceived: async (state) => {
                 await canvas.loadState(state);
                 const bg = canvas.backgroundColor;
                 $bgColorPicker.value = bg;
                 updateActiveBgColorDot(bg);
                 $canvasContainer.style.backgroundColor = bg;
+                updateImageHandles();
                 showToast('📥 캔버스 상태를 동기화했습니다');
             },
             onPeerJoin: (peerId, peerNickname, color) => {
@@ -237,6 +250,7 @@
             textInputEl: $textInput,
             onAction: (action) => {
                 network.sendAction(action);
+                updateImageHandles();
             },
             onCursorMove: (x, y) => {
                 // Throttle cursor updates to ~30fps
@@ -250,7 +264,10 @@
 
         // Resize canvas to fit
         canvas.resize();
-        window.addEventListener('resize', () => canvas.resize());
+        window.addEventListener('resize', () => {
+            canvas.resize();
+            updateImageHandles();
+        });
 
         // Setup initial background color UI state
         $canvasContainer.style.backgroundColor = canvas.backgroundColor;
@@ -673,10 +690,8 @@
                 height: canvasH
             };
 
-            // Commit local drawing
-            canvas.replayAction(action);
-            // Send action to peers
-            network.sendAction(action);
+            // Create and add image action via canvas (handles unique ID generation and network sync automatically)
+            canvas.addImageAction(dataUrl, canvasX, canvasY, canvasW, canvasH);
 
             showToast('🖼️ 이미지가 캔버스에 배치되었습니다');
             $placer.remove();
@@ -690,6 +705,250 @@
             window.removeEventListener('touchend', onMouseUp);
             $placer.remove();
         });
+    }
+
+    /* ---------- Placed Image Modification Handles & Edit Menu ---------- */
+
+    let activeEditMenu = null;
+
+    function updateImageHandles() {
+        // Remove existing handles
+        document.querySelectorAll('.image-handle-el').forEach(el => el.remove());
+        if (activeEditMenu) {
+            activeEditMenu.remove();
+            activeEditMenu = null;
+        }
+
+        if (!canvas || !network) return;
+
+        // Loop through all image actions
+        canvas.actions.forEach(action => {
+            if (action.type !== 'image') return;
+
+            // Compute screen position of top-right corner of image
+            const rect = $tempCanvas.getBoundingClientRect();
+            const containerRect = $canvasContainer.getBoundingClientRect();
+
+            const scaleX = rect.width / canvas.CANVAS_WIDTH;
+            const scaleY = rect.height / canvas.CANVAS_HEIGHT;
+
+            const imgRight = action.x + action.width;
+            const imgTop = action.y;
+
+            const screenX = imgRight * scaleX + (rect.left - containerRect.left);
+            const screenY = imgTop * scaleY + (rect.top - containerRect.top);
+
+            // Create handle element
+            const $handle = document.createElement('div');
+            $handle.className = 'image-handle-el';
+            $handle.dataset.actionId = action.id;
+            $handle.title = '드래그: 이동 / 클릭: 크기·삭제 메뉴';
+            $handle.innerHTML = `<span class="image-handle-icon">✥</span>`;
+
+            // Position it
+            $handle.style.left = screenX + 'px';
+            $handle.style.top = screenY + 'px';
+
+            // Attach drag & click events
+            let isDragging = false;
+            let startX, startY;
+            let startActionX, startActionY;
+            let hasMoved = false;
+
+            const handlePointerDown = (clientX, clientY) => {
+                isDragging = true;
+                hasMoved = false;
+                startX = clientX;
+                startY = clientY;
+                startActionX = action.x;
+                startActionY = action.y;
+
+                // Close any open edit menus
+                if (activeEditMenu) {
+                    activeEditMenu.remove();
+                    activeEditMenu = null;
+                }
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+                window.addEventListener('touchmove', onMouseMove, { passive: false });
+                window.addEventListener('touchend', onMouseUp);
+            };
+
+            $handle.addEventListener('mousedown', (e) => {
+                handlePointerDown(e.clientX, e.clientY);
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            $handle.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                handlePointerDown(touch.clientX, touch.clientY);
+                e.preventDefault();
+                e.stopPropagation();
+            }, { passive: false });
+
+            const onMouseMove = (e) => {
+                if (!isDragging) return;
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                if (!clientX || !clientY) return;
+
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+
+                // If moved more than 3px, treat as drag
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    hasMoved = true;
+                }
+
+                if (hasMoved) {
+                    // Convert screen movement to logical canvas coordinates
+                    action.x = startActionX + (dx / scaleX);
+                    action.y = startActionY + (dy / scaleY);
+
+                    // Redraw canvas
+                    canvas.redrawAll();
+
+                    // Update handle positions dynamically
+                    updateHandlePositions();
+                }
+            };
+
+            const onMouseUp = () => {
+                if (!isDragging) return;
+                isDragging = false;
+
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+                window.removeEventListener('touchmove', onMouseMove);
+                window.removeEventListener('touchend', onMouseUp);
+
+                if (hasMoved) {
+                    // Send final position update to network
+                    network.sendUpdateAction(action);
+                } else {
+                    // Click! Open edit menu
+                    openEditMenu(action, $handle);
+                }
+            };
+
+            $cursors.appendChild($handle);
+        });
+    }
+
+    function updateHandlePositions() {
+        if (!canvas) return;
+        const rect = $tempCanvas.getBoundingClientRect();
+        const containerRect = $canvasContainer.getBoundingClientRect();
+        const scaleX = rect.width / canvas.CANVAS_WIDTH;
+        const scaleY = rect.height / canvas.CANVAS_HEIGHT;
+
+        document.querySelectorAll('.image-handle-el').forEach($handle => {
+            const id = $handle.dataset.actionId;
+            const action = canvas.actions.find(a => a.id === id);
+            if (action) {
+                const imgRight = action.x + action.width;
+                const imgTop = action.y;
+                const screenX = imgRight * scaleX + (rect.left - containerRect.left);
+                const screenY = imgTop * scaleY + (rect.top - containerRect.top);
+                $handle.style.left = screenX + 'px';
+                $handle.style.top = screenY + 'px';
+            }
+        });
+    }
+
+    function openEditMenu(action, $handle) {
+        if (activeEditMenu) activeEditMenu.remove();
+
+        const $menu = document.createElement('div');
+        $menu.className = 'image-edit-menu';
+        
+        // Calculate position next to the handle
+        const handleLeft = parseFloat($handle.style.left);
+        const handleTop = parseFloat($handle.style.top);
+        
+        $menu.style.left = (handleLeft + 15) + 'px';
+        $menu.style.top = (handleTop - 10) + 'px';
+
+        const originalAspect = action.height / action.width;
+
+        $menu.innerHTML = `
+            <div class="menu-item-input">
+                <label>가로 크기 (px)</label>
+                <input type="number" class="menu-width-input" value="${Math.round(action.width)}" min="10" max="2000">
+            </div>
+            <div class="menu-item-input">
+                <label>세로 크기 (px)</label>
+                <input type="number" class="menu-height-input" value="${Math.round(action.height)}" min="10" max="2000">
+            </div>
+            <div class="menu-actions">
+                <button class="btn-menu-action btn-menu-delete">삭제</button>
+                <button class="btn-menu-action btn-menu-close">닫기</button>
+            </div>
+        `;
+
+        const $widthInput = $menu.querySelector('.menu-width-input');
+        const $heightInput = $menu.querySelector('.menu-height-input');
+        const $btnDelete = $menu.querySelector('.btn-menu-delete');
+        const $btnClose = $menu.querySelector('.btn-menu-close');
+
+        // Link width and height to preserve aspect ratio
+        $widthInput.addEventListener('input', (e) => {
+            const w = parseFloat(e.target.value) || 0;
+            if (w > 0) {
+                const h = Math.round(w * originalAspect);
+                $heightInput.value = h;
+                
+                action.width = w;
+                action.height = h;
+                canvas.redrawAll();
+                updateHandlePositions();
+                network.sendUpdateAction(action);
+            }
+        });
+
+        $heightInput.addEventListener('input', (e) => {
+            const h = parseFloat(e.target.value) || 0;
+            if (h > 0) {
+                const w = Math.round(h / originalAspect);
+                $widthInput.value = w;
+                
+                action.width = w;
+                action.height = h;
+                canvas.redrawAll();
+                updateHandlePositions();
+                network.sendUpdateAction(action);
+            }
+        });
+
+        $btnDelete.addEventListener('click', () => {
+            if (confirm('이 이미지를 삭제하시겠습니까?')) {
+                canvas.deleteAction(action.id);
+                network.sendDeleteAction(action.id);
+                updateImageHandles();
+            }
+        });
+
+        $btnClose.addEventListener('click', () => {
+            $menu.remove();
+            activeEditMenu = null;
+        });
+
+        $cursors.appendChild($menu);
+        activeEditMenu = $menu;
+
+        // Auto close menu if clicked outside
+        const onOutsideClick = (e) => {
+            if (!$menu.contains(e.target) && !$handle.contains(e.target)) {
+                $menu.remove();
+                activeEditMenu = null;
+                document.removeEventListener('mousedown', onOutsideClick);
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener('mousedown', onOutsideClick);
+        }, 50);
     }
 
     /* ---------- Keyboard Shortcuts ---------- */
@@ -836,6 +1095,11 @@
         knownParticipants.clear();
         remoteCursors.forEach(el => el.remove());
         remoteCursors.clear();
+        document.querySelectorAll('.image-handle-el').forEach(el => el.remove());
+        if (activeEditMenu) {
+            activeEditMenu.remove();
+            activeEditMenu = null;
+        }
 
         // Switch to lobby
         $studio.classList.remove('active');

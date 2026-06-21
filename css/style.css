@@ -922,3 +922,111 @@ input, button, textarea {
 .btn-placer-cancel:hover {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* ========== PLACED IMAGE HANDLES & EDIT MENU ========== */
+.image-handle-el {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    background: #ffffff;
+    border: 2px solid #00d4ff;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 40;
+    cursor: move;
+    transform: translate(-50%, -50%);
+    transition: transform 0.15s, box-shadow 0.15s, background-color 0.15s;
+    user-select: none;
+    pointer-events: auto;
+}
+.image-handle-el:hover {
+    transform: translate(-50%, -50%) scale(1.2);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.8), 0 4px 15px rgba(0,0,0,0.5);
+    background: #e6f9ff;
+}
+.image-handle-icon {
+    font-size: 14px;
+    font-weight: bold;
+    color: #12122a;
+    pointer-events: none;
+    line-height: 1;
+}
+
+.image-edit-menu {
+    position: absolute;
+    background: rgba(22, 22, 38, 0.95);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 190px;
+    color: #f0f0f5;
+    animation: fadeIn 0.15s ease-out;
+    pointer-events: auto;
+}
+
+.menu-item-input {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.menu-item-input label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.menu-item-input input {
+    width: 100%;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    color: #fff;
+    transition: border-color 0.2s;
+}
+.menu-item-input input:focus {
+    border-color: #00d4ff;
+}
+
+.menu-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+.btn-menu-action {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 0;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    text-align: center;
+    transition: all 0.2s;
+}
+.btn-menu-delete {
+    background: #ff4757;
+    color: #fff;
+}
+.btn-menu-delete:hover {
+    background: #ff6b81;
+    box-shadow: 0 0 8px rgba(255, 71, 87, 0.4);
+}
+.btn-menu-close {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f1f1f1;
+}
+.btn-menu-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}

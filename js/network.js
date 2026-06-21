@@ -12,6 +12,8 @@ class NetworkManager {
         this.onClear = callbacks.onClear || (() => {});
         this.onBackground = callbacks.onBackground || (() => {});
         this.onBgColor = callbacks.onBgColor || (() => {});
+        this.onUpdateAction = callbacks.onUpdateAction || (() => {});
+        this.onDeleteAction = callbacks.onDeleteAction || (() => {});
         this.onStateReceived = callbacks.onStateReceived || (() => {});
         this.onPeerJoin = callbacks.onPeerJoin || (() => {});
         this.onPeerLeave = callbacks.onPeerLeave || (() => {});
@@ -301,6 +303,16 @@ class NetworkManager {
                 }
                 break;
 
+            case 'update-action':
+                this.onUpdateAction(data.action);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
+            case 'delete-action':
+                this.onDeleteAction(data.id);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
             case 'undo':
                 this.onUndo();
                 if (this.isHost) this._broadcast(data, fromPeerId);
@@ -355,6 +367,28 @@ class NetworkManager {
             this._broadcast(data);
         } else {
             // Send to host only; host will relay
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendUpdateAction(action) {
+        const data = { type: 'update-action', action };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendDeleteAction(id) {
+        const data = { type: 'delete-action', id };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
             });
