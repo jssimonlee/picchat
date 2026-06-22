@@ -24,6 +24,7 @@ class NetworkManager {
         this.onSudoku = callbacks.onSudoku || (() => {});
         this.onGomoku = callbacks.onGomoku || (() => {});
         this.onOthello = callbacks.onOthello || (() => {});
+        this.onMinesweeper = callbacks.onMinesweeper || (() => {});
 
         // State needed for state sync
         this.getCanvasState = callbacks.getCanvasState || (() => ({}));
@@ -404,6 +405,10 @@ class NetworkManager {
             case 'othello':
                 this.onOthello(fromPeerId, data.payload);
                 break;
+
+            case 'minesweeper':
+                this.onMinesweeper(fromPeerId, data.payload);
+                break;
         }
     }
 
@@ -571,6 +576,19 @@ class NetworkManager {
             this._broadcast(data);
             // Local echo: host also processes its own messages
             this.onOthello(this.myPeerId, payload);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendMinesweeper(payload) {
+        const data = { type: 'minesweeper', payload };
+        if (this.isHost) {
+            this._broadcast(data);
+            // Local echo: host also processes its own messages
+            this.onMinesweeper(this.myPeerId, payload);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}

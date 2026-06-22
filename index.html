@@ -202,6 +202,19 @@
                         <path d="M12 3a9 9 0 0 0 0 18" fill="currentColor"/>
                     </svg>
                 </button>
+                <button class="tool-btn" id="btnMinesweeper" title="지뢰찾기 게임 (M)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="8" />
+                        <line x1="12" y1="2" x2="12" y2="4" />
+                        <line x1="12" y1="20" x2="12" y2="22" />
+                        <line x1="2" y1="12" x2="4" y2="12" />
+                        <line x1="20" y1="12" x2="22" y2="12" />
+                        <line x1="4.93" y1="4.93" x2="6.34" y2="6.34" />
+                        <line x1="17.66" y1="17.66" x2="19.07" y2="19.07" />
+                        <line x1="4.93" y1="19.07" x2="6.34" y2="17.66" />
+                        <line x1="17.66" y1="4.93" x2="19.07" y2="6.34" />
+                    </svg>
+                </button>
             </div>
         </aside>
 
@@ -723,6 +736,142 @@
                     </div>
 
                     <button id="btnOthelloResultClose" class="btn btn-primary">로비로 돌아가기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MINESWEEPER OVERLAY ===== -->
+    <div id="minesweeperOverlay" class="sudoku-overlay" hidden>
+        <div class="sudoku-window" style="max-width: 1020px;">
+            <header class="sudoku-header">
+                <div class="sudoku-title">
+                    <span class="sudoku-logo-icon">💣</span>
+                    <h2>지뢰찾기 레이스</h2>
+                </div>
+                <div class="sudoku-header-actions">
+                    <button id="btnMinesweeperClose" class="sudoku-close-btn" title="닫기">&times;</button>
+                </div>
+            </header>
+
+            <!-- Minesweeper Lobby -->
+            <div id="minesweeperLobby" class="sudoku-view">
+                <div class="sudoku-lobby-setup" id="minesweeperLobbySetup">
+                    <h3>새 게임 제안</h3>
+                    <p>친구와 동시에 같은 맵에서 지뢰찾기 스피드 경쟁을 펼쳐보세요! 지뢰를 제외한 안전한 칸을 먼저 전부 여는 사람이 승리합니다. 지뢰를 밟으면 경고(실수 카운트 +1)와 함께 맵이 새로운 지뢰로 초기화되므로 신중하게 행동하세요!</p>
+                    
+                    <div style="display: flex; flex-direction: column; text-align: left; gap: 4px; max-width: 280px; margin: 15px auto;">
+                        <label for="minesweeperDifficulty" style="font-size: 13px; font-weight: 600; color: #475569;">난이도</label>
+                        <select id="minesweeperDifficulty" style="width: 100%; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; font-size: 14px; box-sizing: border-box; background: white;">
+                            <option value="basic" selected>기본 (9x9, 지뢰 10개)</option>
+                            <option value="intermediate">중급 (12x12, 지뢰 20개)</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: center; width: 100%; margin-top: 15px;">
+                        <button id="btnMinesweeperPropose" class="btn btn-primary">지뢰찾기 제안하기</button>
+                        <button id="btnMinesweeperSolo" class="btn btn-secondary">혼자하기</button>
+                    </div>
+                </div>
+
+                <div class="sudoku-lobby-waiting" id="minesweeperLobbyWaiting" hidden>
+                    <h3 id="minesweeperLobbyWaitingTitle">상대방 참가 대기 중</h3>
+                    <div class="sudoku-proposal-status">
+                        <p>참가 동의 현황:</p>
+                        <ul id="minesweeperProposalList" class="sudoku-proposal-list">
+                        </ul>
+                    </div>
+                    <div class="sudoku-lobby-actions">
+                        <button id="btnMinesweeperCancel" class="btn btn-secondary">제안 취소</button>
+                        <button id="btnMinesweeperStart" class="btn btn-primary" disabled>게임 시작</button>
+                    </div>
+                </div>
+
+                <div class="sudoku-lobby-invite" id="minesweeperLobbyInvite" hidden>
+                    <h3>지뢰찾기 게임 초대</h3>
+                    <p><span id="minesweeperProposerName" class="highlight-name"></span>님이 지뢰찾기 대결을 제안했습니다!</p>
+                    <p>난이도: <span id="minesweeperProposalDifficulty" class="highlight-diff">기본</span></p>
+                    <div class="sudoku-lobby-actions">
+                        <button id="btnMinesweeperDecline" class="btn btn-secondary">거절</button>
+                        <button id="btnMinesweeperAccept" class="btn btn-primary">참가</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Minesweeper Game Playing -->
+            <div id="minesweeperGame" class="sudoku-view" hidden>
+                <!-- Top stats bar -->
+                <div class="sudoku-stats-bar" style="max-width: 100%; margin-bottom: 20px; padding: 12px 24px; border-radius: 12px; background: rgba(241, 245, 249, 0.7); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                    <div class="sudoku-stat-item">
+                        <span class="label">난이도</span>
+                        <span id="minesweeperGameDiff" class="value" style="font-weight: bold; color: #1e293b;">기본</span>
+                    </div>
+                    <div class="sudoku-stat-item">
+                        <span class="label">남은 지뢰 (내 화면)</span>
+                        <span id="minesweeperMineCount" class="value" style="font-weight: bold; color: #ef4444;">10</span>
+                    </div>
+                    <div class="sudoku-stat-item">
+                        <span class="label">진행 시간</span>
+                        <span id="minesweeperGameTimer" class="value" style="font-family: monospace; font-weight: bold; color: #0f172a;">00:00</span>
+                    </div>
+                    <div class="sudoku-stat-item">
+                        <span class="label">안전 지대 오픈</span>
+                        <span id="minesweeperRevealedCount" class="value" style="font-weight: bold; color: #10b981;">0</span>
+                    </div>
+                </div>
+
+                <!-- Two boards side by side -->
+                <div style="display: flex; gap: 30px; justify-content: center; align-items: flex-start; width: 100%; box-sizing: border-box;">
+                    <!-- Left: My Board -->
+                    <div style="display: flex; flex-direction: column; align-items: center; flex: 1;">
+                        <span style="font-size: 13px; font-weight: bold; color: #3b82f6; margin-bottom: 8px;">내 보드판 (조작 가능)</span>
+                        <div class="sudoku-board-wrapper" id="minesweeperMyWrapper" style="width: 100%; max-width: 440px; aspect-ratio: 1; padding: 8px;">
+                            <!-- Grid will be generated dynamically -->
+                            <div class="minesweeper-board" id="piccomm-minesweeper-board" style="display: grid; width: 100%; height: 100%; gap: 2px;">
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 12px; color: #64748b; text-align: center;">
+                            내 실수(지뢰): <span id="minesweeperMyMistakes" style="font-weight: bold; color: #ef4444;">0</span>회
+                        </div>
+                    </div>
+
+                    <!-- Right: Peer Board -->
+                    <div id="minesweeperPeerArea" style="display: flex; flex-direction: column; align-items: center; flex: 1;">
+                        <span id="minesweeperPeerTitle" style="font-size: 13px; font-weight: bold; color: #64748b; margin-bottom: 8px;">상대방 보드판 (실시간 관전)</span>
+                        <div class="sudoku-board-wrapper" id="minesweeperPeerWrapper" style="width: 100%; max-width: 440px; aspect-ratio: 1; padding: 8px; pointer-events: none; opacity: 0.85;">
+                            <!-- Grid will be generated dynamically -->
+                            <div class="minesweeper-board" id="piccomm-minesweeper-board-peer" style="display: grid; width: 100%; height: 100%; gap: 2px;">
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 12px; color: #64748b; text-align: center;">
+                            상대 실수(지뢰): <span id="minesweeperPeerMistakes" style="font-weight: bold; color: #ef4444;">0</span>회
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action button to quit -->
+                <div style="display: flex; justify-content: center; margin-top: 20px; width: 100%;">
+                    <button class="btn btn-secondary" id="btnMinesweeperQuit" style="display: flex; align-items: center; gap: 6px; padding: 10px 24px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span>기권하고 나가기</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Minesweeper Results -->
+            <div id="minesweeperResult" class="sudoku-view" hidden>
+                <div class="sudoku-result-card">
+                    <span class="overlay-kicker">게임 결과</span>
+                    <h2 id="minesweeperResultTitle">승리!</h2>
+                    <p id="minesweeperResultMsg">축하합니다! 상대방보다 먼저 안전한 칸을 모두 열었습니다.</p>
+                    
+                    <div class="sudoku-final-leaderboard" style="background: rgba(241, 245, 249, 0.95);">
+                        <h3>대결 통계</h3>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: #334155; padding: 10px 0;" id="minesweeperResultStats">
+                        </div>
+                    </div>
+
+                    <button id="btnMinesweeperResultClose" class="btn btn-primary">로비로 돌아가기</button>
                 </div>
             </div>
         </div>

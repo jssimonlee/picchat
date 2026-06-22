@@ -174,6 +174,45 @@
     const $btnOthelloResultClose = document.getElementById('btnOthelloResultClose');
     const $btnOthello = document.getElementById('btnOthello');
 
+    // Minesweeper Elements
+    const $btnMinesweeper = document.getElementById('btnMinesweeper');
+    const $minesweeperOverlay = document.getElementById('minesweeperOverlay');
+    const $btnMinesweeperClose = document.getElementById('btnMinesweeperClose');
+    const $minesweeperLobby = document.getElementById('minesweeperLobby');
+    const $minesweeperLobbySetup = document.getElementById('minesweeperLobbySetup');
+    const $minesweeperDifficulty = document.getElementById('minesweeperDifficulty');
+    const $btnMinesweeperPropose = document.getElementById('btnMinesweeperPropose');
+    const $btnMinesweeperSolo = document.getElementById('btnMinesweeperSolo');
+    const $minesweeperLobbyWaiting = document.getElementById('minesweeperLobbyWaiting');
+    const $minesweeperLobbyWaitingTitle = document.getElementById('minesweeperLobbyWaitingTitle');
+    const $minesweeperProposalList = document.getElementById('minesweeperProposalList');
+    const $btnMinesweeperCancel = document.getElementById('btnMinesweeperCancel');
+    const $btnMinesweeperStart = document.getElementById('btnMinesweeperStart');
+    const $minesweeperLobbyInvite = document.getElementById('minesweeperLobbyInvite');
+    const $minesweeperProposerName = document.getElementById('minesweeperProposerName');
+    const $minesweeperProposalDifficulty = document.getElementById('minesweeperProposalDifficulty');
+    const $btnMinesweeperDecline = document.getElementById('btnMinesweeperDecline');
+    const $btnMinesweeperAccept = document.getElementById('btnMinesweeperAccept');
+    const $minesweeperGame = document.getElementById('minesweeperGame');
+    const $minesweeperGameDiff = document.getElementById('minesweeperGameDiff');
+    const $minesweeperMineCount = document.getElementById('minesweeperMineCount');
+    const $minesweeperGameTimer = document.getElementById('minesweeperGameTimer');
+    const $minesweeperRevealedCount = document.getElementById('minesweeperRevealedCount');
+    const $minesweeperMyWrapper = document.getElementById('minesweeperMyWrapper');
+    const $minesweeperMyBoard = document.getElementById('piccomm-minesweeper-board');
+    const $minesweeperMyMistakes = document.getElementById('minesweeperMyMistakes');
+    const $minesweeperPeerArea = document.getElementById('minesweeperPeerArea');
+    const $minesweeperPeerTitle = document.getElementById('minesweeperPeerTitle');
+    const $minesweeperPeerWrapper = document.getElementById('minesweeperPeerWrapper');
+    const $minesweeperPeerBoard = document.getElementById('piccomm-minesweeper-board-peer');
+    const $minesweeperPeerMistakes = document.getElementById('minesweeperPeerMistakes');
+    const $btnMinesweeperQuit = document.getElementById('btnMinesweeperQuit');
+    const $minesweeperResult = document.getElementById('minesweeperResult');
+    const $minesweeperResultTitle = document.getElementById('minesweeperResultTitle');
+    const $minesweeperResultMsg = document.getElementById('minesweeperResultMsg');
+    const $minesweeperResultStats = document.getElementById('minesweeperResultStats');
+    const $btnMinesweeperResultClose = document.getElementById('btnMinesweeperResultClose');
+
     /* ---------- State ---------- */
 
     let canvas = null;
@@ -544,6 +583,10 @@
                 if (state.othelloState && state.othelloState.status === 'playing') {
                     syncOthelloStateFromHost(state.othelloState);
                 }
+                // Sync active Minesweeper game if present
+                if (state.minesweeperState && state.minesweeperState.status === 'playing') {
+                    syncMinesweeperStateFromHost(state.minesweeperState);
+                }
             },
             onPeerJoin: (peerId, peerNickname, color, isAway) => {
                 knownParticipants.set(peerId, { nickname: peerNickname, color, isAway: isAway || false });
@@ -570,6 +613,7 @@
                 handleSudokuPeerLeave(peerId);
                 handleGomokuPeerLeave(peerId);
                 handleOthelloPeerLeave(peerId);
+                handleMinesweeperPeerLeave(peerId);
             },
             onCursorMove: (peerId, x, y, peerNickname, color) => {
                 updateRemoteCursor(peerId, x, y, peerNickname, color);
@@ -590,6 +634,9 @@
             },
             onOthello: (fromPeerId, payload) => {
                 handleOthelloNetworkMessage(fromPeerId, payload);
+            },
+            onMinesweeper: (fromPeerId, payload) => {
+                handleMinesweeperNetworkMessage(fromPeerId, payload);
             },
             getCanvasState: () => {
                 const state = canvas ? canvas.getState() : {};
@@ -628,6 +675,14 @@
                     currentTurnIndex: othelloState.currentTurnIndex,
                     elapsedSeconds: othelloState.gameSecondsElapsed,
                     history: othelloState.history
+                };
+                state.minesweeperState = {
+                    status: minesweeperState.status,
+                    difficulty: minesweeperState.difficulty,
+                    myBoard: minesweeperState.myBoard,
+                    peerBoard: minesweeperState.peerBoard,
+                    players: minesweeperState.players,
+                    elapsedSeconds: minesweeperState.gameSecondsElapsed
                 };
                 return state;
             }
@@ -695,6 +750,8 @@
         setupGomokuEvents();
         // Setup Othello events
         setupOthelloEvents();
+        // Setup Minesweeper events
+        setupMinesweeperEvents();
     }
 
     /* ---------- Tool Events ---------- */
@@ -6130,7 +6187,1012 @@
         $gomokuResult.hidden = (view !== 'result');
     }
 
+    /* ==========================================================================
+       💣 MINESWEEPER GAME RACE MANAGER & ENGINE
+       ========================================================================== */
+
+    const MINESWEEPER_PRESETS = {
+        basic: { label: "기본", rows: 9, cols: 9, mines: 10 },
+        intermediate: { label: "중급", rows: 12, cols: 12, mines: 20 }
+    };
+    const MINESWEEPER_LONG_PRESS_MS = 450;
+    
+    let msLongPressTimer = null;
+    let msIgnoreNextClick = false;
+    let msHoveredCellIndex = null;
+    let msActiveChordIndex = null;
+    let msActiveChordPointerId = null;
+    let msChordPressTimedOut = false;
+
+    function setupMinesweeperEvents() {
+        // Toolbar icon trigger
+        $btnMinesweeper.addEventListener('click', () => {
+            if (minesweeperState.status === 'none') {
+                $minesweeperOverlay.hidden = false;
+                showMinesweeperSubView('lobby');
+                $minesweeperLobbySetup.hidden = false;
+                $minesweeperLobbyWaiting.hidden = true;
+                $minesweeperLobbyInvite.hidden = true;
+            } else {
+                $minesweeperOverlay.hidden = false;
+            }
+        });
+
+        // Close button
+        $btnMinesweeperClose.addEventListener('click', () => {
+            $minesweeperOverlay.hidden = true;
+        });
+
+        // Propose button click
+        $btnMinesweeperPropose.addEventListener('click', () => {
+            proposeMinesweeper();
+        });
+
+        // Solo button click
+        $btnMinesweeperSolo.addEventListener('click', () => {
+            startMinesweeperSolo();
+        });
+
+        // Cancel proposal click
+        $btnMinesweeperCancel.addEventListener('click', () => {
+            cancelMinesweeperProposal();
+        });
+
+        // Host starts game
+        $btnMinesweeperStart.addEventListener('click', () => {
+            if (network.isHost) {
+                hostStartMinesweeper();
+            }
+        });
+
+        // Accept invite
+        $btnMinesweeperAccept.addEventListener('click', () => {
+            guestRespondMinesweeper(true);
+        });
+
+        // Decline invite
+        $btnMinesweeperDecline.addEventListener('click', () => {
+            guestRespondMinesweeper(false);
+        });
+
+        // Exit / Quit button
+        $btnMinesweeperQuit.addEventListener('click', async () => {
+            const msg = minesweeperState.isSolo 
+                ? '지뢰찾기 게임을 종료하시겠습니까?' 
+                : '지뢰찾기 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+            if (await showCustomConfirm(msg)) {
+                quitMinesweeperGame();
+            }
+        });
+
+        // Close results screen
+        $btnMinesweeperResultClose.addEventListener('click', () => {
+            resetMinesweeper();
+            $minesweeperOverlay.hidden = true;
+        });
+    }
+
+    function proposeMinesweeper() {
+        const diff = $minesweeperDifficulty.value;
+        network.sendMinesweeper({
+            action: 'propose',
+            difficulty: diff,
+            proposerId: network.myPeerId,
+            proposerNickname: network.nickname,
+            proposerColor: network.myColor
+        });
+    }
+
+    function guestRespondMinesweeper(accepted) {
+        network.sendMinesweeper({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
+
+        if (accepted) {
+            $minesweeperLobbyInvite.hidden = true;
+            $minesweeperLobbyWaiting.hidden = false;
+            $minesweeperLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
+            $btnMinesweeperStart.hidden = true;
+            $btnMinesweeperCancel.hidden = true;
+        } else {
+            resetMinesweeper();
+            $minesweeperOverlay.hidden = true;
+        }
+    }
+
+    function cancelMinesweeperProposal() {
+        network.sendMinesweeper({
+            action: 'cancel',
+            peerId: network.myPeerId
+        });
+        resetMinesweeper();
+    }
+
+    function hostStartMinesweeper() {
+        if (!network.isHost) return;
+        const diff = minesweeperState.difficulty;
+        network.sendMinesweeper({
+            action: 'start',
+            difficulty: diff
+        });
+    }
+
+    function startMinesweeperSolo() {
+        const diff = $minesweeperDifficulty.value;
+        minesweeperState.status = 'playing';
+        minesweeperState.isSolo = true;
+        minesweeperState.difficulty = diff;
+        
+        initMinesweeperBoardData(minesweeperState.myBoard, diff);
+        
+        // mistakes count reset for solo play
+        minesweeperState.myBoard.mistakes = 0;
+        
+        minesweeperState.participants = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                accepted: true
+            }
+        ];
+        
+        $minesweeperOverlay.hidden = false;
+        showMinesweeperSubView('game');
+        
+        $minesweeperGameDiff.textContent = MINESWEEPER_PRESETS[diff].label;
+        $minesweeperPeerArea.style.display = 'none'; // 싱글플레이는 피어 보드 숨김
+        $minesweeperMyWrapper.style.maxWidth = '550px'; // 혼자할때는 보드 좀더 크게
+        
+        buildMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard, false);
+        updateMinesweeperStatsUI();
+        
+        resetMinesweeperTimers();
+        startMinesweeperGameTimer();
+    }
+
+    function quitMinesweeperGame() {
+        if (!minesweeperState.isSolo) {
+            network.sendMinesweeper({
+                action: 'quit',
+                peerId: network.myPeerId,
+                nickname: network.nickname
+            });
+        }
+        resetMinesweeper();
+        $minesweeperOverlay.hidden = true;
+    }
+
+    function resetMinesweeper() {
+        stopMinesweeperGameTimer();
+        minesweeperState.status = 'none';
+        minesweeperState.isSolo = false;
+        minesweeperState.proposerId = null;
+        minesweeperState.proposerNickname = null;
+        minesweeperState.participants = [];
+        minesweeperState.players = [];
+        
+        minesweeperState.myBoard = {
+            cells: [],
+            started: false,
+            ended: false,
+            won: false,
+            flags: 0,
+            revealed: 0,
+            mistakes: 0,
+            hitMineIndex: -1
+        };
+        minesweeperState.peerBoard = {
+            cells: [],
+            started: false,
+            ended: false,
+            won: false,
+            flags: 0,
+            revealed: 0,
+            mistakes: 0,
+            hitMineIndex: -1
+        };
+        
+        minesweeperState.gameSecondsElapsed = 0;
+        
+        $minesweeperLobby.hidden = true;
+        $minesweeperGame.hidden = true;
+        $minesweeperResult.hidden = true;
+        
+        $btnMinesweeperStart.disabled = true;
+        $minesweeperProposalList.innerHTML = '';
+        
+        msClearLongPressTimer();
+        msIgnoreNextClick = false;
+        msHoveredCellIndex = null;
+        msActiveChordIndex = null;
+        msActiveChordPointerId = null;
+        msChordPressTimedOut = false;
+    }
+
+    function initMinesweeperBoardData(boardObj, diff) {
+        const preset = MINESWEEPER_PRESETS[diff];
+        const total = preset.rows * preset.cols;
+        
+        boardObj.cells = Array.from({ length: total }, () => ({
+            mine: false,
+            revealed: false,
+            flagged: false,
+            questioned: false,
+            adjacent: 0
+        }));
+        boardObj.started = false;
+        boardObj.ended = false;
+        boardObj.won = false;
+        boardObj.flags = 0;
+        boardObj.revealed = 0;
+        boardObj.hitMineIndex = -1;
+    }
+
+    function placeMines(boardObj, diff, firstIndex) {
+        const preset = MINESWEEPER_PRESETS[diff];
+        const total = preset.rows * preset.cols;
+        
+        let safeIndexes = new Set([firstIndex, ...getMinesweeperNeighbors(firstIndex, preset.rows, preset.cols)]);
+        let candidates = boardObj.cells
+            .map((_, index) => index)
+            .filter((index) => !safeIndexes.has(index));
+            
+        if (candidates.length < preset.mines) {
+            safeIndexes = new Set([firstIndex]);
+            candidates = boardObj.cells.map((_, index) => index).filter((index) => !safeIndexes.has(index));
+        }
+        
+        // shuffle candidates
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        
+        candidates.slice(0, preset.mines).forEach((mineIndex) => {
+            boardObj.cells[mineIndex].mine = true;
+        });
+        
+        boardObj.cells.forEach((cell, index) => {
+            cell.adjacent = getMinesweeperNeighbors(index, preset.rows, preset.cols)
+                .filter((neighborIndex) => boardObj.cells[neighborIndex].mine).length;
+        });
+    }
+
+    function getMinesweeperNeighbors(index, rows, cols) {
+        const row = Math.floor(index / cols);
+        const col = index % cols;
+        const neighbors = [];
+        
+        for (let rOffset = -1; rOffset <= 1; rOffset++) {
+            for (let cOffset = -1; cOffset <= 1; cOffset++) {
+                if (rOffset === 0 && cOffset === 0) continue;
+                const nextRow = row + rOffset;
+                const nextCol = col + cOffset;
+                
+                if (nextRow >= 0 && nextRow < rows && nextCol >= 0 && nextCol < cols) {
+                    neighbors.push(nextRow * cols + nextCol);
+                }
+            }
+        }
+        return neighbors;
+    }
+
+    function buildMinesweeperBoardDOM(boardObj, $boardEl, isPeer) {
+        $boardEl.innerHTML = '';
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        
+        $boardEl.style.setProperty('--cols', preset.cols);
+        
+        boardObj.cells.forEach((cell, index) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'cell';
+            btn.dataset.index = String(index);
+            
+            if ((Math.floor(index / preset.cols) + index) % 2 === 1) {
+                btn.classList.add('is-odd');
+            }
+            
+            if (!isPeer) {
+                btn.addEventListener('click', handleMinesweeperCellClick);
+                btn.addEventListener('contextmenu', handleMinesweeperCellContextMenu);
+                btn.addEventListener('pointerdown', handleMinesweeperPointerDown);
+                btn.addEventListener('pointerup', handleMinesweeperPointerUp);
+                btn.addEventListener('pointerleave', handleMinesweeperPointerLeave);
+                btn.addEventListener('pointercancel', handleMinesweeperPointerLeave);
+            }
+            
+            $boardEl.appendChild(btn);
+        });
+        
+        renderMinesweeperBoardDOM(boardObj, $boardEl);
+    }
+
+    function renderMinesweeperBoardDOM(boardObj, $boardEl) {
+        const buttons = $boardEl.querySelectorAll('.cell');
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        
+        const activeChordIndex = (boardObj === minesweeperState.myBoard) ? msActiveChordIndex : null;
+        const chordPreviewIndexes = activeChordIndex === null 
+            ? new Set() 
+            : new Set(getMinesweeperChordPreviewIndexes(boardObj, activeChordIndex, preset.rows, preset.cols));
+            
+        buttons.forEach((button, index) => {
+            const cell = boardObj.cells[index];
+            const odd = (Math.floor(index / preset.cols) + index) % 2 === 1;
+            button.className = odd ? 'cell is-odd' : 'cell';
+            button.textContent = '';
+            button.removeAttribute('data-number');
+            button.classList.remove('is-chord-source', 'is-chord-preview', 'is-revealed', 'is-mine', 'is-mine-hit');
+            
+            if (index === activeChordIndex) {
+                button.classList.add('is-chord-source');
+            }
+            if (chordPreviewIndexes.has(index)) {
+                button.classList.add('is-chord-preview');
+            }
+            
+            if (cell.revealed) {
+                button.classList.add('is-revealed');
+                if (cell.mine) {
+                    button.classList.add('is-mine');
+                    if (index === boardObj.hitMineIndex) {
+                        button.classList.add('is-mine-hit');
+                    }
+                    button.innerHTML = '<span class="mine-icon" aria-hidden="true"></span>';
+                } else if (cell.adjacent > 0) {
+                    button.textContent = String(cell.adjacent);
+                    button.dataset.number = String(cell.adjacent);
+                }
+                return;
+            }
+            
+            if (cell.flagged) {
+                button.innerHTML = '<span class="flag-icon" aria-hidden="true"></span>';
+            } else if (cell.questioned) {
+                button.innerHTML = '<span class="question-mark" aria-hidden="true">?</span>';
+            }
+        });
+    }
+
+    function handleMinesweeperCellClick(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (msIgnoreNextClick) {
+            msIgnoreNextClick = false;
+            return;
+        }
+        msRevealCell(index);
+    }
+
+    function handleMinesweeperCellContextMenu(event) {
+        event.preventDefault();
+        if (msIgnoreNextClick) {
+            return;
+        }
+        const index = Number(event.currentTarget.dataset.index);
+        msToggleMark(index);
+    }
+
+    function handleMinesweeperPointerDown(event) {
+        if (event.button !== 0) return; 
+        
+        msClearLongPressTimer();
+        const index = Number(event.currentTarget.dataset.index);
+        
+        if (msCanChordFrom(index)) {
+            msBeginChordPress(index, event.pointerId);
+            msLongPressTimer = window.setTimeout(() => {
+                msLongPressTimer = null;
+                msChordPressTimedOut = true;
+            }, MINESWEEPER_LONG_PRESS_MS);
+            return;
+        }
+        
+        if (event.pointerType === 'mouse') return;
+        
+        msLongPressTimer = window.setTimeout(() => {
+            msLongPressTimer = null;
+            msIgnoreNextClick = true;
+            msToggleMark(index);
+        }, MINESWEEPER_LONG_PRESS_MS);
+    }
+
+    function handleMinesweeperPointerUp(event) {
+        const shouldReleaseChord = msActiveChordIndex !== null && msActiveChordPointerId === event.pointerId;
+        const chordIndex = msActiveChordIndex;
+        const shouldRevealChord = shouldReleaseChord && !msChordPressTimedOut;
+        
+        msClearLongPressTimer();
+        if (!shouldReleaseChord) return;
+        
+        msActiveChordIndex = null;
+        msActiveChordPointerId = null;
+        msChordPressTimedOut = false;
+        
+        if (shouldRevealChord) {
+            msRevealCell(chordIndex);
+        } else {
+            renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+        }
+    }
+
+    function handleMinesweeperPointerLeave(event) {
+        msClearLongPressTimer();
+        if (msActiveChordIndex !== null && msActiveChordPointerId === event.pointerId) {
+            msActiveChordIndex = null;
+            msActiveChordPointerId = null;
+            msChordPressTimedOut = false;
+            renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+            msIgnoreNextClick = false;
+        }
+    }
+
+    function msRevealCell(index) {
+        if (minesweeperState.myBoard.ended || minesweeperState.status !== 'playing') return;
+        
+        const cell = minesweeperState.myBoard.cells[index];
+        if (!cell || cell.flagged) return;
+        
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        
+        if (!minesweeperState.myBoard.started) {
+            placeMines(minesweeperState.myBoard, diff, index);
+            minesweeperState.myBoard.started = true;
+            if (!minesweeperState.isSolo) {
+                sendMinesweeperBoardState();
+            }
+        }
+        
+        if (cell.questioned) {
+            cell.questioned = false;
+        }
+        
+        if (cell.revealed) {
+            msRevealAroundNumber(index);
+            renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+            updateMinesweeperStatsUI();
+            if (!minesweeperState.isSolo) {
+                sendMinesweeperBoardState();
+            }
+            return;
+        }
+        
+        if (cell.mine) {
+            cell.revealed = true;
+            minesweeperState.myBoard.hitMineIndex = index;
+            minesweeperState.myBoard.mistakes++;
+            
+            minesweeperState.myBoard.ended = true;
+            minesweeperState.myBoard.cells.forEach(c => {
+                if (c.mine) c.revealed = true;
+            });
+            renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+            updateMinesweeperStatsUI();
+            if (!minesweeperState.isSolo) {
+                sendMinesweeperBoardState();
+            }
+            
+            showToast('💥 지뢰를 밟았습니다! 보드가 재설정됩니다.');
+            
+            setTimeout(() => {
+                if (minesweeperState.status !== 'playing') return;
+                initMinesweeperBoardData(minesweeperState.myBoard, diff);
+                buildMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard, false);
+                updateMinesweeperStatsUI();
+                if (!minesweeperState.isSolo) {
+                    sendMinesweeperBoardState();
+                }
+            }, 800);
+            return;
+        }
+        
+        msFloodReveal(index);
+        msCheckWin();
+        renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+        updateMinesweeperStatsUI();
+        if (!minesweeperState.isSolo) {
+            sendMinesweeperBoardState();
+        }
+    }
+
+    function msRevealAroundNumber(index) {
+        const cell = minesweeperState.myBoard.cells[index];
+        if (!cell.revealed || cell.adjacent === 0) return;
+        
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        const neighbors = getMinesweeperNeighbors(index, preset.rows, preset.cols);
+        
+        const flagCount = neighbors.filter(nIdx => minesweeperState.myBoard.cells[nIdx].flagged).length;
+        if (flagCount !== cell.adjacent) return;
+        
+        let hitMine = false;
+        
+        for (const neighborIndex of neighbors) {
+            const neighbor = minesweeperState.myBoard.cells[neighborIndex];
+            if (!neighbor.revealed && !neighbor.flagged) {
+                if (neighbor.mine) {
+                    neighbor.revealed = true;
+                    minesweeperState.myBoard.hitMineIndex = neighborIndex;
+                    hitMine = true;
+                } else {
+                    msFloodReveal(neighborIndex);
+                }
+            }
+        }
+        
+        if (hitMine) {
+            minesweeperState.myBoard.mistakes++;
+            minesweeperState.myBoard.ended = true;
+            minesweeperState.myBoard.cells.forEach(c => {
+                if (c.mine) c.revealed = true;
+            });
+            renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+            updateMinesweeperStatsUI();
+            if (!minesweeperState.isSolo) {
+                sendMinesweeperBoardState();
+            }
+            showToast('💥 지뢰를 밟았습니다! 보드가 재설정됩니다.');
+            
+            setTimeout(() => {
+                if (minesweeperState.status !== 'playing') return;
+                initMinesweeperBoardData(minesweeperState.myBoard, diff);
+                buildMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard, false);
+                updateMinesweeperStatsUI();
+                if (!minesweeperState.isSolo) {
+                    sendMinesweeperBoardState();
+                }
+            }, 800);
+        } else {
+            msCheckWin();
+        }
+    }
+
+    function msFloodReveal(startIndex) {
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        const stack = [startIndex];
+        
+        while (stack.length > 0) {
+            const index = stack.pop();
+            const cell = minesweeperState.myBoard.cells[index];
+            
+            if (!cell || cell.revealed || cell.flagged || cell.mine) continue;
+            
+            if (cell.questioned) {
+                cell.questioned = false;
+            }
+            
+            cell.revealed = true;
+            minesweeperState.myBoard.revealed++;
+            
+            if (cell.adjacent === 0) {
+                for (const neighborIndex of getMinesweeperNeighbors(index, preset.rows, preset.cols)) {
+                    const neighbor = minesweeperState.myBoard.cells[neighborIndex];
+                    if (!neighbor.revealed && !neighbor.flagged) {
+                        stack.push(neighborIndex);
+                    }
+                }
+            }
+        }
+    }
+
+    function msToggleMark(index) {
+        if (minesweeperState.myBoard.ended || minesweeperState.status !== 'playing') return;
+        
+        const cell = minesweeperState.myBoard.cells[index];
+        if (!cell || cell.revealed) return;
+        
+        if (cell.flagged) {
+            cell.flagged = false;
+            cell.questioned = true;
+            minesweeperState.myBoard.flags--;
+        } else if (cell.questioned) {
+            cell.questioned = false;
+        } else {
+            cell.flagged = true;
+            minesweeperState.myBoard.flags++;
+        }
+        
+        renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+        updateMinesweeperStatsUI();
+        if (!minesweeperState.isSolo) {
+            sendMinesweeperBoardState();
+        }
+    }
+
+    function msCheckWin() {
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        const safeCellCount = preset.rows * preset.cols - preset.mines;
+        
+        if (minesweeperState.myBoard.revealed === safeCellCount) {
+            minesweeperState.myBoard.won = true;
+            minesweeperState.myBoard.ended = true;
+            
+            minesweeperState.myBoard.cells.forEach((cell) => {
+                if (cell.mine) {
+                    cell.flagged = true;
+                    cell.questioned = false;
+                }
+            });
+            minesweeperState.myBoard.flags = preset.mines;
+            renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+            
+            if (minesweeperState.isSolo) {
+                stopMinesweeperGameTimer();
+                showMinesweeperResult(true);
+            } else {
+                network.sendMinesweeper({
+                    action: 'win',
+                    peerId: network.myPeerId,
+                    time: minesweeperState.gameSecondsElapsed,
+                    mistakes: minesweeperState.myBoard.mistakes
+                });
+            }
+        }
+    }
+
+    function updateMinesweeperStatsUI() {
+        const diff = minesweeperState.difficulty;
+        const preset = MINESWEEPER_PRESETS[diff];
+        
+        const remainingMines = Math.max(0, preset.mines - minesweeperState.myBoard.flags);
+        $minesweeperMineCount.textContent = String(remainingMines);
+        $minesweeperRevealedCount.textContent = String(minesweeperState.myBoard.revealed);
+        
+        $minesweeperMyMistakes.textContent = String(minesweeperState.myBoard.mistakes);
+        if (!minesweeperState.isSolo) {
+            $minesweeperPeerMistakes.textContent = String(minesweeperState.peerBoard.mistakes);
+        }
+    }
+
+    function sendMinesweeperBoardState() {
+        network.sendMinesweeper({
+            action: 'board-sync',
+            peerId: network.myPeerId,
+            board: {
+                cells: minesweeperState.myBoard.cells,
+                started: minesweeperState.myBoard.started,
+                ended: minesweeperState.myBoard.ended,
+                won: minesweeperState.myBoard.won,
+                flags: minesweeperState.myBoard.flags,
+                revealed: minesweeperState.myBoard.revealed,
+                mistakes: minesweeperState.myBoard.mistakes,
+                hitMineIndex: minesweeperState.myBoard.hitMineIndex
+            }
+        });
+    }
+
+    function updateMinesweeperProposalListUI() {
+        $minesweeperProposalList.innerHTML = '';
+        minesweeperState.participants.forEach(p => {
+            const li = document.createElement('li');
+            const isMe = p.peerId === network.myPeerId;
+            const nicknameText = isMe ? p.nickname + ' (나)' : p.nickname;
+            
+            let statusText = '대기 중';
+            let dotColor = '#cbd5e1';
+            
+            if (p.accepted) {
+                statusText = '수락함';
+                dotColor = '#10b981';
+            }
+            
+            li.innerHTML = `
+                <span class="name">
+                    <span class="status-dot" style="background: ${dotColor};"></span>
+                    ${nicknameText}
+                </span>
+                <span class="status-text" style="color: ${dotColor};">${statusText}</span>
+            `;
+            $minesweeperProposalList.appendChild(li);
+        });
+        
+        if (network.isHost && minesweeperState.proposerId === network.myPeerId) {
+            const allAccepted = minesweeperState.participants.every(p => p.accepted);
+            $btnMinesweeperStart.disabled = !(allAccepted && minesweeperState.participants.length >= 2);
+        }
+    }
+
+    function handleMinesweeperNetworkMessage(fromPeerId, payload) {
+        console.log('[Minesweeper Network]', fromPeerId, payload);
+        const action = payload.action;
+
+        if (action === 'propose') {
+            minesweeperState.status = 'proposing';
+            minesweeperState.proposerId = payload.proposerId;
+            minesweeperState.proposerNickname = payload.proposerNickname;
+            minesweeperState.difficulty = payload.difficulty;
+            minesweeperState.participants = [
+                {
+                    peerId: payload.proposerId,
+                    nickname: payload.proposerNickname,
+                    color: payload.proposerColor || getPeerColor(payload.proposerId),
+                    accepted: true
+                }
+            ];
+
+            $minesweeperOverlay.hidden = false;
+            
+            if (payload.proposerId === network.myPeerId) {
+                showMinesweeperSubView('lobby');
+                $minesweeperLobbySetup.hidden = true;
+                $minesweeperLobbyWaiting.hidden = false;
+                $minesweeperLobbyInvite.hidden = true;
+                $minesweeperLobbyWaitingTitle.textContent = '지뢰찾기 참가 대기 중';
+                $btnMinesweeperStart.hidden = !network.isHost;
+                $btnMinesweeperStart.disabled = true;
+                updateMinesweeperProposalListUI();
+            } else {
+                showMinesweeperSubView('lobby');
+                $minesweeperLobbySetup.hidden = true;
+                $minesweeperLobbyWaiting.hidden = true;
+                $minesweeperLobbyInvite.hidden = false;
+                $minesweeperProposerName.textContent = payload.proposerNickname;
+                $minesweeperProposalDifficulty.textContent = MINESWEEPER_PRESETS[payload.difficulty].label;
+            }
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'join-response') {
+            if (network.isHost) {
+                let p = minesweeperState.participants.find(x => x.peerId === payload.peerId);
+                if (p) {
+                    p.accepted = payload.accepted;
+                } else {
+                    minesweeperState.participants.push({
+                        peerId: payload.peerId,
+                        nickname: payload.nickname,
+                        color: payload.color,
+                        accepted: payload.accepted
+                    });
+                }
+                
+                if (!payload.accepted) {
+                    showToast(`${payload.nickname}님이 대결을 거절했습니다.`);
+                    network.sendMinesweeper({ action: 'cancel' });
+                    resetMinesweeper();
+                    return;
+                }
+                
+                updateMinesweeperProposalListUI();
+                network._broadcast({ type: 'minesweeper', payload });
+            } else {
+                if (payload.accepted) {
+                    let p = minesweeperState.participants.find(x => x.peerId === payload.peerId);
+                    if (p) {
+                        p.accepted = true;
+                    } else {
+                        minesweeperState.participants.push({
+                            peerId: payload.peerId,
+                            nickname: payload.nickname,
+                            color: payload.color,
+                            accepted: true
+                        });
+                    }
+                    updateMinesweeperProposalListUI();
+                }
+            }
+        }
+        else if (action === 'cancel') {
+            showToast('제안이 취소되었습니다.');
+            resetMinesweeper();
+            if (network.isHost) {
+                network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start') {
+            minesweeperState.status = 'playing';
+            minesweeperState.isSolo = false;
+            minesweeperState.difficulty = payload.difficulty;
+            
+            initMinesweeperBoardData(minesweeperState.myBoard, payload.difficulty);
+            initMinesweeperBoardData(minesweeperState.peerBoard, payload.difficulty);
+            
+            minesweeperState.myBoard.mistakes = 0;
+            minesweeperState.peerBoard.mistakes = 0;
+            
+            $minesweeperOverlay.hidden = false;
+            showMinesweeperSubView('game');
+            
+            $minesweeperGameDiff.textContent = MINESWEEPER_PRESETS[payload.difficulty].label;
+            $minesweeperPeerArea.style.display = 'flex';
+            $minesweeperMyWrapper.style.maxWidth = '440px';
+            
+            buildMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard, false);
+            buildMinesweeperBoardDOM(minesweeperState.peerBoard, $minesweeperPeerBoard, true);
+            
+            const peer = minesweeperState.participants.find(p => p.peerId !== network.myPeerId);
+            if (peer) {
+                $minesweeperPeerTitle.textContent = `${peer.nickname}님의 보드판 (실시간 관전)`;
+            } else {
+                $minesweeperPeerTitle.textContent = '상대방 보드판 (실시간 관전)';
+            }
+            
+            updateMinesweeperStatsUI();
+            
+            resetMinesweeperTimers();
+            startMinesweeperGameTimer();
+            
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'board-sync') {
+            if (fromPeerId !== network.myPeerId) {
+                minesweeperState.peerBoard.cells = payload.board.cells;
+                minesweeperState.peerBoard.started = payload.board.started;
+                minesweeperState.peerBoard.ended = payload.board.ended;
+                minesweeperState.peerBoard.won = payload.board.won;
+                minesweeperState.peerBoard.flags = payload.board.flags;
+                minesweeperState.peerBoard.revealed = payload.board.revealed;
+                minesweeperState.peerBoard.mistakes = payload.board.mistakes;
+                minesweeperState.peerBoard.hitMineIndex = payload.board.hitMineIndex;
+                
+                renderMinesweeperBoardDOM(minesweeperState.peerBoard, $minesweeperPeerBoard);
+                updateMinesweeperStatsUI();
+            }
+            
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'win') {
+            stopMinesweeperGameTimer();
+            minesweeperState.status = 'finished';
+            
+            const winner = minesweeperState.participants.find(p => p.peerId === payload.peerId);
+            const isMe = payload.peerId === network.myPeerId;
+            
+            $minesweeperResultTitle.textContent = isMe ? '🏆 승리!' : '패배';
+            $minesweeperResultMsg.textContent = isMe 
+                ? '축하합니다! 상대방보다 먼저 안전한 칸을 모두 열었습니다.' 
+                : `${winner ? winner.nickname : '상대방'}님이 먼저 완주에 성공하였습니다.`;
+                
+            const duration = formatMinesweeperTime(payload.time);
+            $minesweeperResultStats.innerHTML = `
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #cbd5e1; padding: 6px 0;">
+                    <span>완주 시간:</span>
+                    <strong style="color: #0f172a;">${duration}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                    <span>지뢰 폭발(실수) 횟수:</span>
+                    <strong style="color: #ef4444;">${payload.mistakes}회</strong>
+                </div>
+            `;
+            
+            showMinesweeperSubView('result');
+            
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'quit') {
+            const quitter = minesweeperState.participants.find(p => p.peerId === payload.peerId);
+            showToast(`${quitter ? quitter.nickname : '상대방'}님이 기권하였습니다.`);
+            resetMinesweeper();
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+    }
+
+    function handleMinesweeperPeerLeave(peerId) {
+        if (minesweeperState.status === 'playing') {
+            const p = minesweeperState.participants.find(x => x.peerId === peerId);
+            showToast(`${p ? p.nickname : '상대방'}님의 연결이 끊겨 지뢰찾기 레이스가 종료됩니다.`);
+            resetMinesweeper();
+        } else if (minesweeperState.status === 'proposing') {
+            resetMinesweeper();
+        }
+    }
+
+    function syncMinesweeperStateFromHost(hostState) {
+        minesweeperState.status = hostState.status;
+        minesweeperState.difficulty = hostState.difficulty;
+        minesweeperState.players = hostState.players;
+        minesweeperState.gameSecondsElapsed = hostState.elapsedSeconds;
+        
+        const hostMyBoard = hostState.myBoard;
+        const hostPeerBoard = hostState.peerBoard;
+        const hostMyPeerId = network.getHostPeerId();
+        
+        if (network.myPeerId === hostMyPeerId) {
+            minesweeperState.myBoard = hostMyBoard;
+            minesweeperState.peerBoard = hostPeerBoard;
+        } else {
+            minesweeperState.myBoard = hostPeerBoard;
+            minesweeperState.peerBoard = hostMyBoard;
+        }
+        
+        $minesweeperOverlay.hidden = false;
+        showMinesweeperSubView('game');
+        
+        $minesweeperGameDiff.textContent = MINESWEEPER_PRESETS[minesweeperState.difficulty].label;
+        $minesweeperPeerArea.style.display = 'flex';
+        $minesweeperMyWrapper.style.maxWidth = '440px';
+        
+        buildMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard, false);
+        buildMinesweeperBoardDOM(minesweeperState.peerBoard, $minesweeperPeerBoard, true);
+        
+        const peer = minesweeperState.participants.find(p => p.peerId !== network.myPeerId);
+        if (peer) {
+            $minesweeperPeerTitle.textContent = `${peer.nickname}님의 보드판 (실시간 관전)`;
+        }
+        
+        updateMinesweeperStatsUI();
+        
+        resetMinesweeperTimers();
+        startMinesweeperGameTimer();
+    }
+
+    function resetMinesweeperTimers() {
+        stopMinesweeperGameTimer();
+        minesweeperState.gameSecondsElapsed = 0;
+        $minesweeperGameTimer.textContent = '00:00';
+    }
+
+    function startMinesweeperGameTimer() {
+        minesweeperState.gameStartTime = Date.now() - (minesweeperState.gameSecondsElapsed * 1000);
+        minesweeperState.gameTimerInterval = setInterval(() => {
+            minesweeperState.gameSecondsElapsed = Math.floor((Date.now() - minesweeperState.gameStartTime) / 1000);
+            $minesweeperGameTimer.textContent = formatMinesweeperTime(minesweeperState.gameSecondsElapsed);
+        }, 1000);
+    }
+
+    function stopMinesweeperGameTimer() {
+        if (minesweeperState.gameTimerInterval) {
+            clearInterval(minesweeperState.gameTimerInterval);
+            minesweeperState.gameTimerInterval = null;
+        }
+    }
+
+    function formatMinesweeperTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function showMinesweeperSubView(view) {
+        $minesweeperLobby.hidden = (view !== 'lobby');
+        $minesweeperGame.hidden = (view !== 'game');
+        $minesweeperResult.hidden = (view !== 'result');
+    }
+
+    function showMinesweeperResult(won) {
+        $minesweeperResultTitle.textContent = won ? '🏆 승리!' : '패배';
+        const duration = formatMinesweeperTime(minesweeperState.gameSecondsElapsed);
+        
+        $minesweeperResultMsg.textContent = won 
+            ? '축하합니다! 지뢰를 밟지 않고 모든 안전한 칸을 성공적으로 완료하셨습니다!'
+            : '실패하였습니다.';
+            
+        $minesweeperResultStats.innerHTML = `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #cbd5e1; padding: 6px 0;">
+                <span>완료 시간:</span>
+                <strong style="color: #0f172a;">${duration}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                <span>지뢰 폭발(실수) 횟수:</span>
+                <strong style="color: #ef4444;">${minesweeperState.myBoard.mistakes}회</strong>
+            </div>
+        `;
+        showMinesweeperSubView('result');
+    }
+
     /* ---------- Start ---------- */
 
     init();
 })();
+
