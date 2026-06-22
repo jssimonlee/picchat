@@ -2469,10 +2469,12 @@
             cancelSudokuProposal();
         });
 
-        // Host starts game
+        // Host starts game (Or request it)
         $btnSudokuStart.addEventListener('click', () => {
             if (network.isHost) {
                 hostStartSudoku();
+            } else {
+                network.sendSudoku({ action: 'start-request' });
             }
         });
 
@@ -2665,8 +2667,9 @@
         if (accepted) {
             $sudokuLobbyInvite.hidden = true;
             $sudokuLobbyWaiting.hidden = false;
-            $sudokuLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
-            $btnSudokuStart.hidden = true;
+            $sudokuLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            $btnSudokuStart.hidden = false;
+            $btnSudokuStart.disabled = true;
             $btnSudokuCancel.hidden = true;
         } else {
             resetSudoku();
@@ -2705,7 +2708,7 @@
                 $sudokuLobbyWaiting.hidden = false;
                 $sudokuLobbyInvite.hidden = true;
                 $sudokuLobbyWaitingTitle.textContent = '스도쿠 참가 대기 중';
-                $btnSudokuStart.hidden = !network.isHost;
+                $btnSudokuStart.hidden = false;
                 $btnSudokuStart.disabled = true;
                 updateSudokuProposalListUI();
             } else {
@@ -2721,6 +2724,11 @@
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 // 게스트가 보낸 propose를 다른 게스트에게 전파 (자동 브로드캐스트 없으므로)
                 network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start-request') {
+            if (network.isHost) {
+                hostStartSudoku();
             }
         }
         else if (action === 'join-response') {
@@ -2964,10 +2972,8 @@
             $sudokuProposalList.appendChild(li);
         });
 
-        if (network.isHost) {
-            const acceptedCount = sudokuState.participants.filter(p => p.peerId !== sudokuState.proposerId && p.accepted === true).length;
-            $btnSudokuStart.disabled = (acceptedCount === 0 && sudokuState.proposerId !== network.myPeerId);
-        }
+        const acceptedCount = sudokuState.participants.filter(p => p.peerId !== sudokuState.proposerId && p.accepted === true).length;
+        $btnSudokuStart.disabled = (acceptedCount === 0);
     }
 
     function buildSudokuBoardDOM() {
@@ -4176,10 +4182,12 @@
             cancelGomokuProposal();
         });
 
-        // Host starts game
+        // Host starts game (Or request it)
         $btnGomokuStart.addEventListener('click', () => {
             if (network.isHost) {
                 hostStartGomoku();
+            } else {
+                network.sendGomoku({ action: 'start-request' });
             }
         });
 
@@ -4281,8 +4289,9 @@
         if (accepted) {
             $gomokuLobbyInvite.hidden = true;
             $gomokuLobbyWaiting.hidden = false;
-            $gomokuLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
-            $btnGomokuStart.hidden = true;
+            $gomokuLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            $btnGomokuStart.hidden = false;
+            $btnGomokuStart.disabled = true;
             $btnGomokuCancel.hidden = true;
         } else {
             resetGomoku();
@@ -4315,7 +4324,7 @@
                 $gomokuLobbyWaiting.hidden = false;
                 $gomokuLobbyInvite.hidden = true;
                 $gomokuLobbyWaitingTitle.textContent = '오목 참가 대기 중';
-                $btnGomokuStart.hidden = !network.isHost;
+                $btnGomokuStart.hidden = false;
                 $btnGomokuStart.disabled = true;
                 updateGomokuProposalListUI();
             } else {
@@ -4329,6 +4338,11 @@
             // Relay if host
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start-request') {
+            if (network.isHost) {
+                hostStartGomoku();
             }
         }
         else if (action === 'join-response') {
@@ -4515,10 +4529,8 @@
             $gomokuProposalList.appendChild(li);
         });
 
-        if (network.isHost) {
-            const acceptedCount = gomokuState.participants.filter(p => p.peerId !== gomokuState.proposerId && p.accepted === true).length;
-            $btnGomokuStart.disabled = (acceptedCount === 0 && gomokuState.proposerId !== network.myPeerId);
-        }
+        const acceptedCount = gomokuState.participants.filter(p => p.peerId !== gomokuState.proposerId && p.accepted === true).length;
+        $btnGomokuStart.disabled = (acceptedCount === 0);
     }
 
     function buildGomokuBoardDOM() {
@@ -5200,10 +5212,12 @@
             cancelOthelloProposal();
         });
 
-        // Host starts game
+        // Host starts game (Or request it)
         $btnOthelloStart.addEventListener('click', () => {
             if (network.isHost) {
                 hostStartOthello();
+            } else {
+                network.sendOthello({ action: 'start-request' });
             }
         });
 
@@ -5306,8 +5320,9 @@
         if (accepted) {
             $othelloLobbyInvite.hidden = true;
             $othelloLobbyWaiting.hidden = false;
-            $othelloLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
-            $btnOthelloStart.hidden = true;
+            $othelloLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            $btnOthelloStart.hidden = false;
+            $btnOthelloStart.disabled = true;
             $btnOthelloCancel.hidden = true;
         } else {
             resetOthello();
@@ -5340,7 +5355,7 @@
                 $othelloLobbyWaiting.hidden = false;
                 $othelloLobbyInvite.hidden = true;
                 $othelloLobbyWaitingTitle.textContent = '오셀로 참가 대기 중';
-                $btnOthelloStart.hidden = !network.isHost;
+                $btnOthelloStart.hidden = false;
                 $btnOthelloStart.disabled = true;
                 updateOthelloProposalListUI();
             } else {
@@ -5354,6 +5369,11 @@
             // Relay if host
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start-request') {
+            if (network.isHost) {
+                hostStartOthello();
             }
         }
         else if (action === 'join-response') {
@@ -5541,10 +5561,8 @@
             $othelloProposalList.appendChild(li);
         });
 
-        if (network.isHost) {
-            const acceptedCount = othelloState.participants.filter(p => p.peerId !== othelloState.proposerId && p.accepted === true).length;
-            $btnOthelloStart.disabled = (acceptedCount === 0 && othelloState.proposerId !== network.myPeerId);
-        }
+        const acceptedCount = othelloState.participants.filter(p => p.peerId !== othelloState.proposerId && p.accepted === true).length;
+        $btnOthelloStart.disabled = (acceptedCount === 0);
     }
 
     function initOthelloBoard(board) {
@@ -6407,10 +6425,12 @@
             cancelMinesweeperProposal();
         });
 
-        // Host starts game
+        // Host starts game (Or request it)
         $btnMinesweeperStart.addEventListener('click', () => {
             if (network.isHost) {
                 hostStartMinesweeper();
+            } else {
+                network.sendMinesweeper({ action: 'start-request' });
             }
         });
 
@@ -6468,8 +6488,9 @@
         if (accepted) {
             $minesweeperLobbyInvite.hidden = true;
             $minesweeperLobbyWaiting.hidden = false;
-            $minesweeperLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
-            $btnMinesweeperStart.hidden = true;
+            $minesweeperLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            $btnMinesweeperStart.hidden = false;
+            $btnMinesweeperStart.disabled = true;
             $btnMinesweeperCancel.hidden = true;
         } else {
             resetMinesweeper();
@@ -7104,10 +7125,8 @@
             $minesweeperProposalList.appendChild(li);
         });
         
-        if (network.isHost && minesweeperState.proposerId === network.myPeerId) {
-            const allAccepted = minesweeperState.participants.every(p => p.accepted);
-            $btnMinesweeperStart.disabled = !(allAccepted && minesweeperState.participants.length >= 2);
-        }
+        const allAccepted = minesweeperState.participants.every(p => p.accepted);
+        $btnMinesweeperStart.disabled = !(allAccepted && minesweeperState.participants.length >= 2);
     }
 
     function handleMinesweeperNetworkMessage(fromPeerId, payload) {
@@ -7136,7 +7155,7 @@
                 $minesweeperLobbyWaiting.hidden = false;
                 $minesweeperLobbyInvite.hidden = true;
                 $minesweeperLobbyWaitingTitle.textContent = '지뢰찾기 참가 대기 중';
-                $btnMinesweeperStart.hidden = !network.isHost;
+                $btnMinesweeperStart.hidden = false;
                 $btnMinesweeperStart.disabled = true;
                 updateMinesweeperProposalListUI();
             } else {
@@ -7150,6 +7169,11 @@
 
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start-request') {
+            if (network.isHost) {
+                hostStartMinesweeper();
             }
         }
         else if (action === 'join-response') {
