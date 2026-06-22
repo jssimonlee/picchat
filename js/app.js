@@ -943,12 +943,11 @@
     }
 
     function updateModificationHandles() {
+        // If currently editing an action, do not update handles and do not clear the active edit menu.
+        if (activeEditMenu) return;
+
         // Remove existing handles
         document.querySelectorAll('.image-handle-el').forEach(el => el.remove());
-        if (activeEditMenu) {
-            activeEditMenu.remove();
-            activeEditMenu = null;
-        }
 
         if (!canvas || !network) return;
 
