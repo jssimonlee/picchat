@@ -1518,6 +1518,17 @@ input, button, textarea {
     border-radius: 12px;
     padding: 8px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.sudoku-board-wrapper.my-turn {
+    border-color: rgba(16, 185, 129, 0.85);
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.25), 0 0 15px rgba(16, 185, 129, 0.35);
+}
+
+.sudoku-board-wrapper.other-turn {
+    border-color: rgba(239, 68, 68, 0.85);
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2), 0 0 15px rgba(239, 68, 68, 0.3);
 }
 
 .sudoku-board {

@@ -2429,6 +2429,11 @@
 
                 cell.addEventListener('dblclick', () => {
                     if (isSpectator) return;
+                    
+                    const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
+                    const isMyTurn = activePeerId === network.myPeerId;
+                    if (!isMyTurn) return;
+
                     if (sudokuState.board[r][c] !== 0) return;
                     if (sudokuState.initialBoard[r][c] !== 0) return;
                     applySudokuShortcutInputToCell(r, c);
@@ -2445,6 +2450,12 @@
 
     function selectSudokuCell(r, c) {
         if (sudokuState.status !== 'playing') return;
+
+        // 다른 사람 턴일 때는 클릭 반응 없음
+        const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
+        const isMyTurn = activePeerId === network.myPeerId;
+        if (!isMyTurn) return;
+
         sudokuState.selectedCell = { r, c };
 
         document.querySelectorAll('.sudoku-cell').forEach(cell => {
@@ -2930,6 +2941,17 @@
         const activePlayer = sudokuState.players.find(p => p.peerId === activePeerId);
         const nameText = activePlayer ? activePlayer.nickname : '알 수 없음';
 
+        const $boardWrapper = $sudokuBoard.parentElement;
+        if ($boardWrapper) {
+            if (isMyTurn) {
+                $boardWrapper.classList.add('my-turn');
+                $boardWrapper.classList.remove('other-turn');
+            } else {
+                $boardWrapper.classList.add('other-turn');
+                $boardWrapper.classList.remove('my-turn');
+            }
+        }
+
         if (isMyTurn) {
             $sudokuTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">내 차례입니다!</span> (남은 시간: <span id="sudokuTurnTimerSecs">${sudokuState.secondsRemaining}</span>초)`;
         } else {
@@ -3240,6 +3262,11 @@
         };
 
         $btnSudokuNotes.classList.remove('notes-active');
+
+        const $boardWrapper = $sudokuBoard.parentElement;
+        if ($boardWrapper) {
+            $boardWrapper.classList.remove('my-turn', 'other-turn');
+        }
 
         $sudokuLobby.hidden = true;
         $sudokuGame.hidden = true;
