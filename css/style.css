@@ -1254,6 +1254,38 @@ input, button, textarea {
     animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Sudoku Window Specific Buttons Style (Light Theme adjustments) */
+.sudoku-window .btn-secondary {
+    background: rgba(241, 245, 249, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color: #334155;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+.sudoku-window .btn-secondary:hover {
+    background: rgba(226, 232, 240, 0.95);
+    border-color: rgba(0, 0, 0, 0.25);
+    color: #0f172a;
+}
+.sudoku-window .btn-secondary:active {
+    background: rgba(203, 213, 225, 0.95);
+}
+
+.sudoku-window .btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    border: none;
+}
+.sudoku-window .btn-primary:hover {
+    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.35);
+}
+.sudoku-window .btn-primary:disabled {
+    background: #e2e8f0;
+    color: #94a3b8;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
 .sudoku-header {
     display: flex;
     justify-content: space-between;
