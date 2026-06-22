@@ -91,9 +91,31 @@ class NetworkManager {
             
             const peerId = this._roomCodeToPeerId(this.roomCode);
 
-            this.peer = new Peer(peerId, {
-                debug: 0
-            });
+            const peerConfig = {
+                debug: 0,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:openrelay.metered.ca:80' },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ]
+                }
+            };
+            this.peer = new Peer(peerId, peerConfig);
 
             this.peer.on('open', (id) => {
                 this.myPeerId = id;
@@ -149,9 +171,31 @@ class NetworkManager {
             const hostPeerId = this._roomCodeToPeerId(this.roomCode);
             const myPeerId = hostPeerId + '-' + Math.random().toString(36).substr(2, 6);
 
-            this.peer = new Peer(myPeerId, {
-                debug: 0
-            });
+            const peerConfig = {
+                debug: 0,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:openrelay.metered.ca:80' },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ]
+                }
+            };
+            this.peer = new Peer(myPeerId, peerConfig);
 
             this.peer.on('open', (id) => {
                 this.myPeerId = id;
