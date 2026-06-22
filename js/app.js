@@ -6673,6 +6673,32 @@
         }
     }
 
+    function msClearLongPressTimer() {
+        if (msLongPressTimer !== null) {
+            window.clearTimeout(msLongPressTimer);
+            msLongPressTimer = null;
+        }
+    }
+
+    function msCanChordFrom(index) {
+        const cell = minesweeperState.myBoard.cells[index];
+        return Boolean(
+            minesweeperState.status === 'playing' &&
+            !minesweeperState.myBoard.ended &&
+            cell &&
+            cell.revealed &&
+            !cell.mine
+        );
+    }
+
+    function msBeginChordPress(index, pointerId) {
+        msActiveChordIndex = index;
+        msActiveChordPointerId = pointerId;
+        msChordPressTimedOut = false;
+        msIgnoreNextClick = true;
+        renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+    }
+
     function msRevealCell(index) {
         if (minesweeperState.myBoard.ended || minesweeperState.status !== 'playing') return;
         
