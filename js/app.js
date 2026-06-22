@@ -19,6 +19,7 @@
     const $roomCode = document.getElementById('roomCode');
     const $btnCopyCode = document.getElementById('btnCopyCode');
     const $lobbyStatus = document.getElementById('lobbyStatus');
+    const $btnEnterSolo = document.getElementById('btnEnterSolo');
 
     // Studio
     const $mainCanvas = document.getElementById('mainCanvas');
@@ -238,6 +239,11 @@
         });
         $joinCode.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') $btnJoinRoom.click();
+        });
+        $btnEnterSolo.addEventListener('click', () => {
+            if (network && network.roomCode) {
+                enterStudio(network.roomCode);
+            }
         });
     }
 
