@@ -1,5 +1,5 @@
 /* ========================================
-   PicComm - Main Application Controller
+   PicChat - Main Application Controller
    Wires Canvas + Network + UI together
    ======================================== */
 
@@ -81,10 +81,10 @@
     const $sudokuHealthBars = document.getElementById('sudokuHealthBars');
     const $sudokuMyBoardTitle = document.getElementById('sudokuMyBoardTitle');
     const $sudokuMyWrapper = document.getElementById('sudokuMyWrapper');
-    const $sudokuBoard = document.getElementById('piccomm-sudoku-board');
+    const $sudokuBoard = document.getElementById('picchat-sudoku-board');
     const $sudokuPeerBoardArea = document.getElementById('sudokuPeerBoardArea');
     const $sudokuPeerWrapper = document.getElementById('sudokuPeerWrapper');
-    const $sudokuPeerBoard = document.getElementById('piccomm-sudoku-board-peer');
+    const $sudokuPeerBoard = document.getElementById('picchat-sudoku-board-peer');
     const $sudokuTurnStatus = document.getElementById('sudokuTurnStatus');
     const $sudokuTurnCard = document.getElementById('sudokuTurnCard');
     const $sudokuTurnTimerProgress = document.getElementById('sudokuTurnTimerProgress');
@@ -122,7 +122,7 @@
     const $gomokuGameStatus = document.getElementById('gomokuGameStatus');
     const $gomokuGameTimer = document.getElementById('gomokuGameTimer');
     const $gomokuCurrentTurnIcon = document.getElementById('gomokuCurrentTurnIcon');
-    const $gomokuBoard = document.getElementById('piccomm-gomoku-board');
+    const $gomokuBoard = document.getElementById('picchat-gomoku-board');
     const $gomokuTurnCard = document.getElementById('gomokuTurnCard');
     const $gomokuTurnStatus = document.getElementById('gomokuTurnStatus');
     const $gomokuTurnTimerProgress = document.getElementById('gomokuTurnTimerProgress');
@@ -157,7 +157,7 @@
     const $othelloGameStatus = document.getElementById('othelloGameStatus');
     const $othelloGameTimer = document.getElementById('othelloGameTimer');
     const $othelloCurrentTurnIcon = document.getElementById('othelloCurrentTurnIcon');
-    const $othelloBoard = document.getElementById('piccomm-othello-board');
+    const $othelloBoard = document.getElementById('picchat-othello-board');
     const $othelloBlackCount = document.getElementById('othelloBlackCount');
     const $othelloWhiteCount = document.getElementById('othelloWhiteCount');
     const $othelloTurnCard = document.getElementById('othelloTurnCard');
@@ -199,12 +199,12 @@
     const $minesweeperGameTimer = document.getElementById('minesweeperGameTimer');
     const $minesweeperRevealedCount = document.getElementById('minesweeperRevealedCount');
     const $minesweeperMyWrapper = document.getElementById('minesweeperMyWrapper');
-    const $minesweeperMyBoard = document.getElementById('piccomm-minesweeper-board');
+    const $minesweeperMyBoard = document.getElementById('picchat-minesweeper-board');
     const $minesweeperMyMistakes = document.getElementById('minesweeperMyMistakes');
     const $minesweeperPeerArea = document.getElementById('minesweeperPeerArea');
     const $minesweeperPeerTitle = document.getElementById('minesweeperPeerTitle');
     const $minesweeperPeerWrapper = document.getElementById('minesweeperPeerWrapper');
-    const $minesweeperPeerBoard = document.getElementById('piccomm-minesweeper-board-peer');
+    const $minesweeperPeerBoard = document.getElementById('picchat-minesweeper-board-peer');
     const $minesweeperPeerMistakes = document.getElementById('minesweeperPeerMistakes');
     const $btnMinesweeperQuit = document.getElementById('btnMinesweeperQuit');
     const $minesweeperResult = document.getElementById('minesweeperResult');
@@ -212,6 +212,19 @@
     const $minesweeperResultMsg = document.getElementById('minesweeperResultMsg');
     const $minesweeperResultStats = document.getElementById('minesweeperResultStats');
     const $btnMinesweeperResultClose = document.getElementById('btnMinesweeperResultClose');
+
+    // Chat Sidebar Elements
+    const $chatSidebar = document.getElementById('chatSidebar');
+    const $chatMessages = document.getElementById('chatMessages');
+    const $chatInput = document.getElementById('chatInput');
+    const $btnSendChat = document.getElementById('btnSendChat');
+    const $btnToggleChat = document.getElementById('btnToggleChat');
+    const $btnCloseChat = document.getElementById('btnCloseChat');
+    const $chatUnread = document.getElementById('chatUnread');
+    const $floatingEmojis = document.getElementById('floatingEmojis');
+    const $gridTemplate = document.getElementById('gridTemplate');
+    const $btnGames = document.getElementById('btnGames');
+    const $gamesSubmenu = document.getElementById('gamesSubmenu');
 
     /* ---------- State ---------- */
 
@@ -222,6 +235,8 @@
     let downloadTimeout = null;
     const remoteCursors = new Map(); // peerId -> DOM element
     const knownParticipants = new Map(); // peerId -> { nickname, color }
+    let chatUnreadCount = 0;
+    let isChatOpen = false;
 
     // Sudoku State
     let sudokuState = {
@@ -346,7 +361,7 @@
         setupLobbyEvents();
         setupPresenceTracking();
         // Auto-fill nickname from localStorage
-        const savedNick = localStorage.getItem('piccomm-nickname');
+        const savedNick = localStorage.getItem('picchat-nickname');
         if (savedNick) $nickname.value = savedNick;
 
         // Auto-format join code
@@ -482,7 +497,7 @@
 
     function getNickname() {
         const nick = $nickname.value.trim() || '익명' + Math.floor(Math.random() * 100);
-        localStorage.setItem('piccomm-nickname', nick);
+        localStorage.setItem('picchat-nickname', nick);
         return nick;
     }
 
@@ -675,6 +690,25 @@
             onMinesweeper: (fromPeerId, payload) => {
                 handleMinesweeperNetworkMessage(fromPeerId, payload);
             },
+            onChat: (fromPeerId, message, nickname, color) => {
+                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId);
+            },
+            onEmoji: (fromPeerId, emoji, nickname, color) => {
+                spawnFloatingEmoji(emoji);
+                addChatEmojiReaction(nickname, emoji, fromPeerId === network.myPeerId);
+            },
+            onLaser: (fromPeerId, points, color) => {
+                showRemoteLaser(points, color);
+            },
+            onDrawStart: (fromPeerId, pathId, tool, color, size, opacity, point) => {
+                if (canvas) canvas.remoteDrawStart(pathId, tool, color, size, opacity, point);
+            },
+            onDrawMove: (fromPeerId, pathId, point, endPoint) => {
+                if (canvas) canvas.remoteDrawMove(pathId, point, endPoint);
+            },
+            onDrawEnd: (fromPeerId, pathId) => {
+                if (canvas) canvas.remoteDrawEnd(pathId);
+            },
             getCanvasState: () => {
                 const state = canvas ? canvas.getState() : {};
                 state.sudokuState = {
@@ -753,6 +787,21 @@
                     cursorThrottle = now;
                     network.sendCursor(x, y);
                 }
+            },
+            onLaserStroke: (points, color) => {
+                // Show local laser fade effect
+                showLocalLaser(points, color);
+                // Broadcast to others
+                network.sendLaser(points, color);
+            },
+            onDrawStart: (pathId, tool, color, size, opacity, point) => {
+                network.sendDrawStart(pathId, tool, color, size, opacity, point);
+            },
+            onDrawMove: (pathId, point, endPoint) => {
+                network.sendDrawMove(pathId, point, endPoint);
+            },
+            onDrawEnd: (pathId) => {
+                network.sendDrawEnd(pathId);
             }
         });
 
@@ -789,6 +838,8 @@
         setupOthelloEvents();
         // Setup Minesweeper events
         setupMinesweeperEvents();
+        // Setup Chat events
+        setupChatEvents();
     }
 
     /* ---------- Tool Events ---------- */
@@ -806,6 +857,10 @@
                     $tempCanvas.style.cursor = 'text';
                 } else if (btn.dataset.tool === 'eraser') {
                     $tempCanvas.style.cursor = 'cell';
+                } else if (btn.dataset.tool === 'fill') {
+                    $tempCanvas.style.cursor = 'crosshair';
+                } else if (btn.dataset.tool === 'laser') {
+                    $tempCanvas.style.cursor = 'default';
                 } else {
                     $tempCanvas.style.cursor = 'crosshair';
                 }
@@ -865,6 +920,52 @@
             $opacityValue.textContent = e.target.value + '%';
         });
 
+        // Grid template
+        $gridTemplate.addEventListener('change', (e) => {
+            const val = e.target.value;
+            $tempCanvas.classList.remove('grid-none', 'grid-grid', 'grid-dots', 'grid-lines');
+            $tempCanvas.classList.add('grid-' + val);
+        });
+
+        // Games dropdown hover / click behavior with delay
+        if ($btnGames && $gamesSubmenu) {
+            const $gamesGroup = $btnGames.parentElement;
+            let hideTimeout = null;
+
+            const showMenu = () => {
+                if (hideTimeout) clearTimeout(hideTimeout);
+                $gamesSubmenu.classList.add('active');
+            };
+
+            const hideMenu = () => {
+                if (hideTimeout) clearTimeout(hideTimeout);
+                hideTimeout = setTimeout(() => {
+                    $gamesSubmenu.classList.remove('active');
+                }, 400); // 400ms delay to prevent accidental closing
+            };
+
+            // Hover on the parent group container
+            $gamesGroup.addEventListener('mouseenter', showMenu);
+            $gamesGroup.addEventListener('mouseleave', hideMenu);
+
+            // Click toggle for touchscreen support
+            $btnGames.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if ($gamesSubmenu.classList.contains('active')) {
+                    $gamesSubmenu.classList.remove('active');
+                } else {
+                    showMenu();
+                }
+            });
+
+            // Click outside to close
+            document.addEventListener('click', (e) => {
+                if (!$gamesGroup.contains(e.target)) {
+                    $gamesSubmenu.classList.remove('active');
+                }
+            });
+        }
+
         // Undo/Redo
         $btnUndo.addEventListener('click', () => {
             canvas.undo();
@@ -891,7 +992,7 @@
 
             const dataUrl = canvas.exportImage();
             const link = document.createElement('a');
-            link.download = `piccomm-${Date.now()}.png`;
+            link.download = `picchat-${Date.now()}.png`;
             link.href = dataUrl;
             link.click();
             showToast('💾 이미지가 다운로드되었습니다');
@@ -1902,7 +2003,8 @@
             const toolMap = {
                 'p': 'pen', 'b': 'brush', 'e': 'eraser',
                 'l': 'line', 'r': 'rectangle', 'c': 'circle',
-                'a': 'arrow', 't': 'text', 'i': 'upload'
+                'a': 'arrow', 't': 'text', 'i': 'upload',
+                'f': 'fill', 'v': 'laser'
             };
             const tool = toolMap[e.key.toLowerCase()];
             if (tool === 'upload') {
@@ -7258,6 +7360,228 @@
             </div>
         `;
         showMinesweeperSubView('result');
+    }
+
+    /* ==============================================
+       CHAT SIDEBAR
+       ============================================== */
+
+    function setupChatEvents() {
+        // Toggle chat sidebar
+        $btnToggleChat.addEventListener('click', toggleChat);
+        $btnCloseChat.addEventListener('click', () => {
+            toggleChat(false);
+        });
+
+        // Send chat message
+        $btnSendChat.addEventListener('click', sendChatMessage);
+        $chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+
+        // Emoji quick buttons
+        document.querySelectorAll('.emoji-quick-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const emoji = btn.dataset.emoji;
+                if (network) {
+                    network.sendEmoji(emoji);
+                    // Local echo for non-host
+                    if (!network.isHost) {
+                        spawnFloatingEmoji(emoji);
+                        addChatEmojiReaction(network.nickname, emoji, true);
+                    }
+                }
+            });
+        });
+    }
+
+    function toggleChat(forceState) {
+        isChatOpen = typeof forceState === 'boolean' ? forceState : !isChatOpen;
+        $chatSidebar.hidden = !isChatOpen;
+        $btnToggleChat.classList.toggle('active', isChatOpen);
+
+        if (isChatOpen) {
+            chatUnreadCount = 0;
+            $chatUnread.hidden = true;
+            $chatUnread.textContent = '0';
+            // Scroll to bottom
+            setTimeout(() => {
+                $chatMessages.scrollTop = $chatMessages.scrollHeight;
+                $chatInput.focus();
+            }, 100);
+        }
+    }
+
+    function sendChatMessage() {
+        const msg = $chatInput.value.trim();
+        if (!msg || !network) return;
+
+        network.sendChat(msg);
+        // Local echo for non-host
+        if (!network.isHost) {
+            addChatMessage(network.nickname, msg, network.myColor, true);
+        }
+        $chatInput.value = '';
+        $chatInput.focus();
+    }
+
+    function addChatMessage(nickname, message, color, isMine) {
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg' + (isMine ? ' mine' : '');
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'chat-msg-name';
+        nameEl.style.color = color;
+        nameEl.textContent = nickname;
+
+        const bubbleEl = document.createElement('div');
+        bubbleEl.className = 'chat-msg-bubble';
+        bubbleEl.textContent = message;
+
+        msgEl.appendChild(nameEl);
+        msgEl.appendChild(bubbleEl);
+        $chatMessages.appendChild(msgEl);
+
+        // Keep only last 200 messages
+        while ($chatMessages.children.length > 200) {
+            $chatMessages.removeChild($chatMessages.firstChild);
+        }
+
+        // Auto-scroll
+        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+
+        // Update unread badge if chat is closed
+        if (!isChatOpen) {
+            chatUnreadCount++;
+            $chatUnread.textContent = chatUnreadCount > 99 ? '99+' : chatUnreadCount;
+            $chatUnread.hidden = false;
+        }
+    }
+
+    function addChatEmojiReaction(nickname, emoji, isMine) {
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg-emoji-reaction';
+        msgEl.textContent = emoji;
+        msgEl.title = nickname;
+        $chatMessages.appendChild(msgEl);
+        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+    }
+
+    function addChatSystemMessage(text) {
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg-system';
+        msgEl.textContent = text;
+        $chatMessages.appendChild(msgEl);
+        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+    }
+
+    /* ==============================================
+       FLOATING EMOJI REACTIONS
+       ============================================== */
+
+    function spawnFloatingEmoji(emoji) {
+        const el = document.createElement('div');
+        el.className = 'floating-emoji';
+        el.textContent = emoji;
+        // Random horizontal position within the canvas area
+        const containerRect = $canvasContainer.getBoundingClientRect();
+        const x = Math.random() * (containerRect.width - 60) + 30;
+        const y = containerRect.height - 60;
+        el.style.left = x + 'px';
+        el.style.bottom = '20px';
+        $floatingEmojis.appendChild(el);
+
+        // Remove after animation
+        setTimeout(() => {
+            el.remove();
+        }, 2600);
+    }
+
+    /* ==============================================
+       LASER POINTER
+       ============================================== */
+
+    function showLocalLaser(points, color) {
+        if (!canvas) return;
+        _animateLaserFade(points, color);
+    }
+
+    function showRemoteLaser(points, color) {
+        if (!canvas) return;
+        _animateLaserFade(points, color);
+    }
+
+    function _animateLaserFade(points, color) {
+        if (!canvas || !points || points.length < 2) return;
+
+        // Create an overlay canvas for the laser effect
+        const laserCanvas = document.createElement('canvas');
+        laserCanvas.width = canvas.CANVAS_WIDTH;
+        laserCanvas.height = canvas.CANVAS_HEIGHT;
+        laserCanvas.style.position = 'absolute';
+        laserCanvas.style.top = '50%';
+        laserCanvas.style.left = '50%';
+        laserCanvas.style.transform = 'translate(-50%, -50%)';
+        laserCanvas.style.pointerEvents = 'none';
+        laserCanvas.style.zIndex = '8';
+        // Match the size of tempCanvas
+        laserCanvas.style.width = canvas.tempCanvas.style.width;
+        laserCanvas.style.height = canvas.tempCanvas.style.height;
+        $canvasContainer.appendChild(laserCanvas);
+
+        const ctx = laserCanvas.getContext('2d');
+
+        function drawLaser(alpha) {
+            ctx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+            // Glow layer
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.lineWidth = 8;
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Animate fade-out over 1.5 seconds
+        const duration = 1500;
+        const startTime = performance.now();
+
+        function fade(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const alpha = 1 - progress;
+
+            if (alpha > 0) {
+                drawLaser(alpha);
+                requestAnimationFrame(fade);
+            } else {
+                laserCanvas.remove();
+            }
+        }
+
+        drawLaser(1);
+        requestAnimationFrame(fade);
     }
 
     /* ---------- Start ---------- */

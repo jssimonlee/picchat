@@ -1,5 +1,5 @@
 /* ========================================
-   PicComm - Network Manager (PeerJS)
+   PicChat - Network Manager (PeerJS)
    Handles P2P connections via WebRTC
    Star topology: host relays all messages
    ======================================== */
@@ -25,6 +25,12 @@ class NetworkManager {
         this.onGomoku = callbacks.onGomoku || (() => {});
         this.onOthello = callbacks.onOthello || (() => {});
         this.onMinesweeper = callbacks.onMinesweeper || (() => {});
+        this.onChat = callbacks.onChat || (() => {});
+        this.onEmoji = callbacks.onEmoji || (() => {});
+        this.onLaser = callbacks.onLaser || (() => {});
+        this.onDrawStart = callbacks.onDrawStart || (() => {});
+        this.onDrawMove = callbacks.onDrawMove || (() => {});
+        this.onDrawEnd = callbacks.onDrawEnd || (() => {});
 
         // State needed for state sync
         this.getCanvasState = callbacks.getCanvasState || (() => ({}));
@@ -57,7 +63,7 @@ class NetworkManager {
     }
 
     _roomCodeToPeerId(code) {
-        return 'piccomm-' + code.replace('-', '').toLowerCase();
+        return 'picchat-' + code.replace('-', '').toLowerCase();
     }
 
     _nextColor() {
@@ -409,6 +415,36 @@ class NetworkManager {
             case 'minesweeper':
                 this.onMinesweeper(fromPeerId, data.payload);
                 break;
+
+            case 'chat':
+                this.onChat(fromPeerId, data.message, data.nickname, data.color);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
+            case 'emoji':
+                this.onEmoji(fromPeerId, data.emoji, data.nickname, data.color);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
+            case 'laser':
+                this.onLaser(fromPeerId, data.points, data.color);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
+            case 'draw-start':
+                this.onDrawStart(fromPeerId, data.pathId, data.tool, data.color, data.size, data.opacity, data.point);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
+            case 'draw-move':
+                this.onDrawMove(fromPeerId, data.pathId, data.point, data.endPoint);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
+
+            case 'draw-end':
+                this.onDrawEnd(fromPeerId, data.pathId);
+                if (this.isHost) this._broadcast(data, fromPeerId);
+                break;
         }
     }
 
@@ -589,6 +625,74 @@ class NetworkManager {
             this._broadcast(data);
             // Local echo: host also processes its own messages
             this.onMinesweeper(this.myPeerId, payload);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendChat(message) {
+        const data = { type: 'chat', message, nickname: this.nickname, color: this.myColor };
+        if (this.isHost) {
+            this._broadcast(data);
+            this.onChat(this.myPeerId, message, this.nickname, this.myColor);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendEmoji(emoji) {
+        const data = { type: 'emoji', emoji, nickname: this.nickname, color: this.myColor };
+        if (this.isHost) {
+            this._broadcast(data);
+            this.onEmoji(this.myPeerId, emoji, this.nickname, this.myColor);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendLaser(points, color) {
+        const data = { type: 'laser', points, color };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendDrawStart(pathId, tool, color, size, opacity, point) {
+        const data = { type: 'draw-start', pathId, tool, color, size, opacity, point };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendDrawMove(pathId, point, endPoint) {
+        const data = { type: 'draw-move', pathId, point, endPoint };
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendDrawEnd(pathId) {
+        const data = { type: 'draw-end', pathId };
+        if (this.isHost) {
+            this._broadcast(data);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}

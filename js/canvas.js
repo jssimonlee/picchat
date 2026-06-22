@@ -1,5 +1,5 @@
 /* ========================================
-   PicComm - Drawing Canvas Engine
+   PicChat - Drawing Canvas Engine
    Manages all canvas drawing operations
    ======================================== */
 
@@ -34,14 +34,20 @@ class DrawingCanvas {
         this.currentPath = [];
         this.startPoint = null;
         this.lastPoint = null;
+        this.currentPathId = null;
+        this.remoteActivePaths = new Map(); // pathId -> pathData
 
         // Callbacks
         this.onAction = options.onAction || (() => {});
         this.onCursorMove = options.onCursorMove || (() => {});
+        this.onDrawStart = options.onDrawStart || null;
+        this.onDrawMove = options.onDrawMove || null;
+        this.onDrawEnd = options.onDrawEnd || null;
 
         // Text input
         this.textInputEl = options.textInputEl || null;
         this._textCallback = null;
+        this.onLaserStroke = options.onLaserStroke || null;
 
         this._init();
     }
@@ -135,10 +141,24 @@ class DrawingCanvas {
             return;
         }
 
-        this.isDrawing = true;
+        if (this.currentTool === 'fill') {
+            this._floodFill(point);
+            return;
+        }
 
-        if (this._isFreehandTool()) {
+        this.isDrawing = true;
+        this.currentPathId = 'p-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
+
+        if (this._isFreehandTool() || this.currentTool === 'laser') {
             this.currentPath = [point];
+        }
+
+        if (this.onDrawStart) {
+            const tool = this.currentTool;
+            const color = tool === 'eraser' ? this.backgroundColor : this.currentColor;
+            const size = tool === 'brush' ? this.currentSize * 2.5 : this.currentSize;
+            const opacity = tool === 'eraser' ? 1 : this.currentOpacity;
+            this.onDrawStart(this.currentPathId, tool, color, size, opacity, point);
         }
     }
 
@@ -146,17 +166,26 @@ class DrawingCanvas {
         if (!this.isDrawing) return;
         const point = this._getCanvasPoint(e);
 
-        if (this._isFreehandTool()) {
+        if (this.currentTool === 'laser') {
             this.currentPath.push(point);
             this.lastPoint = point;
-
-            // Draw path preview on temp canvas to prevent overlapping opacity circles at joints
-            this._clearTemp();
-            this._drawFreehandPath(this.tempCtx, this.currentPath);
+            this.redrawTemp();
+            if (this.onDrawMove) {
+                this.onDrawMove(this.currentPathId, point, null);
+            }
+        } else if (this._isFreehandTool()) {
+            this.currentPath.push(point);
+            this.lastPoint = point;
+            this.redrawTemp();
+            if (this.onDrawMove) {
+                this.onDrawMove(this.currentPathId, point, null);
+            }
         } else {
-            // Shape preview on temp canvas
-            this._clearTemp();
-            this._drawShapePreview(this.startPoint, point);
+            this.lastPoint = point;
+            this.redrawTemp();
+            if (this.onDrawMove) {
+                this.onDrawMove(this.currentPathId, null, point);
+            }
         }
     }
 
@@ -164,10 +193,27 @@ class DrawingCanvas {
         if (!this.isDrawing) return;
         this.isDrawing = false;
 
+        if (this.currentTool === 'laser') {
+            const laserPath = [...this.currentPath];
+            if (this.onDrawEnd) this.onDrawEnd(this.currentPathId);
+            this.redrawTemp();
+            this.currentPath = [];
+            this.startPoint = null;
+            this.lastPoint = null;
+            this.currentPathId = null;
+            if (this.onLaserStroke) {
+                this.onLaserStroke(laserPath, this.currentColor);
+            }
+            return;
+        }
+
         const point = this._getCanvasPoint(e);
 
+        if (this.onDrawEnd) {
+            this.onDrawEnd(this.currentPathId);
+        }
+
         if (this._isFreehandTool()) {
-            this._clearTemp(); // Clear temp canvas
             if (this.currentPath.length > 0) {
                 // Simplify path for network efficiency
                 const simplified = this._simplifyPath(this.currentPath);
@@ -186,7 +232,6 @@ class DrawingCanvas {
             }
         } else {
             // Finalize shape
-            this._clearTemp();
             const action = {
                 type: 'shape',
                 shape: this.currentTool,
@@ -205,6 +250,8 @@ class DrawingCanvas {
         this.currentPath = [];
         this.startPoint = null;
         this.lastPoint = null;
+        this.currentPathId = null;
+        this.redrawTemp();
     }
 
     /* ---------- Tool Helpers ---------- */
@@ -237,15 +284,16 @@ class DrawingCanvas {
         ctx.restore();
     }
 
-    _drawShapePreview(from, to) {
-        const ctx = this.tempCtx;
+    _drawShapePreview(from, to, customCtx = null, tool = null, color = null, size = null, opacity = null) {
+        const ctx = customCtx || this.tempCtx;
+        const currentTool = tool || this.currentTool;
         ctx.save();
-        ctx.globalAlpha = this.currentOpacity;
-        ctx.strokeStyle = this.currentColor;
-        ctx.lineWidth = this.currentSize;
+        ctx.globalAlpha = opacity !== null ? opacity : this.currentOpacity;
+        ctx.strokeStyle = color || this.currentColor;
+        ctx.lineWidth = size || this.currentSize;
         ctx.setLineDash([6, 4]);
 
-        switch (this.currentTool) {
+        switch (currentTool) {
             case 'line':
                 ctx.beginPath();
                 ctx.moveTo(from.x, from.y);
@@ -266,14 +314,15 @@ class DrawingCanvas {
                 break;
             }
             case 'arrow':
-                this._drawArrow(ctx, from.x, from.y, to.x, to.y);
+                this._drawArrow(ctx, from.x, from.y, to.x, to.y, size);
                 break;
         }
         ctx.restore();
     }
 
-    _drawArrow(ctx, x1, y1, x2, y2) {
-        const headLen = Math.max(15, this.currentSize * 4);
+    _drawArrow(ctx, x1, y1, x2, y2, customSize = null) {
+        const size = customSize !== null ? customSize : this.currentSize;
+        const headLen = Math.max(15, size * 4);
         const angle = Math.atan2(y2 - y1, x2 - x1);
         ctx.beginPath();
         ctx.moveTo(x1, y1);
@@ -287,6 +336,93 @@ class DrawingCanvas {
         ctx.moveTo(x2, y2);
         ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
         ctx.stroke();
+    }
+
+    /* ---------- Real-Time Remote Drawing ---------- */
+
+    redrawTemp() {
+        this._clearTemp();
+
+        // 1. Draw remote active paths
+        for (const [id, path] of this.remoteActivePaths) {
+            this._drawRemoteActivePath(path);
+        }
+
+        // 2. Draw local active path
+        if (this.isDrawing) {
+            if (this.currentTool === 'laser') {
+                this._drawLaserPath(this.tempCtx, this.currentPath);
+            } else if (this._isFreehandTool()) {
+                this._drawFreehandPath(this.tempCtx, this.currentPath);
+            } else if (this.startPoint && this.lastPoint) {
+                this._drawShapePreview(this.startPoint, this.lastPoint);
+            }
+        }
+    }
+
+    _drawRemoteActivePath(path) {
+        const ctx = this.tempCtx;
+        ctx.save();
+        ctx.globalAlpha = path.opacity;
+        ctx.strokeStyle = path.color;
+        ctx.lineWidth = path.size;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (path.tool === 'laser') {
+            this._drawLaserPath(ctx, path.points);
+        } else if (path.tool === 'pen' || path.tool === 'brush' || path.tool === 'eraser') {
+            if (path.points.length < 2) {
+                if (path.points.length === 1) {
+                    ctx.fillStyle = path.color;
+                    ctx.beginPath();
+                    ctx.arc(path.points[0].x, path.points[0].y, path.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(path.points[0].x, path.points[0].y);
+                for (let i = 1; i < path.points.length; i++) {
+                    ctx.lineTo(path.points[i].x, path.points[i].y);
+                }
+                ctx.stroke();
+            }
+        } else {
+            // Draw shape preview
+            this._drawShapePreview(path.startPoint, path.endPoint, ctx, path.tool, path.color, path.size, path.opacity);
+        }
+        ctx.restore();
+    }
+
+    remoteDrawStart(pathId, tool, color, size, opacity, point) {
+        this.remoteActivePaths.set(pathId, {
+            tool,
+            color,
+            size,
+            opacity,
+            points: [point],
+            startPoint: point,
+            endPoint: point
+        });
+        this.redrawTemp();
+    }
+
+    remoteDrawMove(pathId, point, endPoint) {
+        const path = this.remoteActivePaths.get(pathId);
+        if (!path) return;
+
+        if (point) {
+            path.points.push(point);
+        }
+        if (endPoint) {
+            path.endPoint = endPoint;
+        }
+        this.redrawTemp();
+    }
+
+    remoteDrawEnd(pathId) {
+        this.remoteActivePaths.delete(pathId);
+        this.redrawTemp();
     }
 
     _renderAction(ctx, action) {
@@ -363,6 +499,42 @@ class DrawingCanvas {
                     newImg.src = action.dataUrl;
                 }
                 break;
+
+            case 'fill': {
+                const fx = Math.round(action.x);
+                const fy = Math.round(action.y);
+                const w = this.CANVAS_WIDTH;
+                const h = this.CANVAS_HEIGHT;
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                const tc2 = document.createElement('canvas');
+                tc2.width = 1; tc2.height = 1;
+                const tctx = tc2.getContext('2d');
+                tctx.fillStyle = action.color;
+                tctx.fillRect(0, 0, 1, 1);
+                const fc = tctx.getImageData(0, 0, 1, 1).data;
+                const i0 = (fy * w + fx) * 4;
+                const tr2 = d[i0], tg2 = d[i0+1], tb2 = d[i0+2], ta2 = d[i0+3];
+                if (!(tr2 === fc[0] && tg2 === fc[1] && tb2 === fc[2] && ta2 === 255)) {
+                    const tol = 32;
+                    const matchFill = (i) => Math.abs(d[i]-tr2)<=tol && Math.abs(d[i+1]-tg2)<=tol && Math.abs(d[i+2]-tb2)<=tol && Math.abs(d[i+3]-ta2)<=tol;
+                    const stk = [[fx, fy]];
+                    const vis = new Uint8Array(w * h);
+                    while (stk.length > 0) {
+                        const [cx, cy] = stk.pop();
+                        if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
+                        const pos = cy * w + cx;
+                        if (vis[pos]) continue;
+                        const pi = pos * 4;
+                        if (!matchFill(pi)) continue;
+                        vis[pos] = 1;
+                        d[pi] = fc[0]; d[pi+1] = fc[1]; d[pi+2] = fc[2]; d[pi+3] = 255;
+                        stk.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+                }
+                break;
+            }
         }
         ctx.restore();
     }
@@ -464,6 +636,102 @@ class DrawingCanvas {
             this.textInputEl.removeEventListener('blur', this._textBlurHandler);
             this._textBlurHandler = null;
         }
+    }
+
+    /* ---------- Flood Fill ---------- */
+
+    _floodFill(point) {
+        const x = Math.round(point.x);
+        const y = Math.round(point.y);
+        const fillColor = this.currentColor;
+        const ctx = this.mainCtx;
+        const w = this.CANVAS_WIDTH;
+        const h = this.CANVAS_HEIGHT;
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+
+        const tmpCvs = document.createElement('canvas');
+        tmpCvs.width = 1;
+        tmpCvs.height = 1;
+        const tmpCtx = tmpCvs.getContext('2d');
+        tmpCtx.fillStyle = fillColor;
+        tmpCtx.fillRect(0, 0, 1, 1);
+        const fillRgb = tmpCtx.getImageData(0, 0, 1, 1).data;
+        const fr = fillRgb[0], fg = fillRgb[1], fb = fillRgb[2];
+
+        const idx = (y * w + x) * 4;
+        const tr = data[idx], tg = data[idx + 1], tb = data[idx + 2], ta = data[idx + 3];
+
+        if (tr === fr && tg === fg && tb === fb && ta === 255) return;
+
+        const tolerance = 32;
+        const matchTarget = (i) => {
+            return Math.abs(data[i] - tr) <= tolerance &&
+                   Math.abs(data[i + 1] - tg) <= tolerance &&
+                   Math.abs(data[i + 2] - tb) <= tolerance &&
+                   Math.abs(data[i + 3] - ta) <= tolerance;
+        };
+
+        const stack = [[x, y]];
+        const visited = new Uint8Array(w * h);
+
+        while (stack.length > 0) {
+            const [cx, cy] = stack.pop();
+            if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
+            const pos = cy * w + cx;
+            if (visited[pos]) continue;
+            const pi = pos * 4;
+            if (!matchTarget(pi)) continue;
+
+            visited[pos] = 1;
+            data[pi] = fr;
+            data[pi + 1] = fg;
+            data[pi + 2] = fb;
+            data[pi + 3] = 255;
+
+            stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        const action = {
+            type: 'fill',
+            x: x,
+            y: y,
+            color: fillColor,
+            opacity: this.currentOpacity
+        };
+        this._addAction(action);
+    }
+
+    /* ---------- Laser Path Drawing ---------- */
+
+    _drawLaserPath(ctx, path) {
+        if (path.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = this.currentColor;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = this.currentColor;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) {
+            ctx.lineTo(path[i].x, path[i].y);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 8;
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) {
+            ctx.lineTo(path[i].x, path[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
     }
 
     /* ---------- Path Simplification ---------- */
