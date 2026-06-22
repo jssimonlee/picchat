@@ -22,6 +22,7 @@ class NetworkManager {
         this.onError = callbacks.onError || (() => {});
         this.onReady = callbacks.onReady || (() => {});
         this.onSudoku = callbacks.onSudoku || (() => {});
+        this.onGomoku = callbacks.onGomoku || (() => {});
 
         // State needed for state sync
         this.getCanvasState = callbacks.getCanvasState || (() => ({}));
@@ -380,6 +381,10 @@ class NetworkManager {
                 this.onSudoku(fromPeerId, data.payload);
                 // No automatic broadcast — app logic handles relay via sendSudoku
                 break;
+
+            case 'gomoku':
+                this.onGomoku(fromPeerId, data.payload);
+                break;
         }
     }
 
@@ -521,6 +526,19 @@ class NetworkManager {
             this._broadcast(data);
             // Local echo: host also processes its own messages
             this.onSudoku(this.myPeerId, payload);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendGomoku(payload) {
+        const data = { type: 'gomoku', payload };
+        if (this.isHost) {
+            this._broadcast(data);
+            // Local echo: host also processes its own messages
+            this.onGomoku(this.myPeerId, payload);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}

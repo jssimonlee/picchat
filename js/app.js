@@ -88,6 +88,41 @@
     const $btnSudoku = document.getElementById('btnSudoku');
     const $btnSudokuSolo = document.getElementById('btnSudokuSolo');
 
+    // Gomoku Elements
+    const $gomokuOverlay = document.getElementById('gomokuOverlay');
+    const $btnGomokuClose = document.getElementById('btnGomokuClose');
+    const $gomokuLobby = document.getElementById('gomokuLobby');
+    const $gomokuLobbySetup = document.getElementById('gomokuLobbySetup');
+    const $btnGomokuPropose = document.getElementById('btnGomokuPropose');
+    const $btnGomokuSolo = document.getElementById('btnGomokuSolo');
+    const $gomokuLobbyWaiting = document.getElementById('gomokuLobbyWaiting');
+    const $gomokuLobbyWaitingTitle = document.getElementById('gomokuLobbyWaitingTitle');
+    const $gomokuProposalList = document.getElementById('gomokuProposalList');
+    const $btnGomokuCancel = document.getElementById('btnGomokuCancel');
+    const $btnGomokuStart = document.getElementById('btnGomokuStart');
+    const $gomokuLobbyInvite = document.getElementById('gomokuLobbyInvite');
+    const $gomokuProposerName = document.getElementById('gomokuProposerName');
+    const $btnGomokuDecline = document.getElementById('btnGomokuDecline');
+    const $btnGomokuAccept = document.getElementById('btnGomokuAccept');
+    const $gomokuGame = document.getElementById('gomokuGame');
+    const $gomokuGameStatus = document.getElementById('gomokuGameStatus');
+    const $gomokuGameTimer = document.getElementById('gomokuGameTimer');
+    const $gomokuCurrentTurnIcon = document.getElementById('gomokuCurrentTurnIcon');
+    const $gomokuBoard = document.getElementById('piccomm-gomoku-board');
+    const $gomokuTurnCard = document.getElementById('gomokuTurnCard');
+    const $gomokuTurnStatus = document.getElementById('gomokuTurnStatus');
+    const $gomokuTurnTimerProgress = document.getElementById('gomokuTurnTimerProgress');
+    const $gomokuPlayersList = document.getElementById('gomokuPlayersList');
+    const $btnGomokuUndo = document.getElementById('btnGomokuUndo');
+    const $btnGomokuQuit = document.getElementById('btnGomokuQuit');
+    const $gomokuResult = document.getElementById('gomokuResult');
+    const $gomokuResultKicker = document.getElementById('gomokuResultKicker');
+    const $gomokuResultTitle = document.getElementById('gomokuResultTitle');
+    const $gomokuResultMsg = document.getElementById('gomokuResultMsg');
+    const $gomokuResultStats = document.getElementById('gomokuResultStats');
+    const $btnGomokuResultClose = document.getElementById('btnGomokuResultClose');
+    const $btnGomoku = document.getElementById('btnGomoku');
+
     /* ---------- State ---------- */
 
     let canvas = null;
@@ -126,6 +161,29 @@
         gameSecondsElapsed: 0,
         gameTimerInterval: null,
         history: []
+    };
+
+    // Gomoku State
+    let gomokuState = {
+        status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
+        isSolo: false,
+        board: [], // 15x15 grid, 0: empty, 1: black, 2: white
+        lastMove: null, // { r, c }
+        proposerId: null,
+        proposerNickname: null,
+        participants: [], // { peerId, nickname, color, accepted }
+        players: [], // { peerId, nickname, color, role: 'black' | 'white' }
+        turnOrder: [], // [peerId1, peerId2]
+        currentTurnIndex: 0,
+        turnStartTime: 0,
+        turnTimerInterval: null,
+        turnTimeLimit: 30,
+        secondsRemaining: 30,
+        gameStartTime: 0,
+        gameSecondsElapsed: 0,
+        gameTimerInterval: null,
+        history: [], // [{ r, c, val, peerId, role }]
+        soloTurn: 'black' // 'black' | 'white' (solo mode)
     };
 
     /* ---------- Initialize ---------- */
@@ -364,6 +422,10 @@
                 if (state.sudokuState && state.sudokuState.status === 'playing') {
                     syncSudokuStateFromHost(state.sudokuState);
                 }
+                // Sync active Gomoku game if present
+                if (state.gomokuState && state.gomokuState.status === 'playing') {
+                    syncGomokuStateFromHost(state.gomokuState);
+                }
             },
             onPeerJoin: (peerId, peerNickname, color, isAway) => {
                 knownParticipants.set(peerId, { nickname: peerNickname, color, isAway: isAway || false });
@@ -388,6 +450,7 @@
                 updateParticipantsUI();
                 showToast(`🔴 ${peerNickname}님이 나갔습니다`);
                 handleSudokuPeerLeave(peerId);
+                handleGomokuPeerLeave(peerId);
             },
             onCursorMove: (peerId, x, y, peerNickname, color) => {
                 updateRemoteCursor(peerId, x, y, peerNickname, color);
@@ -403,6 +466,9 @@
             onSudoku: (fromPeerId, payload) => {
                 handleSudokuNetworkMessage(fromPeerId, payload);
             },
+            onGomoku: (fromPeerId, payload) => {
+                handleGomokuNetworkMessage(fromPeerId, payload);
+            },
             getCanvasState: () => {
                 const state = canvas ? canvas.getState() : {};
                 state.sudokuState = {
@@ -416,6 +482,16 @@
                     turnOrder: sudokuState.turnOrder,
                     currentTurnIndex: sudokuState.currentTurnIndex,
                     elapsedSeconds: sudokuState.gameSecondsElapsed
+                };
+                state.gomokuState = {
+                    status: gomokuState.status,
+                    board: gomokuState.board,
+                    lastMove: gomokuState.lastMove,
+                    players: gomokuState.players,
+                    turnOrder: gomokuState.turnOrder,
+                    currentTurnIndex: gomokuState.currentTurnIndex,
+                    elapsedSeconds: gomokuState.gameSecondsElapsed,
+                    history: gomokuState.history
                 };
                 return state;
             }
@@ -479,6 +555,8 @@
 
         // Setup Sudoku events
         setupSudokuEvents();
+        // Setup Gomoku events
+        setupGomokuEvents();
     }
 
     /* ---------- Tool Events ---------- */
@@ -1695,6 +1773,7 @@
 
     function leaveRoom() {
         resetSudoku();
+        resetGomoku();
         if (network) {
             network.disconnect();
             network = null;
@@ -3369,6 +3448,1022 @@
         $sudokuLobby.hidden = (view !== 'lobby');
         $sudokuGame.hidden = (view !== 'game');
         $sudokuResult.hidden = (view !== 'result');
+    }
+
+    /* ==========================================================================
+       ⚫⚪ GOMOKU GAME MULTIPLAYER MANAGER & ENGINE
+       ========================================================================== */
+
+    function setupGomokuEvents() {
+        // Toolbar icon trigger
+        $btnGomoku.addEventListener('click', () => {
+            if (gomokuState.status === 'none') {
+                $gomokuOverlay.hidden = false;
+                showGomokuSubView('lobby');
+                $gomokuLobbySetup.hidden = false;
+                $gomokuLobbyWaiting.hidden = true;
+                $gomokuLobbyInvite.hidden = true;
+            } else {
+                $gomokuOverlay.hidden = false;
+            }
+        });
+
+        // Close button
+        $btnGomokuClose.addEventListener('click', () => {
+            $gomokuOverlay.hidden = true;
+        });
+
+        // Propose button click
+        $btnGomokuPropose.addEventListener('click', () => {
+            proposeGomoku();
+        });
+
+        // Solo button click
+        $btnGomokuSolo.addEventListener('click', () => {
+            startGomokuSolo();
+        });
+
+        // Cancel proposal click
+        $btnGomokuCancel.addEventListener('click', () => {
+            cancelGomokuProposal();
+        });
+
+        // Host starts game
+        $btnGomokuStart.addEventListener('click', () => {
+            if (network.isHost) {
+                hostStartGomoku();
+            }
+        });
+
+        // Accept invite
+        $btnGomokuAccept.addEventListener('click', () => {
+            guestRespondGomoku(true);
+        });
+
+        // Decline invite
+        $btnGomokuDecline.addEventListener('click', () => {
+            guestRespondGomoku(false);
+        });
+
+        // Exit / Quit button
+        $btnGomokuQuit.addEventListener('click', async () => {
+            const msg = gomokuState.isSolo 
+                ? '오목 게임을 종료하시겠습니까?' 
+                : '오목 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+            if (await showCustomConfirm(msg)) {
+                quitGomokuGame();
+            }
+        });
+
+        // Close results screen
+        $btnGomokuResultClose.addEventListener('click', () => {
+            resetGomoku();
+            $gomokuOverlay.hidden = true;
+        });
+
+        // Action panel triggers
+        $btnGomokuUndo.addEventListener('click', () => {
+            undoGomokuMove();
+        });
+    }
+
+    function proposeGomoku() {
+        network.sendGomoku({
+            action: 'propose',
+            proposerId: network.myPeerId,
+            proposerNickname: network.nickname,
+            proposerColor: network.myColor
+        });
+    }
+
+    function startGomokuSolo() {
+        gomokuState.status = 'playing';
+        gomokuState.isSolo = true;
+        gomokuState.board = Array(15).fill(null).map(() => Array(15).fill(0));
+        gomokuState.lastMove = null;
+        gomokuState.history = [];
+        gomokuState.soloTurn = 'black';
+
+        gomokuState.participants = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                accepted: true,
+                totalTime: 0,
+                correctCount: 0
+            }
+        ];
+
+        gomokuState.players = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                role: 'black'
+            }
+        ];
+
+        gomokuState.turnOrder = [network.myPeerId];
+        gomokuState.currentTurnIndex = 0;
+
+        $gomokuOverlay.hidden = false;
+        showGomokuSubView('game');
+        
+        buildGomokuBoardDOM();
+        
+        resetGomokuTimers();
+        startGomokuGameTimer();
+        startGomokuTurn();
+    }
+
+    function guestRespondGomoku(accepted) {
+        network.sendGomoku({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
+
+        if (accepted) {
+            $gomokuLobbyInvite.hidden = true;
+            $gomokuLobbyWaiting.hidden = false;
+            $gomokuLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
+            $btnGomokuStart.hidden = true;
+            $btnGomokuCancel.hidden = true;
+        } else {
+            resetGomoku();
+            $gomokuOverlay.hidden = true;
+        }
+    }
+
+    function handleGomokuNetworkMessage(fromPeerId, payload) {
+        console.log('[Gomoku Network]', fromPeerId, payload);
+        const action = payload.action;
+
+        if (action === 'propose') {
+            gomokuState.status = 'proposing';
+            gomokuState.proposerId = payload.proposerId;
+            gomokuState.proposerNickname = payload.proposerNickname;
+            gomokuState.participants = [
+                {
+                    peerId: payload.proposerId,
+                    nickname: payload.proposerNickname,
+                    color: payload.proposerColor || getPeerColor(payload.proposerId),
+                    accepted: true
+                }
+            ];
+
+            $gomokuOverlay.hidden = false;
+            
+            if (payload.proposerId === network.myPeerId) {
+                showGomokuSubView('lobby');
+                $gomokuLobbySetup.hidden = true;
+                $gomokuLobbyWaiting.hidden = false;
+                $gomokuLobbyInvite.hidden = true;
+                $gomokuLobbyWaitingTitle.textContent = '오목 참가 대기 중';
+                $btnGomokuStart.hidden = !network.isHost;
+                $btnGomokuStart.disabled = true;
+                updateGomokuProposalListUI();
+            } else {
+                showGomokuSubView('lobby');
+                $gomokuLobbySetup.hidden = true;
+                $gomokuLobbyWaiting.hidden = true;
+                $gomokuLobbyInvite.hidden = false;
+                $gomokuProposerName.textContent = payload.proposerNickname;
+            }
+
+            // Relay if host
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'join-response') {
+            if (network.isHost) {
+                let p = gomokuState.participants.find(x => x.peerId === payload.peerId);
+                if (p) {
+                    p.accepted = payload.accepted;
+                } else {
+                    gomokuState.participants.push({
+                        peerId: payload.peerId,
+                        nickname: payload.nickname,
+                        color: payload.color,
+                        accepted: payload.accepted
+                    });
+                }
+                network.sendGomoku({
+                    action: 'proposal-sync',
+                    proposerId: gomokuState.proposerId,
+                    proposerNickname: gomokuState.proposerNickname,
+                    participants: gomokuState.participants
+                });
+            }
+        }
+        else if (action === 'proposal-sync') {
+            gomokuState.proposerId = payload.proposerId;
+            gomokuState.proposerNickname = payload.proposerNickname;
+            gomokuState.participants = payload.participants;
+
+            updateGomokuProposalListUI();
+        }
+        else if (action === 'start') {
+            gomokuState.status = 'playing';
+            gomokuState.isSolo = false;
+            gomokuState.board = payload.board;
+            gomokuState.lastMove = null;
+            gomokuState.history = [];
+
+            gomokuState.participants.forEach(p => {
+                p.totalTime = 0;
+                p.correctCount = 0; // count of placements
+            });
+
+            gomokuState.players = payload.players.map(p => ({
+                peerId: p.peerId,
+                nickname: p.nickname,
+                color: p.color,
+                role: p.role // 'black' or 'white'
+            }));
+
+            gomokuState.turnOrder = payload.turnOrder;
+            gomokuState.currentTurnIndex = 0;
+
+            showGomokuSubView('game');
+            buildGomokuBoardDOM();
+
+            resetGomokuTimers();
+            startGomokuGameTimer();
+            startGomokuTurn();
+        }
+        else if (action === 'move') {
+            applyGomokuMove(payload.peerId, payload.r, payload.c, payload.role, payload.elapsedSecs);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'undo') {
+            applyGomokuUndo();
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'skip-turn') {
+            applyGomokuSkipTurn(payload.peerId, payload.elapsedSecs);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'quit') {
+            applyGomokuQuit(payload.peerId);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'cancel') {
+            showToast('🛑 오목 대결이 취소되었습니다.');
+            resetGomoku();
+            $gomokuOverlay.hidden = true;
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'gomoku', payload }, fromPeerId);
+            }
+        }
+    }
+
+    function cancelGomokuProposal() {
+        if (gomokuState.isSolo) {
+            resetGomoku();
+            $gomokuOverlay.hidden = true;
+            return;
+        }
+        network.sendGomoku({
+            action: 'cancel'
+        });
+    }
+
+    function hostStartGomoku() {
+        if (!network.isHost) return;
+
+        const proposer = gomokuState.participants.find(p => p.peerId === gomokuState.proposerId);
+        const acceptor = gomokuState.participants.find(p => p.peerId !== gomokuState.proposerId && p.accepted === true);
+
+        if (!proposer || !acceptor) {
+            showToast('⚠️ 대국을 시작할 대국자가 부족합니다.');
+            return;
+        }
+
+        // Randomly assign black/white (50% chance)
+        const isProposerBlack = Math.random() < 0.5;
+        const players = [
+            {
+                peerId: proposer.peerId,
+                nickname: proposer.nickname,
+                color: proposer.color,
+                role: isProposerBlack ? 'black' : 'white'
+            },
+            {
+                peerId: acceptor.peerId,
+                nickname: acceptor.nickname,
+                color: acceptor.color,
+                role: isProposerBlack ? 'white' : 'black'
+            }
+        ];
+
+        // Black plays first
+        const blackPlayer = players.find(p => p.role === 'black');
+        const whitePlayer = players.find(p => p.role === 'white');
+        const turnOrder = [blackPlayer.peerId, whitePlayer.peerId];
+
+        network.sendGomoku({
+            action: 'start',
+            board: Array(15).fill(null).map(() => Array(15).fill(0)),
+            players: players,
+            turnOrder: turnOrder
+        });
+    }
+
+    function updateGomokuProposalListUI() {
+        $gomokuProposalList.innerHTML = '';
+        gomokuState.participants.forEach(p => {
+            const li = document.createElement('li');
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'name';
+            
+            const dot = document.createElement('span');
+            dot.className = 'status-dot';
+            dot.style.background = p.color;
+            nameSpan.appendChild(dot);
+            
+            const nameText = document.createTextNode(p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname);
+            nameSpan.appendChild(nameText);
+            
+            li.appendChild(nameSpan);
+
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'status-text';
+
+            if (p.accepted === true) {
+                statusSpan.textContent = '수락';
+                statusSpan.style.color = '#10b981';
+            } else if (p.accepted === false) {
+                statusSpan.textContent = '거절';
+                statusSpan.style.color = '#ef4444';
+            } else {
+                statusSpan.textContent = '대기 중';
+                statusSpan.style.color = '#ffd32a';
+            }
+            li.appendChild(statusSpan);
+
+            $gomokuProposalList.appendChild(li);
+        });
+
+        if (network.isHost) {
+            const acceptedCount = gomokuState.participants.filter(p => p.peerId !== gomokuState.proposerId && p.accepted === true).length;
+            $btnGomokuStart.disabled = (acceptedCount === 0 && gomokuState.proposerId !== network.myPeerId);
+        }
+    }
+
+    function buildGomokuBoardDOM() {
+        $gomokuBoard.innerHTML = '';
+        const isSpectator = !gomokuState.turnOrder.includes(network.myPeerId);
+
+        const starPoints = [
+            [3, 3], [3, 7], [3, 11],
+            [7, 3], [7, 7], [7, 11],
+            [11, 3], [11, 7], [11, 11]
+        ];
+
+        for (let r = 0; r < 15; r++) {
+            for (let c = 0; c < 15; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'gomoku-cell';
+                cell.dataset.row = r;
+                cell.dataset.col = c;
+
+                // Render Star points
+                const isStar = starPoints.some(([sr, sc]) => sr === r && sc === c);
+                if (isStar) {
+                    const star = document.createElement('div');
+                    star.className = 'gomoku-cell-star';
+                    cell.appendChild(star);
+                }
+
+                // Render Stones
+                const val = gomokuState.board[r][c];
+                if (val !== 0) {
+                    const stone = document.createElement('div');
+                    stone.className = `gomoku-stone ${val === 1 ? 'black' : 'white'}`;
+                    if (gomokuState.lastMove && gomokuState.lastMove.r === r && gomokuState.lastMove.c === c) {
+                        stone.classList.add('last-move');
+                    }
+                    cell.appendChild(stone);
+                }
+
+                cell.addEventListener('click', () => {
+                    if (isSpectator) return;
+                    placeGomokuStone(r, c);
+                });
+
+                $gomokuBoard.appendChild(cell);
+            }
+        }
+    }
+
+    function getGomokuCellElement(r, c) {
+        return $gomokuBoard.querySelector(`.gomoku-cell[data-row="${r}"][data-col="${c}"]`);
+    }
+
+    function placeGomokuStone(r, c) {
+        if (gomokuState.status !== 'playing') return;
+        if (gomokuState.board[r][c] !== 0) return; // Cell is already occupied
+
+        let isMyTurn = false;
+        let role = 'black';
+        let peerId = network.myPeerId;
+
+        if (gomokuState.isSolo) {
+            isMyTurn = true;
+            role = gomokuState.soloTurn;
+        } else {
+            const activePeerId = gomokuState.turnOrder[gomokuState.currentTurnIndex];
+            isMyTurn = activePeerId === network.myPeerId;
+            if (!isMyTurn) {
+                showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
+                return;
+            }
+            const me = gomokuState.players.find(p => p.peerId === network.myPeerId);
+            if (me) {
+                role = me.role;
+            }
+        }
+
+        if (!isMyTurn) return;
+
+        const elapsed = (performance.now() - gomokuState.turnStartTime) / 1000;
+
+        if (gomokuState.isSolo) {
+            applyGomokuMove(peerId, r, c, role, elapsed);
+        } else {
+            network.sendGomoku({
+                action: 'move',
+                peerId: network.myPeerId,
+                r, c, role,
+                elapsedSecs: elapsed
+            });
+            if (!network.isHost) {
+                applyGomokuMove(network.myPeerId, r, c, role, elapsed);
+            }
+        }
+    }
+
+    function applyGomokuMove(peerId, r, c, role, elapsed) {
+        clearInterval(gomokuState.turnTimerInterval);
+
+        const roleVal = role === 'black' ? 1 : 2;
+        gomokuState.board[r][c] = roleVal;
+        
+        // Update lastMove visual feedback
+        if (gomokuState.lastMove) {
+            const prevEl = getGomokuCellElement(gomokuState.lastMove.r, gomokuState.lastMove.c);
+            if (prevEl) {
+                const stoneEl = prevEl.querySelector('.gomoku-stone');
+                if (stoneEl) stoneEl.classList.remove('last-move');
+            }
+        }
+        gomokuState.lastMove = { r, c };
+
+        // Save move history for Undo function
+        gomokuState.history.push({ r, c, val: roleVal, peerId, role });
+
+        // Update player stats
+        const pState = gomokuState.participants.find(p => p.peerId === peerId);
+        if (pState) {
+            pState.totalTime += elapsed;
+            pState.correctCount++; 
+        }
+
+        // Render the stone in the board DOM
+        const cellEl = getGomokuCellElement(r, c);
+        if (cellEl) {
+            const stone = document.createElement('div');
+            stone.className = `gomoku-stone ${role} last-move`;
+            cellEl.appendChild(stone);
+        }
+
+        // Win check
+        if (checkGomokuWin(r, c, roleVal)) {
+            endGomokuGame(peerId, role);
+            return;
+        }
+
+        // Check for Board Full (Draw)
+        let isFull = true;
+        for (let i = 0; i < 15; i++) {
+            for (let j = 0; j < 15; j++) {
+                if (gomokuState.board[i][j] === 0) {
+                    isFull = false;
+                    break;
+                }
+            }
+        }
+        if (isFull) {
+            endGomokuGame(null, 'draw');
+            return;
+        }
+
+        // Advance to next turn
+        if (gomokuState.isSolo) {
+            gomokuState.soloTurn = gomokuState.soloTurn === 'black' ? 'white' : 'black';
+            advanceGomokuTurn();
+        } else {
+            advanceGomokuTurn();
+        }
+    }
+
+    function checkGomokuWin(r, c, roleVal) {
+        const directions = [
+            [[0, 1], [0, -1]],   // Horizontal
+            [[1, 0], [-1, 0]],   // Vertical
+            [[1, 1], [-1, -1]], // Diagonal Down-Right
+            [[1, -1], [-1, 1]]  // Diagonal Up-Right
+        ];
+
+        for (const dir of directions) {
+            let count = 1; 
+            for (const [dr, dc] of dir) {
+                let nr = r + dr;
+                let nc = c + dc;
+                while (nr >= 0 && nr < 15 && nc >= 0 && nc < 15 && gomokuState.board[nr][nc] === roleVal) {
+                    count++;
+                    nr += dr;
+                    nc += dc;
+                }
+            }
+            if (count >= 5) {
+                return true; 
+            }
+        }
+        return false;
+    }
+
+    function undoGomokuMove() {
+        if (gomokuState.status !== 'playing') return;
+        if (gomokuState.history.length === 0) return;
+
+        if (gomokuState.isSolo) {
+            applyGomokuUndo();
+        } else {
+            // Check if active player's turn to send undo request, or just allow direct network sync for simplicity
+            network.sendGomoku({
+                action: 'undo'
+            });
+            if (!network.isHost) {
+                applyGomokuUndo();
+            }
+        }
+    }
+
+    function applyGomokuUndo() {
+        if (gomokuState.history.length === 0) return;
+        clearInterval(gomokuState.turnTimerInterval);
+
+        const lastAction = gomokuState.history.pop();
+        const { r, c, val, peerId, role } = lastAction;
+
+        gomokuState.board[r][c] = 0;
+
+        // Remove stone from DOM
+        const cellEl = getGomokuCellElement(r, c);
+        if (cellEl) {
+            const stoneEl = cellEl.querySelector('.gomoku-stone');
+            if (stoneEl) stoneEl.remove();
+        }
+
+        // Restore lastMove pointer
+        if (gomokuState.lastMove && gomokuState.lastMove.r === r && gomokuState.lastMove.c === c) {
+            if (gomokuState.history.length > 0) {
+                const prevAction = gomokuState.history[gomokuState.history.length - 1];
+                gomokuState.lastMove = { r: prevAction.r, c: prevAction.c };
+                const prevEl = getGomokuCellElement(prevAction.r, prevAction.c);
+                if (prevEl) {
+                    const prevStone = prevEl.querySelector('.gomoku-stone');
+                    if (prevStone) prevStone.classList.add('last-move');
+                }
+            } else {
+                gomokuState.lastMove = null;
+            }
+        }
+
+        // Revert stats
+        const pState = gomokuState.participants.find(p => p.peerId === peerId);
+        if (pState) {
+            pState.correctCount = Math.max(0, pState.correctCount - 1);
+        }
+
+        // Revert active turn
+        if (gomokuState.isSolo) {
+            gomokuState.soloTurn = role;
+        } else {
+            const idx = gomokuState.turnOrder.indexOf(peerId);
+            if (idx !== -1) {
+                gomokuState.currentTurnIndex = idx;
+            }
+        }
+
+        showToast(`↩️ 한 수를 물렀습니다.`);
+        startGomokuTurn();
+    }
+
+    function quitGomokuGame() {
+        if (gomokuState.isSolo) {
+            resetGomoku();
+            $gomokuOverlay.hidden = true;
+            return;
+        }
+
+        network.sendGomoku({
+            action: 'quit',
+            peerId: network.myPeerId
+        });
+        if (!network.isHost) {
+            applyGomokuQuit(network.myPeerId);
+        }
+    }
+
+    function applyGomokuQuit(quitterId) {
+        clearInterval(gomokuState.turnTimerInterval);
+        clearInterval(gomokuState.gameTimerInterval);
+
+        gomokuState.status = 'finished';
+        showGomokuSubView('result');
+
+        const isMe = quitterId === network.myPeerId;
+        if (isMe) {
+            $gomokuResultTitle.textContent = '💀 기권 패배 💀';
+            $gomokuResultTitle.className = 'error-title';
+            $gomokuResultMsg.textContent = '대국을 기권하여 패배하였습니다.';
+        } else {
+            $gomokuResultTitle.textContent = '🏆 기권 승리! 🏆';
+            $gomokuResultTitle.className = '';
+            $gomokuResultMsg.textContent = '상대방이 기권하여 승리하였습니다!';
+        }
+
+        renderGomokuFinalResult();
+    }
+
+    function endGomokuGame(winnerPeerId, winnerRole) {
+        clearInterval(gomokuState.turnTimerInterval);
+        clearInterval(gomokuState.gameTimerInterval);
+
+        gomokuState.status = 'finished';
+        showGomokuSubView('result');
+
+        if (winnerPeerId === null) {
+            $gomokuResultTitle.textContent = '🤝 무승부 🤝';
+            $gomokuResultTitle.className = '';
+            $gomokuResultMsg.textContent = '바둑판이 가득 차 승패를 가리지 못했습니다.';
+        } else {
+            const isMe = winnerPeerId === network.myPeerId;
+            const name = getPeerNickname(winnerPeerId);
+            const roleKorean = winnerRole === 'black' ? '흑돌' : '백돌';
+
+            if (isMe) {
+                $gomokuResultTitle.textContent = '🏆 대국 승리! 🏆';
+                $gomokuResultTitle.className = '';
+                $gomokuResultMsg.textContent = `축하합니다! ${roleKorean}로 5목을 먼저 완성하여 승리하셨습니다.`;
+            } else {
+                $gomokuResultTitle.textContent = '💀 대국 패배 💀';
+                $gomokuResultTitle.className = 'error-title';
+                $gomokuResultMsg.textContent = `${escapeHtml(name)}님이 ${roleKorean}로 5목을 먼저 완성하여 승리하셨습니다.`;
+            }
+        }
+
+        renderGomokuFinalResult();
+    }
+
+    function startGomokuGameTimer() {
+        gomokuState.gameStartTime = Date.now();
+        gomokuState.gameSecondsElapsed = 0;
+        $gomokuGameTimer.textContent = '00:00';
+
+        gomokuState.gameTimerInterval = setInterval(() => {
+            gomokuState.gameSecondsElapsed++;
+            $gomokuGameTimer.textContent = formatSudokuTime(gomokuState.gameSecondsElapsed);
+        }, 1000);
+    }
+
+    function startGomokuTurn() {
+        if (gomokuState.status !== 'playing') return;
+
+        gomokuState.turnStartTime = performance.now();
+        gomokuState.secondsRemaining = gomokuState.turnTimeLimit;
+
+        let isMyTurn = false;
+        let activeName = '';
+        let activePeerId = '';
+        let activeRole = 'black';
+
+        if (gomokuState.isSolo) {
+            isMyTurn = true;
+            activePeerId = network.myPeerId;
+            activeName = network.nickname;
+            activeRole = gomokuState.soloTurn;
+        } else {
+            activePeerId = gomokuState.turnOrder[gomokuState.currentTurnIndex];
+            isMyTurn = activePeerId === network.myPeerId;
+            const activePlayer = gomokuState.players.find(p => p.peerId === activePeerId);
+            activeName = activePlayer ? activePlayer.nickname : '알 수 없음';
+            activeRole = activePlayer ? activePlayer.role : 'black';
+        }
+
+        const roleText = activeRole === 'black' ? '⚫ 흑돌' : '⚪ 백돌';
+        $gomokuCurrentTurnIcon.textContent = roleText;
+
+        const $boardWrapper = $gomokuBoard.parentElement;
+        if ($boardWrapper) {
+            if (isMyTurn) {
+                $boardWrapper.classList.add('my-turn');
+                $boardWrapper.classList.remove('other-turn');
+            } else {
+                $boardWrapper.classList.add('other-turn');
+                $boardWrapper.classList.remove('my-turn');
+            }
+        }
+
+        if (isMyTurn) {
+            if (gomokuState.isSolo) {
+                $gomokuTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">차례: ${roleText}</span> (남은 시간: <span id="gomokuTurnTimerSecs">${gomokuState.secondsRemaining}</span>초)`;
+            } else {
+                $gomokuTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">내 차례입니다! (${roleText})</span> (남은 시간: <span id="gomokuTurnTimerSecs">${gomokuState.secondsRemaining}</span>초)`;
+            }
+        } else {
+            $gomokuTurnStatus.innerHTML = `⏳ <b>${escapeHtml(activeName)}</b> 님의 턴 (${roleText}) (남은 시간: <span id="gomokuTurnTimerSecs">${gomokuState.secondsRemaining}</span>초)`;
+        }
+
+        updateGomokuPlayersListUI();
+
+        $gomokuTurnTimerProgress.style.width = '100%';
+        $gomokuTurnTimerProgress.className = 'sudoku-progress-fill';
+
+        gomokuState.turnTimerInterval = setInterval(() => {
+            gomokuState.secondsRemaining--;
+            
+            const timerEl = document.getElementById('gomokuTurnTimerSecs');
+            if (timerEl) timerEl.textContent = gomokuState.secondsRemaining;
+
+            const pct = (gomokuState.secondsRemaining / gomokuState.turnTimeLimit) * 100;
+            $gomokuTurnTimerProgress.style.width = `${pct}%`;
+
+            if (pct <= 25) {
+                $gomokuTurnTimerProgress.className = 'sudoku-progress-fill danger';
+            } else if (pct <= 50) {
+                $gomokuTurnTimerProgress.className = 'sudoku-progress-fill warning';
+            }
+
+            if (gomokuState.secondsRemaining <= 0) {
+                clearInterval(gomokuState.turnTimerInterval);
+                
+                if (isMyTurn) {
+                    if (gomokuState.isSolo) {
+                        applyGomokuSkipTurn(network.myPeerId, gomokuState.turnTimeLimit);
+                        return;
+                    }
+
+                    network.sendGomoku({
+                        action: 'skip-turn',
+                        peerId: network.myPeerId,
+                        elapsedSecs: gomokuState.turnTimeLimit
+                    });
+                    if (!network.isHost) {
+                        applyGomokuSkipTurn(network.myPeerId, gomokuState.turnTimeLimit);
+                    }
+                }
+            }
+        }, 1000);
+    }
+
+    function applyGomokuSkipTurn(peerId, elapsed) {
+        clearInterval(gomokuState.turnTimerInterval);
+
+        const player = gomokuState.participants.find(p => p.peerId === peerId);
+        if (player) {
+            player.totalTime += elapsed;
+        }
+
+        showToast(`⏰ 시간 초과! 차례가 넘어갑니다.`);
+
+        if (gomokuState.status === 'playing') {
+            if (gomokuState.isSolo) {
+                gomokuState.soloTurn = gomokuState.soloTurn === 'black' ? 'white' : 'black';
+            }
+            advanceGomokuTurn();
+        }
+    }
+
+    function advanceGomokuTurn() {
+        if (gomokuState.turnOrder.length === 0) return;
+        gomokuState.currentTurnIndex = (gomokuState.currentTurnIndex + 1) % gomokuState.turnOrder.length;
+        startGomokuTurn();
+    }
+
+    function updateGomokuPlayersListUI() {
+        $gomokuPlayersList.innerHTML = '';
+
+        if (gomokuState.isSolo) {
+            const item = document.createElement('div');
+            item.className = 'sudoku-leaderboard-item active';
+            
+            const pName = document.createElement('span');
+            pName.className = 'player-name';
+            pName.innerHTML = `<span class="player-color-dot" style="background:${network.myColor}"></span> 흑/백 교대 대국 (나)`;
+            item.appendChild(pName);
+
+            const score = document.createElement('span');
+            score.className = 'player-score';
+            score.textContent = `총 착수 ${gomokuState.history.length}회`;
+            item.appendChild(score);
+
+            $gomokuPlayersList.appendChild(item);
+            return;
+        }
+
+        gomokuState.players.forEach(p => {
+            const item = document.createElement('div');
+            item.className = 'sudoku-leaderboard-item';
+            
+            const activePeerId = gomokuState.turnOrder[gomokuState.currentTurnIndex];
+            if (p.peerId === activePeerId) {
+                item.classList.add('active');
+            }
+
+            const pName = document.createElement('span');
+            pName.className = 'player-name';
+            
+            const dot = document.createElement('span');
+            dot.className = 'player-color-dot';
+            dot.style.background = p.color;
+            pName.appendChild(dot);
+            
+            const roleTxt = p.role === 'black' ? '⚫ 흑돌' : '⚪ 백돌';
+            const nameTxt = document.createTextNode(`${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname} (${roleTxt})`);
+            pName.appendChild(nameTxt);
+            item.appendChild(pName);
+
+            const match = gomokuState.participants.find(x => x.peerId === p.peerId);
+            const totalTime = match ? match.totalTime : 0;
+            const placements = match ? match.correctCount : 0;
+
+            const score = document.createElement('span');
+            score.className = 'player-score';
+            score.textContent = `${placements}수 둠 (${Math.round(totalTime)}초)`;
+            item.appendChild(score);
+
+            $gomokuPlayersList.appendChild(item);
+        });
+    }
+
+    function renderGomokuFinalResult() {
+        $gomokuResultStats.innerHTML = '';
+
+        if (gomokuState.isSolo) {
+            const statText = document.createElement('p');
+            statText.innerHTML = `총 대국 시간: <b>${formatSudokuTime(gomokuState.gameSecondsElapsed)}</b><br>총 착수 수: <b>${gomokuState.history.length}수</b>`;
+            $gomokuResultStats.appendChild(statText);
+            return;
+        }
+
+        gomokuState.players.forEach(p => {
+            const match = gomokuState.participants.find(x => x.peerId === p.peerId);
+            const totalTime = match ? match.totalTime : 0;
+            const placements = match ? match.correctCount : 0;
+            const roleTxt = p.role === 'black' ? '흑돌' : '백돌';
+
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.justify = 'space-between';
+            div.style.borderBottom = '1px solid rgba(0,0,0,0.05)';
+            div.style.paddingBottom = '4px';
+
+            div.innerHTML = `
+                <span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${p.color}; margin-right:6px;"></span>${escapeHtml(p.nickname)} (${roleTxt})</span>
+                <span><b>${placements}수</b> 둠 (평균 착수 시간: ${placements > 0 ? (totalTime / placements).toFixed(1) : 0}초)</span>
+            `;
+            $gomokuResultStats.appendChild(div);
+        });
+    }
+
+    function handleGomokuPeerLeave(peerId) {
+        if (gomokuState.status === 'proposing') {
+            if (peerId === gomokuState.proposerId) {
+                showToast('🛑 오목 제안자가 퇴장하여 제안이 취소되었습니다.');
+                resetGomoku();
+                $gomokuOverlay.hidden = true;
+            } else {
+                gomokuState.participants = gomokuState.participants.filter(p => p.peerId !== peerId);
+                updateGomokuProposalListUI();
+            }
+        } else if (gomokuState.status === 'playing') {
+            const hostId = network.getHostPeerId();
+            if (peerId === hostId) {
+                showToast('⚠️ 방장이 퇴장하여 오목 게임을 종료합니다.');
+                resetGomoku();
+                $gomokuOverlay.hidden = true;
+                return;
+            }
+
+            if (gomokuState.turnOrder.includes(peerId)) {
+                showToast(`🔴 참가자 ${escapeHtml(getPeerNickname(peerId))}님이 퇴장하여 대국이 중단됩니다.`);
+                resetGomoku();
+                $gomokuOverlay.hidden = true;
+            }
+        }
+    }
+
+    function syncGomokuStateFromHost(hostState) {
+        gomokuState.status = 'playing';
+        gomokuState.isSolo = false;
+        gomokuState.board = hostState.board;
+        gomokuState.lastMove = hostState.lastMove;
+        gomokuState.players = hostState.players;
+        gomokuState.turnOrder = hostState.turnOrder;
+        gomokuState.currentTurnIndex = hostState.currentTurnIndex;
+        gomokuState.history = hostState.history;
+
+        gomokuState.participants = hostState.players.map(p => {
+            const existing = gomokuState.participants.find(x => x.peerId === p.peerId);
+            return {
+                peerId: p.peerId,
+                nickname: p.nickname,
+                color: p.color,
+                accepted: true,
+                totalTime: existing ? existing.totalTime : 0,
+                correctCount: existing ? existing.correctCount : 0
+            };
+        });
+
+        $gomokuOverlay.hidden = false;
+        showGomokuSubView('game');
+
+        buildGomokuBoardDOM();
+
+        resetGomokuTimers();
+        
+        gomokuState.gameSecondsElapsed = hostState.elapsedSeconds;
+        $gomokuGameTimer.textContent = formatSudokuTime(gomokuState.gameSecondsElapsed);
+        gomokuState.gameTimerInterval = setInterval(() => {
+            gomokuState.gameSecondsElapsed++;
+            $gomokuGameTimer.textContent = formatSudokuTime(gomokuState.gameSecondsElapsed);
+        }, 1000);
+
+        startGomokuTurn();
+    }
+
+    function resetGomokuTimers() {
+        clearInterval(gomokuState.turnTimerInterval);
+        clearInterval(gomokuState.gameTimerInterval);
+    }
+
+    function resetGomoku() {
+        resetGomokuTimers();
+
+        gomokuState = {
+            status: 'none',
+            isSolo: false,
+            board: [],
+            lastMove: null,
+            proposerId: null,
+            proposerNickname: null,
+            participants: [],
+            players: [],
+            turnOrder: [],
+            currentTurnIndex: 0,
+            turnStartTime: 0,
+            turnTimerInterval: null,
+            turnTimeLimit: 30,
+            secondsRemaining: 30,
+            gameStartTime: 0,
+            gameSecondsElapsed: 0,
+            gameTimerInterval: null,
+            history: [],
+            soloTurn: 'black'
+        };
+
+        const $boardWrapper = $gomokuBoard.parentElement;
+        if ($boardWrapper) {
+            $boardWrapper.classList.remove('my-turn', 'other-turn');
+        }
+
+        $gomokuLobby.hidden = true;
+        $gomokuGame.hidden = true;
+        $gomokuResult.hidden = true;
+    }
+
+    function showGomokuSubView(view) {
+        $gomokuLobby.hidden = (view !== 'lobby');
+        $gomokuGame.hidden = (view !== 'game');
+        $gomokuResult.hidden = (view !== 'result');
     }
 
     /* ---------- Start ---------- */
