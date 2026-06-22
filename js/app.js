@@ -85,6 +85,7 @@
     const $sudokuFinalLeaderboardList = document.getElementById('sudokuFinalLeaderboardList');
     const $btnSudokuResultClose = document.getElementById('btnSudokuResultClose');
     const $btnSudoku = document.getElementById('btnSudoku');
+    const $btnSudokuSolo = document.getElementById('btnSudokuSolo');
 
     /* ---------- State ---------- */
 
@@ -99,6 +100,7 @@
     // Sudoku State
     let sudokuState = {
         status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
+        isSolo: false,
         difficulty: 'medium',
         board: [],
         initialBoard: [],
@@ -2030,6 +2032,12 @@
             proposeSudoku(diff);
         });
 
+        // Solo button click
+        $btnSudokuSolo.addEventListener('click', () => {
+            const diff = $sudokuDifficulty.value;
+            startSudokuSolo(diff);
+        });
+
         // Cancel proposal click
         $btnSudokuCancel.addEventListener('click', () => {
             cancelSudokuProposal();
@@ -2157,6 +2165,62 @@
         });
     }
 
+    function startSudokuSolo(difficulty) {
+        const puzzleData = SudokuEngine.generate(difficulty);
+        if (!puzzleData) {
+            showToast('⚠️ 스도쿠 퍼즐 생성에 실패했습니다.');
+            return;
+        }
+
+        sudokuState.status = 'playing';
+        sudokuState.isSolo = true;
+        sudokuState.difficulty = difficulty;
+        sudokuState.board = puzzleData.puzzle;
+        sudokuState.initialBoard = puzzleData.puzzle;
+        sudokuState.solution = puzzleData.solution;
+        sudokuState.notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+        sudokuState.selectedCell = null;
+        sudokuState.mistakes = 0;
+        sudokuState.history = [];
+
+        sudokuState.participants = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                accepted: true,
+                totalTime: 0,
+                correctCount: 0
+            }
+        ];
+
+        sudokuState.players = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                totalTime: 0,
+                correctCount: 0,
+                active: true
+            }
+        ];
+
+        sudokuState.turnOrder = [network.myPeerId];
+        sudokuState.currentTurnIndex = 0;
+
+        $sudokuOverlay.hidden = false;
+        showSudokuSubView('game');
+        $sudokuGameDiff.textContent = difficulty.toUpperCase();
+        
+        buildSudokuBoardDOM();
+        updateSudokuMistakesDisplay();
+        updateSudokuNumpadState();
+
+        resetSudokuTimers();
+        startSudokuGameTimer();
+        startSudokuTurn();
+    }
+
     function guestRespondSudoku(accepted) {
         network.sendSudoku({
             action: 'join-response',
@@ -2256,7 +2320,13 @@
         }
         else if (action === 'start') {
             sudokuState.status = 'playing';
+            sudokuState.isSolo = false;
             sudokuState.difficulty = payload.difficulty;
+
+            sudokuState.participants.forEach(p => {
+                p.totalTime = 0;
+                p.correctCount = 0;
+            });
             sudokuState.board = payload.puzzle;
             sudokuState.initialBoard = payload.initialBoard;
             sudokuState.solution = payload.solution;
@@ -2315,6 +2385,12 @@
     }
 
     function cancelSudokuProposal() {
+        if (sudokuState.isSolo) {
+            resetSudoku();
+            $sudokuOverlay.hidden = true;
+            return;
+        }
+
         // sendSudoku의 로컬 에코로 cancel 핸들러가 호출되어 상태 및 UI가 처리됨
         network.sendSudoku({
             action: 'cancel'
@@ -2515,6 +2591,11 @@
 
         const elapsed = (performance.now() - sudokuState.turnStartTime) / 1000;
         const isCorrect = sudokuState.solution[r][c] === val;
+
+        if (sudokuState.isSolo) {
+            applySudokuMove(network.myPeerId, r, c, val, isCorrect, elapsed);
+            return;
+        }
 
         network.sendSudoku({
             action: 'move',
@@ -2981,6 +3062,11 @@
                 clearInterval(sudokuState.turnTimerInterval);
                 
                 if (isMyTurn) {
+                    if (sudokuState.isSolo) {
+                        applySudokuSkipTurn(network.myPeerId, sudokuState.turnTimeLimit);
+                        return;
+                    }
+
                     network.sendSudoku({
                         action: 'skip-turn',
                         peerId: network.myPeerId,
@@ -3234,6 +3320,7 @@
 
         sudokuState = {
             status: 'none',
+            isSolo: false,
             difficulty: 'medium',
             board: [],
             initialBoard: [],
