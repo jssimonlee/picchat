@@ -2583,15 +2583,18 @@
 
     function proposeSudoku(difficulty) {
         const gameMode = $sudokuMode.value || 'turn';
-        // sendSudoku의 로컬 에코로 handleSudokuNetworkMessage가 호출되어 상태 및 UI가 설정됨
-        network.sendSudoku({
+        const payload = {
             action: 'propose',
             difficulty: difficulty,
             gameMode: gameMode,
             proposerId: network.myPeerId,
             proposerNickname: network.nickname,
             proposerColor: network.myColor
-        });
+        };
+        network.sendSudoku(payload);
+        if (!network.isHost) {
+            handleSudokuNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function startSudokuSolo(difficulty) {
@@ -2875,10 +2878,13 @@
             return;
         }
 
-        // sendSudoku의 로컬 에코로 cancel 핸들러가 호출되어 상태 및 UI가 처리됨
-        network.sendSudoku({
+        const payload = {
             action: 'cancel'
-        });
+        };
+        network.sendSudoku(payload);
+        if (!network.isHost) {
+            handleSudokuNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function hostStartSudoku() {
@@ -4210,12 +4216,16 @@
     }
 
     function proposeGomoku() {
-        network.sendGomoku({
+        const payload = {
             action: 'propose',
             proposerId: network.myPeerId,
             proposerNickname: network.nickname,
             proposerColor: network.myColor
-        });
+        };
+        network.sendGomoku(payload);
+        if (!network.isHost) {
+            handleGomokuNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function startGomokuSolo() {
@@ -4419,9 +4429,13 @@
             $gomokuOverlay.hidden = true;
             return;
         }
-        network.sendGomoku({
+        const payload = {
             action: 'cancel'
-        });
+        };
+        network.sendGomoku(payload);
+        if (!network.isHost) {
+            handleGomokuNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function hostStartGomoku() {
@@ -5226,12 +5240,16 @@
     }
 
     function proposeOthello() {
-        network.sendOthello({
+        const payload = {
             action: 'propose',
             proposerId: network.myPeerId,
             proposerNickname: network.nickname,
             proposerColor: network.myColor
-        });
+        };
+        network.sendOthello(payload);
+        if (!network.isHost) {
+            handleOthelloNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function startOthelloSolo() {
@@ -5436,9 +5454,13 @@
             $othelloOverlay.hidden = true;
             return;
         }
-        network.sendOthello({
+        const payload = {
             action: 'cancel'
-        });
+        };
+        network.sendOthello(payload);
+        if (!network.isHost) {
+            handleOthelloNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function hostStartOthello() {
@@ -6421,13 +6443,17 @@
 
     function proposeMinesweeper() {
         const diff = $minesweeperDifficulty.value;
-        network.sendMinesweeper({
+        const payload = {
             action: 'propose',
             difficulty: diff,
             proposerId: network.myPeerId,
             proposerNickname: network.nickname,
             proposerColor: network.myColor
-        });
+        };
+        network.sendMinesweeper(payload);
+        if (!network.isHost) {
+            handleMinesweeperNetworkMessage(network.myPeerId, payload);
+        }
     }
 
     function guestRespondMinesweeper(accepted) {
@@ -6452,10 +6478,14 @@
     }
 
     function cancelMinesweeperProposal() {
-        network.sendMinesweeper({
+        const payload = {
             action: 'cancel',
             peerId: network.myPeerId
-        });
+        };
+        network.sendMinesweeper(payload);
+        if (!network.isHost) {
+            handleMinesweeperNetworkMessage(network.myPeerId, payload);
+        }
         resetMinesweeper();
     }
 
@@ -7165,6 +7195,7 @@
         else if (action === 'cancel') {
             showToast('제안이 취소되었습니다.');
             resetMinesweeper();
+            $minesweeperOverlay.hidden = true;
             if (network.isHost) {
                 network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
             }
