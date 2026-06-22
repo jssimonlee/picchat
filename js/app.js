@@ -6205,8 +6205,10 @@
     let msChordPressTimedOut = false;
 
     function setupMinesweeperEvents() {
+        console.log('[Minesweeper] Setting up event listeners');
         // Toolbar icon trigger
         $btnMinesweeper.addEventListener('click', () => {
+            console.log('[Minesweeper] Toolbar icon clicked');
             if (minesweeperState.status === 'none') {
                 $minesweeperOverlay.hidden = false;
                 showMinesweeperSubView('lobby');
