@@ -6612,9 +6612,6 @@
 
     function handleMinesweeperCellContextMenu(event) {
         event.preventDefault();
-        if (msIgnoreNextClick) {
-            return;
-        }
         const index = Number(event.currentTarget.dataset.index);
         msToggleMark(index);
     }
@@ -6697,6 +6694,13 @@
         msChordPressTimedOut = false;
         msIgnoreNextClick = true;
         renderMinesweeperBoardDOM(minesweeperState.myBoard, $minesweeperMyBoard);
+    }
+
+    function getMinesweeperChordPreviewIndexes(boardObj, index, rows, cols) {
+        return getMinesweeperNeighbors(index, rows, cols).filter((neighborIndex) => {
+            const neighbor = boardObj.cells[neighborIndex];
+            return neighbor && !neighbor.revealed && !neighbor.flagged;
+        });
     }
 
     function msRevealCell(index) {
