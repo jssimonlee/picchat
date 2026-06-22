@@ -303,6 +303,43 @@
         soloTurn: 'black'
     };
 
+    // Minesweeper State
+    let minesweeperState = {
+        status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
+        isSolo: false,
+        difficulty: 'basic', // 'basic' | 'intermediate'
+        proposerId: null,
+        proposerNickname: null,
+        participants: [],
+        players: [],
+        
+        myBoard: {
+            cells: [], // { mine: bool, revealed: bool, flagged: bool, questioned: bool, adjacent: int }
+            started: false,
+            ended: false,
+            won: false,
+            flags: 0,
+            revealed: 0,
+            mistakes: 0,
+            hitMineIndex: -1
+        },
+        
+        peerBoard: {
+            cells: [],
+            started: false,
+            ended: false,
+            won: false,
+            flags: 0,
+            revealed: 0,
+            mistakes: 0,
+            hitMineIndex: -1
+        },
+        
+        gameStartTime: 0,
+        gameSecondsElapsed: 0,
+        gameTimerInterval: null
+    };
+
     /* ---------- Initialize ---------- */
 
     function init() {
