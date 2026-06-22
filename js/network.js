@@ -23,6 +23,7 @@ class NetworkManager {
         this.onReady = callbacks.onReady || (() => {});
         this.onSudoku = callbacks.onSudoku || (() => {});
         this.onGomoku = callbacks.onGomoku || (() => {});
+        this.onOthello = callbacks.onOthello || (() => {});
 
         // State needed for state sync
         this.getCanvasState = callbacks.getCanvasState || (() => ({}));
@@ -385,6 +386,10 @@ class NetworkManager {
             case 'gomoku':
                 this.onGomoku(fromPeerId, data.payload);
                 break;
+
+            case 'othello':
+                this.onOthello(fromPeerId, data.payload);
+                break;
         }
     }
 
@@ -539,6 +544,19 @@ class NetworkManager {
             this._broadcast(data);
             // Local echo: host also processes its own messages
             this.onGomoku(this.myPeerId, payload);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendOthello(payload) {
+        const data = { type: 'othello', payload };
+        if (this.isHost) {
+            this._broadcast(data);
+            // Local echo: host also processes its own messages
+            this.onOthello(this.myPeerId, payload);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}

@@ -123,6 +123,43 @@
     const $btnGomokuResultClose = document.getElementById('btnGomokuResultClose');
     const $btnGomoku = document.getElementById('btnGomoku');
 
+    // Othello Elements
+    const $othelloOverlay = document.getElementById('othelloOverlay');
+    const $btnOthelloClose = document.getElementById('btnOthelloClose');
+    const $othelloLobby = document.getElementById('othelloLobby');
+    const $othelloLobbySetup = document.getElementById('othelloLobbySetup');
+    const $btnOthelloPropose = document.getElementById('btnOthelloPropose');
+    const $btnOthelloSolo = document.getElementById('btnOthelloSolo');
+    const $othelloLobbyWaiting = document.getElementById('othelloLobbyWaiting');
+    const $othelloLobbyWaitingTitle = document.getElementById('othelloLobbyWaitingTitle');
+    const $othelloProposalList = document.getElementById('othelloProposalList');
+    const $btnOthelloCancel = document.getElementById('btnOthelloCancel');
+    const $btnOthelloStart = document.getElementById('btnOthelloStart');
+    const $othelloLobbyInvite = document.getElementById('othelloLobbyInvite');
+    const $othelloProposerName = document.getElementById('othelloProposerName');
+    const $btnOthelloDecline = document.getElementById('btnOthelloDecline');
+    const $btnOthelloAccept = document.getElementById('btnOthelloAccept');
+    const $othelloGame = document.getElementById('othelloGame');
+    const $othelloGameStatus = document.getElementById('othelloGameStatus');
+    const $othelloGameTimer = document.getElementById('othelloGameTimer');
+    const $othelloCurrentTurnIcon = document.getElementById('othelloCurrentTurnIcon');
+    const $othelloBoard = document.getElementById('piccomm-othello-board');
+    const $othelloBlackCount = document.getElementById('othelloBlackCount');
+    const $othelloWhiteCount = document.getElementById('othelloWhiteCount');
+    const $othelloTurnCard = document.getElementById('othelloTurnCard');
+    const $othelloTurnStatus = document.getElementById('othelloTurnStatus');
+    const $othelloTurnTimerProgress = document.getElementById('othelloTurnTimerProgress');
+    const $othelloPlayersList = document.getElementById('othelloPlayersList');
+    const $btnOthelloUndo = document.getElementById('btnOthelloUndo');
+    const $btnOthelloQuit = document.getElementById('btnOthelloQuit');
+    const $othelloResult = document.getElementById('othelloResult');
+    const $othelloResultKicker = document.getElementById('othelloResultKicker');
+    const $othelloResultTitle = document.getElementById('othelloResultTitle');
+    const $othelloResultMsg = document.getElementById('othelloResultMsg');
+    const $othelloResultStats = document.getElementById('othelloResultStats');
+    const $btnOthelloResultClose = document.getElementById('btnOthelloResultClose');
+    const $btnOthello = document.getElementById('btnOthello');
+
     /* ---------- State ---------- */
 
     let canvas = null;
@@ -184,6 +221,29 @@
         gameTimerInterval: null,
         history: [], // [{ r, c, val, peerId, role }]
         soloTurn: 'black' // 'black' | 'white' (solo mode)
+    };
+
+    // Othello State
+    let othelloState = {
+        status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
+        isSolo: false,
+        board: [], // 8x8 grid, 0: empty, 1: black, 2: white
+        lastMove: null, // { r, c }
+        proposerId: null,
+        proposerNickname: null,
+        participants: [], // { peerId, nickname, color, accepted }
+        players: [], // { peerId, nickname, color, role: 'black' | 'white' }
+        turnOrder: [], // [peerId1, peerId2]
+        currentTurnIndex: 0,
+        turnStartTime: 0,
+        turnTimerInterval: null,
+        turnTimeLimit: 30,
+        secondsRemaining: 30,
+        gameStartTime: 0,
+        gameSecondsElapsed: 0,
+        gameTimerInterval: null,
+        history: [], // [{ boardState, turnIndex, soloTurn }] (saving board state snapshots is easiest for reversing flips!)
+        soloTurn: 'black'
     };
 
     /* ---------- Initialize ---------- */
@@ -426,6 +486,10 @@
                 if (state.gomokuState && state.gomokuState.status === 'playing') {
                     syncGomokuStateFromHost(state.gomokuState);
                 }
+                // Sync active Othello game if present
+                if (state.othelloState && state.othelloState.status === 'playing') {
+                    syncOthelloStateFromHost(state.othelloState);
+                }
             },
             onPeerJoin: (peerId, peerNickname, color, isAway) => {
                 knownParticipants.set(peerId, { nickname: peerNickname, color, isAway: isAway || false });
@@ -451,6 +515,7 @@
                 showToast(`🔴 ${peerNickname}님이 나갔습니다`);
                 handleSudokuPeerLeave(peerId);
                 handleGomokuPeerLeave(peerId);
+                handleOthelloPeerLeave(peerId);
             },
             onCursorMove: (peerId, x, y, peerNickname, color) => {
                 updateRemoteCursor(peerId, x, y, peerNickname, color);
@@ -468,6 +533,9 @@
             },
             onGomoku: (fromPeerId, payload) => {
                 handleGomokuNetworkMessage(fromPeerId, payload);
+            },
+            onOthello: (fromPeerId, payload) => {
+                handleOthelloNetworkMessage(fromPeerId, payload);
             },
             getCanvasState: () => {
                 const state = canvas ? canvas.getState() : {};
@@ -492,6 +560,16 @@
                     currentTurnIndex: gomokuState.currentTurnIndex,
                     elapsedSeconds: gomokuState.gameSecondsElapsed,
                     history: gomokuState.history
+                };
+                state.othelloState = {
+                    status: othelloState.status,
+                    board: othelloState.board,
+                    lastMove: othelloState.lastMove,
+                    players: othelloState.players,
+                    turnOrder: othelloState.turnOrder,
+                    currentTurnIndex: othelloState.currentTurnIndex,
+                    elapsedSeconds: othelloState.gameSecondsElapsed,
+                    history: othelloState.history
                 };
                 return state;
             }
@@ -557,6 +635,8 @@
         setupSudokuEvents();
         // Setup Gomoku events
         setupGomokuEvents();
+        // Setup Othello events
+        setupOthelloEvents();
     }
 
     /* ---------- Tool Events ---------- */
@@ -1774,6 +1854,7 @@
     function leaveRoom() {
         resetSudoku();
         resetGomoku();
+        resetOthello();
         if (network) {
             network.disconnect();
             network = null;
@@ -4458,6 +4539,1190 @@
         $gomokuLobby.hidden = true;
         $gomokuGame.hidden = true;
         $gomokuResult.hidden = true;
+    }
+
+    function showGomokuSubView(view) {
+        $gomokuLobby.hidden = (view !== 'lobby');
+        $gomokuGame.hidden = (view !== 'game');
+        $gomokuResult.hidden = (view !== 'result');
+    }
+
+    /* ==========================================================================
+       🌗 OTHELLO GAME MULTIPLAYER MANAGER & ENGINE
+       ========================================================================== */
+
+    function setupOthelloEvents() {
+        // Toolbar icon trigger
+        $btnOthello.addEventListener('click', () => {
+            if (othelloState.status === 'none') {
+                $othelloOverlay.hidden = false;
+                showOthelloSubView('lobby');
+                $othelloLobbySetup.hidden = false;
+                $othelloLobbyWaiting.hidden = true;
+                $othelloLobbyInvite.hidden = true;
+            } else {
+                $othelloOverlay.hidden = false;
+            }
+        });
+
+        // Close button
+        $btnOthelloClose.addEventListener('click', () => {
+            $othelloOverlay.hidden = true;
+        });
+
+        // Propose button click
+        $btnOthelloPropose.addEventListener('click', () => {
+            proposeOthello();
+        });
+
+        // Solo button click
+        $btnOthelloSolo.addEventListener('click', () => {
+            startOthelloSolo();
+        });
+
+        // Cancel proposal click
+        $btnOthelloCancel.addEventListener('click', () => {
+            cancelOthelloProposal();
+        });
+
+        // Host starts game
+        $btnOthelloStart.addEventListener('click', () => {
+            if (network.isHost) {
+                hostStartOthello();
+            }
+        });
+
+        // Accept invite
+        $btnOthelloAccept.addEventListener('click', () => {
+            guestRespondOthello(true);
+        });
+
+        // Decline invite
+        $btnOthelloDecline.addEventListener('click', () => {
+            guestRespondOthello(false);
+        });
+
+        // Exit / Quit button
+        $btnOthelloQuit.addEventListener('click', async () => {
+            const msg = othelloState.isSolo 
+                ? '오셀로 게임을 종료하시겠습니까?' 
+                : '오셀로 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+            if (await showCustomConfirm(msg)) {
+                quitOthelloGame();
+            }
+        });
+
+        // Close results screen
+        $btnOthelloResultClose.addEventListener('click', () => {
+            resetOthello();
+            $othelloOverlay.hidden = true;
+        });
+
+        // Action panel triggers
+        $btnOthelloUndo.addEventListener('click', () => {
+            undoOthelloMove();
+        });
+    }
+
+    function proposeOthello() {
+        network.sendOthello({
+            action: 'propose',
+            proposerId: network.myPeerId,
+            proposerNickname: network.nickname,
+            proposerColor: network.myColor
+        });
+    }
+
+    function startOthelloSolo() {
+        othelloState.status = 'playing';
+        othelloState.isSolo = true;
+        othelloState.board = Array(8).fill(null).map(() => Array(8).fill(0));
+        initOthelloBoard(othelloState.board);
+        othelloState.lastMove = null;
+        othelloState.history = [];
+        othelloState.soloTurn = 'black';
+
+        othelloState.participants = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                accepted: true,
+                totalTime: 0,
+                correctCount: 0
+            }
+        ];
+
+        othelloState.players = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                role: 'black'
+            }
+        ];
+
+        othelloState.turnOrder = [network.myPeerId];
+        othelloState.currentTurnIndex = 0;
+
+        $othelloOverlay.hidden = false;
+        showOthelloSubView('game');
+        
+        buildOthelloBoardDOM();
+        
+        resetOthelloTimers();
+        startOthelloGameTimer();
+        startOthelloTurn();
+    }
+
+    function guestRespondOthello(accepted) {
+        network.sendOthello({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
+
+        if (accepted) {
+            $othelloLobbyInvite.hidden = true;
+            $othelloLobbyWaiting.hidden = false;
+            $othelloLobbyWaitingTitle.textContent = '방장이 게임을 시작하기를 기다리는 중...';
+            $btnOthelloStart.hidden = true;
+            $btnOthelloCancel.hidden = true;
+        } else {
+            resetOthello();
+            $othelloOverlay.hidden = true;
+        }
+    }
+
+    function handleOthelloNetworkMessage(fromPeerId, payload) {
+        console.log('[Othello Network]', fromPeerId, payload);
+        const action = payload.action;
+
+        if (action === 'propose') {
+            othelloState.status = 'proposing';
+            othelloState.proposerId = payload.proposerId;
+            othelloState.proposerNickname = payload.proposerNickname;
+            othelloState.participants = [
+                {
+                    peerId: payload.proposerId,
+                    nickname: payload.proposerNickname,
+                    color: payload.proposerColor || getPeerColor(payload.proposerId),
+                    accepted: true
+                }
+            ];
+
+            $othelloOverlay.hidden = false;
+            
+            if (payload.proposerId === network.myPeerId) {
+                showOthelloSubView('lobby');
+                $othelloLobbySetup.hidden = true;
+                $othelloLobbyWaiting.hidden = false;
+                $othelloLobbyInvite.hidden = true;
+                $othelloLobbyWaitingTitle.textContent = '오셀로 참가 대기 중';
+                $btnOthelloStart.hidden = !network.isHost;
+                $btnOthelloStart.disabled = true;
+                updateOthelloProposalListUI();
+            } else {
+                showOthelloSubView('lobby');
+                $othelloLobbySetup.hidden = true;
+                $othelloLobbyWaiting.hidden = true;
+                $othelloLobbyInvite.hidden = false;
+                $othelloProposerName.textContent = payload.proposerNickname;
+            }
+
+            // Relay if host
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'join-response') {
+            if (network.isHost) {
+                let p = othelloState.participants.find(x => x.peerId === payload.peerId);
+                if (p) {
+                    p.accepted = payload.accepted;
+                } else {
+                    othelloState.participants.push({
+                        peerId: payload.peerId,
+                        nickname: payload.nickname,
+                        color: payload.color,
+                        accepted: payload.accepted
+                    });
+                }
+                network.sendOthello({
+                    action: 'proposal-sync',
+                    proposerId: othelloState.proposerId,
+                    proposerNickname: othelloState.proposerNickname,
+                    participants: othelloState.participants
+                });
+            }
+        }
+        else if (action === 'proposal-sync') {
+            othelloState.proposerId = payload.proposerId;
+            othelloState.proposerNickname = payload.proposerNickname;
+            othelloState.participants = payload.participants;
+
+            updateOthelloProposalListUI();
+        }
+        else if (action === 'start') {
+            othelloState.status = 'playing';
+            othelloState.isSolo = false;
+            othelloState.board = payload.board;
+            othelloState.lastMove = null;
+            othelloState.history = [];
+
+            othelloState.participants.forEach(p => {
+                p.totalTime = 0;
+                p.correctCount = 0;
+            });
+
+            othelloState.players = payload.players.map(p => ({
+                peerId: p.peerId,
+                nickname: p.nickname,
+                color: p.color,
+                role: p.role // 'black' or 'white'
+            }));
+
+            othelloState.turnOrder = payload.turnOrder;
+            othelloState.currentTurnIndex = 0;
+
+            showOthelloSubView('game');
+            buildOthelloBoardDOM();
+
+            resetOthelloTimers();
+            startOthelloGameTimer();
+            startOthelloTurn();
+        }
+        else if (action === 'move') {
+            applyOthelloMove(payload.peerId, payload.r, payload.c, payload.role, payload.elapsedSecs);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'undo') {
+            applyOthelloUndo();
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'skip-turn') {
+            applyOthelloSkipTurn(payload.peerId, payload.elapsedSecs);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'quit') {
+            applyOthelloQuit(payload.peerId);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'cancel') {
+            showToast('🛑 오셀로 대결이 취소되었습니다.');
+            resetOthello();
+            $othelloOverlay.hidden = true;
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'othello', payload }, fromPeerId);
+            }
+        }
+    }
+
+    function cancelOthelloProposal() {
+        if (othelloState.isSolo) {
+            resetOthello();
+            $othelloOverlay.hidden = true;
+            return;
+        }
+        network.sendOthello({
+            action: 'cancel'
+        });
+    }
+
+    function hostStartOthello() {
+        if (!network.isHost) return;
+
+        const proposer = othelloState.participants.find(p => p.peerId === othelloState.proposerId);
+        const acceptor = othelloState.participants.find(p => p.peerId !== othelloState.proposerId && p.accepted === true);
+
+        if (!proposer || !acceptor) {
+            showToast('⚠️ 대국을 시작할 대국자가 부족합니다.');
+            return;
+        }
+
+        const isProposerBlack = Math.random() < 0.5;
+        const players = [
+            {
+                peerId: proposer.peerId,
+                nickname: proposer.nickname,
+                color: proposer.color,
+                role: isProposerBlack ? 'black' : 'white'
+            },
+            {
+                peerId: acceptor.peerId,
+                nickname: acceptor.nickname,
+                color: acceptor.color,
+                role: isProposerBlack ? 'white' : 'black'
+            }
+        ];
+
+        const blackPlayer = players.find(p => p.role === 'black');
+        const whitePlayer = players.find(p => p.role === 'white');
+        const turnOrder = [blackPlayer.peerId, whitePlayer.peerId];
+
+        const initialBoard = Array(8).fill(null).map(() => Array(8).fill(0));
+        initOthelloBoard(initialBoard);
+
+        network.sendOthello({
+            action: 'start',
+            board: initialBoard,
+            players: players,
+            turnOrder: turnOrder
+        });
+    }
+
+    function updateOthelloProposalListUI() {
+        $othelloProposalList.innerHTML = '';
+        othelloState.participants.forEach(p => {
+            const li = document.createElement('li');
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'name';
+            
+            const dot = document.createElement('span');
+            dot.className = 'status-dot';
+            dot.style.background = p.color;
+            nameSpan.appendChild(dot);
+            
+            const nameText = document.createTextNode(p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname);
+            nameSpan.appendChild(nameText);
+            
+            li.appendChild(nameSpan);
+
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'status-text';
+
+            if (p.accepted === true) {
+                statusSpan.textContent = '수락';
+                statusSpan.style.color = '#10b981';
+            } else if (p.accepted === false) {
+                statusSpan.textContent = '거절';
+                statusSpan.style.color = '#ef4444';
+            } else {
+                statusSpan.textContent = '대기 중';
+                statusSpan.style.color = '#ffd32a';
+            }
+            li.appendChild(statusSpan);
+
+            $othelloProposalList.appendChild(li);
+        });
+
+        if (network.isHost) {
+            const acceptedCount = othelloState.participants.filter(p => p.peerId !== othelloState.proposerId && p.accepted === true).length;
+            $btnOthelloStart.disabled = (acceptedCount === 0 && othelloState.proposerId !== network.myPeerId);
+        }
+    }
+
+    function initOthelloBoard(board) {
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                board[r][c] = 0;
+            }
+        }
+        board[3][3] = 2; // White
+        board[4][4] = 2; // White
+        board[3][4] = 1; // Black
+        board[4][3] = 1; // Black
+    }
+
+    function isValidOthelloMove(board, r, c, roleVal) {
+        if (board[r][c] !== 0) return false;
+        const opponentVal = roleVal === 1 ? 2 : 1;
+        const directions = [
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1],           [0, 1],
+            [1, -1],  [1, 0],  [1, 1]
+        ];
+
+        for (const [dr, dc] of directions) {
+            let nr = r + dr;
+            let nc = c + dc;
+            let foundOpponent = false;
+
+            while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                if (board[nr][nc] === opponentVal) {
+                    foundOpponent = true;
+                } else if (board[nr][nc] === roleVal) {
+                    if (foundOpponent) {
+                        return true; 
+                    }
+                    break;
+                } else {
+                    break;
+                }
+                nr += dr;
+                nc += dc;
+            }
+        }
+        return false;
+    }
+
+    function getValidOthelloMoves(board, roleVal) {
+        const moves = [];
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if (isValidOthelloMove(board, r, c, roleVal)) {
+                    moves.push({ r, c });
+                }
+            }
+        }
+        return moves;
+    }
+
+    function flipOthelloStones(board, r, c, roleVal) {
+        const opponentVal = roleVal === 1 ? 2 : 1;
+        const directions = [
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1],           [0, 1],
+            [1, -1],  [1, 0],  [1, 1]
+        ];
+        let flipped = [];
+
+        board[r][c] = roleVal;
+
+        for (const [dr, dc] of directions) {
+            let nr = r + dr;
+            let nc = c + dc;
+            let tempFlipped = [];
+
+            while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                if (board[nr][nc] === opponentVal) {
+                    tempFlipped.push({ r: nr, c: nc });
+                } else if (board[nr][nc] === roleVal) {
+                    if (tempFlipped.length > 0) {
+                        for (const cell of tempFlipped) {
+                            board[cell.r][cell.c] = roleVal;
+                            flipped.push(cell);
+                        }
+                    }
+                    break;
+                } else {
+                    break;
+                }
+                nr += dr;
+                nc += dc;
+            }
+        }
+        return flipped;
+    }
+
+    function getOthelloStoneCounts() {
+        let black = 0;
+        let white = 0;
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if (othelloState.board[r][c] === 1) black++;
+                else if (othelloState.board[r][c] === 2) white++;
+            }
+        }
+        return { black, white };
+    }
+
+    function updateOthelloScoreDisplay() {
+        const score = getOthelloStoneCounts();
+        $othelloBlackCount.textContent = score.black;
+        $othelloWhiteCount.textContent = score.white;
+    }
+
+    function buildOthelloBoardDOM() {
+        $othelloBoard.innerHTML = '';
+        
+        let activeRoleVal = 1;
+        if (othelloState.isSolo) {
+            activeRoleVal = othelloState.soloTurn === 'black' ? 1 : 2;
+        } else {
+            const activePeerId = othelloState.turnOrder[othelloState.currentTurnIndex];
+            const activePlayer = othelloState.players.find(p => p.peerId === activePeerId);
+            if (activePlayer) activeRoleVal = activePlayer.role === 'black' ? 1 : 2;
+        }
+
+        const hints = getValidOthelloMoves(othelloState.board, activeRoleVal);
+        const isSpectator = !othelloState.turnOrder.includes(network.myPeerId);
+        
+        let showHints = false;
+        if (othelloState.isSolo) {
+            showHints = true;
+        } else {
+            const activePeerId = othelloState.turnOrder[othelloState.currentTurnIndex];
+            showHints = (activePeerId === network.myPeerId);
+        }
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'othello-cell';
+                cell.dataset.row = r;
+                cell.dataset.col = c;
+
+                // Render Hints
+                if (showHints && !isSpectator && hints.some(h => h.r === r && h.c === c)) {
+                    const hintDot = document.createElement('div');
+                    hintDot.className = 'othello-cell-hint';
+                    cell.appendChild(hintDot);
+                }
+
+                // Render Stones
+                const val = othelloState.board[r][c];
+                if (val !== 0) {
+                    const stone = document.createElement('div');
+                    stone.className = `othello-stone ${val === 1 ? 'black' : 'white'}`;
+                    if (othelloState.lastMove && othelloState.lastMove.r === r && othelloState.lastMove.c === c) {
+                        stone.classList.add('last-move');
+                    }
+                    cell.appendChild(stone);
+                }
+
+                cell.addEventListener('click', () => {
+                    if (isSpectator) return;
+                    placeOthelloStone(r, c);
+                });
+
+                $othelloBoard.appendChild(cell);
+            }
+        }
+        updateOthelloScoreDisplay();
+    }
+
+    function getOthelloCellElement(r, c) {
+        return $othelloBoard.querySelector(`.othello-cell[data-row="${r}"][data-col="${c}"]`);
+    }
+
+    function placeOthelloStone(r, c) {
+        if (othelloState.status !== 'playing') return;
+
+        let isMyTurn = false;
+        let role = 'black';
+        let peerId = network.myPeerId;
+
+        if (othelloState.isSolo) {
+            isMyTurn = true;
+            role = othelloState.soloTurn;
+        } else {
+            const activePeerId = othelloState.turnOrder[othelloState.currentTurnIndex];
+            isMyTurn = activePeerId === network.myPeerId;
+            if (!isMyTurn) {
+                showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
+                return;
+            }
+            const me = othelloState.players.find(p => p.peerId === network.myPeerId);
+            if (me) {
+                role = me.role;
+            }
+        }
+
+        if (!isMyTurn) return;
+
+        // Verify valid reversi move
+        const roleVal = role === 'black' ? 1 : 2;
+        if (!isValidOthelloMove(othelloState.board, r, c, roleVal)) {
+            showToast('⚠️ 여기에 돌을 둘 수 없습니다! 상대방 돌을 가둘 수 있는 자리를 선택하세요.');
+            return;
+        }
+
+        const elapsed = (performance.now() - othelloState.turnStartTime) / 1000;
+
+        if (othelloState.isSolo) {
+            applyOthelloMove(peerId, r, c, role, elapsed);
+        } else {
+            network.sendOthello({
+                action: 'move',
+                peerId: network.myPeerId,
+                r, c, role,
+                elapsedSecs: elapsed
+            });
+            if (!network.isHost) {
+                applyOthelloMove(network.myPeerId, r, c, role, elapsed);
+            }
+        }
+    }
+
+    function applyOthelloMove(peerId, r, c, role, elapsed) {
+        clearInterval(othelloState.turnTimerInterval);
+
+        // Save board state snapshot *before* making the move so undo can restore it perfectly
+        const boardSnapshot = othelloState.board.map(row => [...row]);
+        othelloState.history.push({
+            boardState: boardSnapshot,
+            turnIndex: othelloState.currentTurnIndex,
+            soloTurn: othelloState.soloTurn,
+            lastMove: othelloState.lastMove ? { ...othelloState.lastMove } : null
+        });
+
+        const roleVal = role === 'black' ? 1 : 2;
+        
+        // Place stone and flip standard reversi cells
+        const flippedCells = flipOthelloStones(othelloState.board, r, c, roleVal);
+
+        // Update lastMove pointers
+        if (othelloState.lastMove) {
+            const prevEl = getOthelloCellElement(othelloState.lastMove.r, othelloState.lastMove.c);
+            if (prevEl) {
+                const stoneEl = prevEl.querySelector('.othello-stone');
+                if (stoneEl) stoneEl.classList.remove('last-move');
+            }
+        }
+        othelloState.lastMove = { r, c };
+
+        // Update stats
+        const pState = othelloState.participants.find(p => p.peerId === peerId);
+        if (pState) {
+            pState.totalTime += elapsed;
+            pState.correctCount++;
+        }
+
+        // Render the newly placed stone
+        const cellEl = getOthelloCellElement(r, c);
+        if (cellEl) {
+            const stone = document.createElement('div');
+            stone.className = `othello-stone ${role} last-move`;
+            cellEl.appendChild(stone);
+        }
+
+        // Apply flip animations (Wait 10ms for DOM insertion to trigger transition nicely)
+        setTimeout(() => {
+            flippedCells.forEach(cell => {
+                const cEl = getOthelloCellElement(cell.r, cell.c);
+                if (cEl) {
+                    const st = cEl.querySelector('.othello-stone');
+                    if (st) {
+                        st.className = `othello-stone ${role}`;
+                        st.style.transform = 'scale(1.2) rotateY(180deg)';
+                        setTimeout(() => {
+                            st.style.transform = 'scale(1) rotateY(0deg)';
+                        }, 250);
+                    }
+                }
+            });
+        }, 10);
+
+        updateOthelloScoreDisplay();
+
+        // Check if game has ended
+        const counts = getOthelloStoneCounts();
+        if (counts.black === 0 || counts.white === 0 || (counts.black + counts.white === 64)) {
+            setTimeout(() => {
+                if (counts.black > counts.white) {
+                    const bp = othelloState.players.find(x => x.role === 'black');
+                    endOthelloGame(bp ? bp.peerId : null, 'black');
+                } else if (counts.white > counts.black) {
+                    const wp = othelloState.players.find(x => x.role === 'white');
+                    endOthelloGame(wp ? wp.peerId : null, 'white');
+                } else {
+                    endOthelloGame(null, 'draw');
+                }
+            }, 600);
+            return;
+        }
+
+        // Advance turn (with Pass logic inside)
+        if (othelloState.isSolo) {
+            othelloState.soloTurn = othelloState.soloTurn === 'black' ? 'white' : 'black';
+            advanceOthelloTurn();
+        } else {
+            advanceOthelloTurn();
+        }
+    }
+
+    function undoOthelloMove() {
+        if (othelloState.status !== 'playing') return;
+        if (othelloState.history.length === 0) return;
+
+        if (othelloState.isSolo) {
+            applyOthelloUndo();
+        } else {
+            network.sendOthello({
+                action: 'undo'
+            });
+            if (!network.isHost) {
+                applyOthelloUndo();
+            }
+        }
+    }
+
+    function applyOthelloUndo() {
+        if (othelloState.history.length === 0) return;
+        clearInterval(othelloState.turnTimerInterval);
+
+        const lastSnapshot = othelloState.history.pop();
+        const { boardState, turnIndex, soloTurn, lastMove } = lastSnapshot;
+
+        // Restore state
+        othelloState.board = boardState;
+        othelloState.currentTurnIndex = turnIndex;
+        othelloState.soloTurn = soloTurn;
+        othelloState.lastMove = lastMove;
+
+        // Re-render board DOM to reflect previous snapshot
+        buildOthelloBoardDOM();
+
+        showToast(`↩️ 한 수를 물렀습니다.`);
+        startOthelloTurn();
+    }
+
+    function quitOthelloGame() {
+        if (othelloState.isSolo) {
+            resetOthello();
+            $othelloOverlay.hidden = true;
+            return;
+        }
+
+        network.sendOthello({
+            action: 'quit',
+            peerId: network.myPeerId
+        });
+        if (!network.isHost) {
+            applyOthelloQuit(network.myPeerId);
+        }
+    }
+
+    function applyOthelloQuit(quitterId) {
+        clearInterval(othelloState.turnTimerInterval);
+        clearInterval(othelloState.gameTimerInterval);
+
+        othelloState.status = 'finished';
+        showOthelloSubView('result');
+
+        const isMe = quitterId === network.myPeerId;
+        if (isMe) {
+            $othelloResultTitle.textContent = '💀 기권 패배 💀';
+            $othelloResultTitle.className = 'error-title';
+            $othelloResultMsg.textContent = '대국을 기권하여 패배하였습니다.';
+        } else {
+            $othelloResultTitle.textContent = '🏆 기권 승리! 🏆';
+            $othelloResultTitle.className = '';
+            $othelloResultMsg.textContent = '상대방이 기권하여 승리하였습니다!';
+        }
+
+        renderOthelloFinalResult();
+    }
+
+    function endOthelloGame(winnerPeerId, winnerRole) {
+        clearInterval(othelloState.turnTimerInterval);
+        clearInterval(othelloState.gameTimerInterval);
+
+        othelloState.status = 'finished';
+        showOthelloSubView('result');
+
+        const score = getOthelloStoneCounts();
+
+        if (winnerPeerId === null && winnerRole === 'draw') {
+            $othelloResultTitle.textContent = '🤝 무승부 🤝';
+            $othelloResultTitle.className = '';
+            $othelloResultMsg.textContent = `양쪽 모두 ${score.black}개로 무승부를 기록하였습니다.`;
+        } else {
+            const isMe = winnerPeerId === network.myPeerId;
+            const name = getPeerNickname(winnerPeerId);
+            const roleKorean = winnerRole === 'black' ? '흑돌' : '백돌';
+
+            if (isMe) {
+                $othelloResultTitle.textContent = '🏆 대국 승리! 🏆';
+                $othelloResultTitle.className = '';
+                $othelloResultMsg.textContent = `축하합니다! ${roleKorean}로 더 많은 돌(${roleKorean === '흑돌' ? score.black : score.white}개)을 차지하여 승리하셨습니다.`;
+            } else {
+                $othelloResultTitle.textContent = '💀 대국 패배 💀';
+                $othelloResultTitle.className = 'error-title';
+                $othelloResultMsg.textContent = `${escapeHtml(name)}님이 ${roleKorean}로 더 많은 돌(${roleKorean === '흑돌' ? score.black : score.white}개)을 차지하여 승리하셨습니다.`;
+            }
+        }
+
+        renderOthelloFinalResult();
+    }
+
+    function startOthelloGameTimer() {
+        othelloState.gameStartTime = Date.now();
+        othelloState.gameSecondsElapsed = 0;
+        $othelloGameTimer.textContent = '00:00';
+
+        othelloState.gameTimerInterval = setInterval(() => {
+            othelloState.gameSecondsElapsed++;
+            $othelloGameTimer.textContent = formatSudokuTime(othelloState.gameSecondsElapsed);
+        }, 1000);
+    }
+
+    function startOthelloTurn() {
+        if (othelloState.status !== 'playing') return;
+
+        othelloState.turnStartTime = performance.now();
+        othelloState.secondsRemaining = othelloState.turnTimeLimit;
+
+        let isMyTurn = false;
+        let activeName = '';
+        let activePeerId = '';
+        let activeRole = 'black';
+
+        if (othelloState.isSolo) {
+            isMyTurn = true;
+            activePeerId = network.myPeerId;
+            activeName = network.nickname;
+            activeRole = othelloState.soloTurn;
+        } else {
+            activePeerId = othelloState.turnOrder[othelloState.currentTurnIndex];
+            isMyTurn = activePeerId === network.myPeerId;
+            const activePlayer = othelloState.players.find(p => p.peerId === activePeerId);
+            activeName = activePlayer ? activePlayer.nickname : '알 수 없음';
+            activeRole = activePlayer ? activePlayer.role : 'black';
+        }
+
+        const roleText = activeRole === 'black' ? '⚫ 흑돌' : '⚪ 백돌';
+        $othelloCurrentTurnIcon.textContent = roleText;
+
+        const $boardWrapper = $othelloBoard.parentElement;
+        if ($boardWrapper) {
+            if (isMyTurn) {
+                $boardWrapper.classList.add('my-turn');
+                $boardWrapper.classList.remove('other-turn');
+            } else {
+                $boardWrapper.classList.add('other-turn');
+                $boardWrapper.classList.remove('my-turn');
+            }
+        }
+
+        if (isMyTurn) {
+            if (othelloState.isSolo) {
+                $othelloTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">차례: ${roleText}</span> (남은 시간: <span id="othelloTurnTimerSecs">${othelloState.secondsRemaining}</span>초)`;
+            } else {
+                $othelloTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">내 차례입니다! (${roleText})</span> (남은 시간: <span id="othelloTurnTimerSecs">${othelloState.secondsRemaining}</span>초)`;
+            }
+        } else {
+            $othelloTurnStatus.innerHTML = `⏳ <b>${escapeHtml(activeName)}</b> 님의 턴 (${roleText}) (남은 시간: <span id="othelloTurnTimerSecs">${othelloState.secondsRemaining}</span>초)`;
+        }
+
+        // Build grid with new hints and listeners
+        buildOthelloBoardDOM();
+        updateOthelloPlayersListUI();
+
+        $othelloTurnTimerProgress.style.width = '100%';
+        $othelloTurnTimerProgress.className = 'sudoku-progress-fill';
+
+        othelloState.turnTimerInterval = setInterval(() => {
+            othelloState.secondsRemaining--;
+            
+            const timerEl = document.getElementById('othelloTurnTimerSecs');
+            if (timerEl) timerEl.textContent = othelloState.secondsRemaining;
+
+            const pct = (othelloState.secondsRemaining / othelloState.turnTimeLimit) * 100;
+            $othelloTurnTimerProgress.style.width = `${pct}%`;
+
+            if (pct <= 25) {
+                $othelloTurnTimerProgress.className = 'sudoku-progress-fill danger';
+            } else if (pct <= 50) {
+                $othelloTurnTimerProgress.className = 'sudoku-progress-fill warning';
+            }
+
+            if (othelloState.secondsRemaining <= 0) {
+                clearInterval(othelloState.turnTimerInterval);
+                
+                if (isMyTurn) {
+                    if (othelloState.isSolo) {
+                        applyOthelloSkipTurn(network.myPeerId, othelloState.turnTimeLimit);
+                        return;
+                    }
+
+                    network.sendOthello({
+                        action: 'skip-turn',
+                        peerId: network.myPeerId,
+                        elapsedSecs: othelloState.turnTimeLimit
+                    });
+                    if (!network.isHost) {
+                        applyOthelloSkipTurn(network.myPeerId, othelloState.turnTimeLimit);
+                    }
+                }
+            }
+        }, 1000);
+    }
+
+    function applyOthelloSkipTurn(peerId, elapsed) {
+        clearInterval(othelloState.turnTimerInterval);
+
+        const player = othelloState.participants.find(p => p.peerId === peerId);
+        if (player) {
+            player.totalTime += elapsed;
+        }
+
+        showToast(`⏰ 시간 초과! 차례가 넘어갑니다.`);
+
+        if (othelloState.status === 'playing') {
+            if (othelloState.isSolo) {
+                othelloState.soloTurn = othelloState.soloTurn === 'black' ? 'white' : 'black';
+            }
+            advanceOthelloTurn();
+        }
+    }
+
+    function advanceOthelloTurn() {
+        if (othelloState.turnOrder.length === 0) return;
+
+        const nextTurnIndex = (othelloState.currentTurnIndex + 1) % othelloState.turnOrder.length;
+        let nextPeerId = '';
+        let nextRole = 'black';
+
+        if (othelloState.isSolo) {
+            nextPeerId = network.myPeerId;
+            nextRole = othelloState.soloTurn;
+        } else {
+            nextPeerId = othelloState.turnOrder[nextTurnIndex];
+            const nextPlayer = othelloState.players.find(p => p.peerId === nextPeerId);
+            if (nextPlayer) nextRole = nextPlayer.role;
+        }
+
+        const nextRoleVal = nextRole === 'black' ? 1 : 2;
+        const nextMoves = getValidOthelloMoves(othelloState.board, nextRoleVal);
+
+        if (nextMoves.length > 0) {
+            othelloState.currentTurnIndex = nextTurnIndex;
+            startOthelloTurn();
+        } else {
+            const currentPeerId = othelloState.isSolo ? network.myPeerId : othelloState.turnOrder[othelloState.currentTurnIndex];
+            let currentRole = 'black';
+            if (othelloState.isSolo) {
+                currentRole = othelloState.soloTurn === 'black' ? 'white' : 'black'; 
+            } else {
+                const curPlayer = othelloState.players.find(p => p.peerId === currentPeerId);
+                if (curPlayer) currentRole = curPlayer.role;
+            }
+            
+            const currentRoleVal = currentRole === 'black' ? 1 : 2;
+            const currentMoves = getValidOthelloMoves(othelloState.board, currentRoleVal);
+
+            if (currentMoves.length > 0) {
+                showToast(`⚠️ ${nextRole === 'black' ? '흑돌' : '백돌'} 둘 자리가 없어 턴이 넘어갑니다 (Pass)`);
+                if (othelloState.isSolo) {
+                    othelloState.soloTurn = currentRole; 
+                }
+                startOthelloTurn();
+            } else {
+                showToast('🏁 양쪽 모두 둘 수 있는 자리가 없어 대국을 종료합니다.');
+                const score = getOthelloStoneCounts();
+                setTimeout(() => {
+                    if (score.black > score.white) {
+                        const bp = othelloState.players.find(x => x.role === 'black');
+                        endOthelloGame(bp ? bp.peerId : null, 'black');
+                    } else if (score.white > score.black) {
+                        const wp = othelloState.players.find(x => x.role === 'white');
+                        endOthelloGame(wp ? wp.peerId : null, 'white');
+                    } else {
+                        endOthelloGame(null, 'draw');
+                    }
+                }, 600);
+            }
+        }
+    }
+
+    function updateOthelloPlayersListUI() {
+        $othelloPlayersList.innerHTML = '';
+
+        if (othelloState.isSolo) {
+            const item = document.createElement('div');
+            item.className = 'sudoku-leaderboard-item active';
+            
+            const pName = document.createElement('span');
+            pName.className = 'player-name';
+            pName.innerHTML = `<span class="player-color-dot" style="background:${network.myColor}"></span> 흑/백 교대 대국 (나)`;
+            item.appendChild(pName);
+
+            const score = document.createElement('span');
+            score.className = 'player-score';
+            score.textContent = `총 착수 ${othelloState.history.length}회`;
+            item.appendChild(score);
+
+            $othelloPlayersList.appendChild(item);
+            return;
+        }
+
+        othelloState.players.forEach(p => {
+            const item = document.createElement('div');
+            item.className = 'sudoku-leaderboard-item';
+            
+            const activePeerId = othelloState.turnOrder[othelloState.currentTurnIndex];
+            if (p.peerId === activePeerId) {
+                item.classList.add('active');
+            }
+
+            const pName = document.createElement('span');
+            pName.className = 'player-name';
+            
+            const dot = document.createElement('span');
+            dot.className = 'player-color-dot';
+            dot.style.background = p.color;
+            pName.appendChild(dot);
+            
+            const roleTxt = p.role === 'black' ? '⚫ 흑돌' : '⚪ 백돌';
+            const nameTxt = document.createTextNode(`${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname} (${roleTxt})`);
+            pName.appendChild(nameTxt);
+            item.appendChild(pName);
+
+            const match = othelloState.participants.find(x => x.peerId === p.peerId);
+            const totalTime = match ? match.totalTime : 0;
+            const placements = match ? match.correctCount : 0;
+
+            const score = document.createElement('span');
+            score.className = 'player-score';
+            score.textContent = `${placements}수 둠 (${Math.round(totalTime)}초)`;
+            item.appendChild(score);
+
+            $othelloPlayersList.appendChild(item);
+        });
+    }
+
+    function renderOthelloFinalResult() {
+        $othelloResultStats.innerHTML = '';
+        const score = getOthelloStoneCounts();
+
+        const titleText = document.createElement('h4');
+        titleText.style.margin = '0 0 8px 0';
+        titleText.style.color = '#1e293b';
+        titleText.textContent = `최종 스코어 - 흑돌: ${score.black}개 vs 백돌: ${score.white}개`;
+        $othelloResultStats.appendChild(titleText);
+
+        if (othelloState.isSolo) {
+            const statText = document.createElement('p');
+            statText.innerHTML = `총 대국 시간: <b>${formatSudokuTime(othelloState.gameSecondsElapsed)}</b><br>총 착수 수: <b>${othelloState.history.length}수</b>`;
+            $othelloResultStats.appendChild(statText);
+            return;
+        }
+
+        othelloState.players.forEach(p => {
+            const match = othelloState.participants.find(x => x.peerId === p.peerId);
+            const totalTime = match ? match.totalTime : 0;
+            const placements = match ? match.correctCount : 0;
+            const roleTxt = p.role === 'black' ? '흑돌' : '백돌';
+            const finalStones = p.role === 'black' ? score.black : score.white;
+
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.justifyContent = 'space-between';
+            div.style.borderBottom = '1px solid rgba(0,0,0,0.05)';
+            div.style.paddingBottom = '4px';
+
+            div.innerHTML = `
+                <span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${p.color}; margin-right:6px;"></span>${escapeHtml(p.nickname)} (${roleTxt})</span>
+                <span><b>${finalStones}개 차지</b> (${placements}수 둠, 평균 ${placements > 0 ? (totalTime / placements).toFixed(1) : 0}초)</span>
+            `;
+            $othelloResultStats.appendChild(div);
+        });
+    }
+
+    function handleOthelloPeerLeave(peerId) {
+        if (othelloState.status === 'proposing') {
+            if (peerId === othelloState.proposerId) {
+                showToast('🛑 오셀로 제안자가 퇴장하여 제안이 취소되었습니다.');
+                resetOthello();
+                $othelloOverlay.hidden = true;
+            } else {
+                othelloState.participants = othelloState.participants.filter(p => p.peerId !== peerId);
+                updateOthelloProposalListUI();
+            }
+        } else if (othelloState.status === 'playing') {
+            const hostId = network.getHostPeerId();
+            if (peerId === hostId) {
+                showToast('⚠️ 방장이 퇴장하여 오셀로 게임을 종료합니다.');
+                resetOthello();
+                $othelloOverlay.hidden = true;
+                return;
+            }
+
+            if (othelloState.turnOrder.includes(peerId)) {
+                showToast(`🔴 참가자 ${escapeHtml(getPeerNickname(peerId))}님이 퇴장하여 대국이 중단됩니다.`);
+                resetOthello();
+                $othelloOverlay.hidden = true;
+            }
+        }
+    }
+
+    function syncOthelloStateFromHost(hostState) {
+        othelloState.status = 'playing';
+        othelloState.isSolo = false;
+        othelloState.board = hostState.board;
+        othelloState.lastMove = hostState.lastMove;
+        othelloState.players = hostState.players;
+        othelloState.turnOrder = hostState.turnOrder;
+        othelloState.currentTurnIndex = hostState.currentTurnIndex;
+        othelloState.history = hostState.history;
+
+        othelloState.participants = hostState.players.map(p => {
+            const existing = othelloState.participants.find(x => x.peerId === p.peerId);
+            return {
+                peerId: p.peerId,
+                nickname: p.nickname,
+                color: p.color,
+                accepted: true,
+                totalTime: existing ? existing.totalTime : 0,
+                correctCount: existing ? existing.correctCount : 0
+            };
+        });
+
+        $othelloOverlay.hidden = false;
+        showOthelloSubView('game');
+
+        buildOthelloBoardDOM();
+
+        resetOthelloTimers();
+        
+        othelloState.gameSecondsElapsed = hostState.elapsedSeconds;
+        $othelloGameTimer.textContent = formatSudokuTime(othelloState.gameSecondsElapsed);
+        othelloState.gameTimerInterval = setInterval(() => {
+            othelloState.gameSecondsElapsed++;
+            $othelloGameTimer.textContent = formatSudokuTime(othelloState.gameSecondsElapsed);
+        }, 1000);
+
+        startOthelloTurn();
+    }
+
+    function resetOthelloTimers() {
+        clearInterval(othelloState.turnTimerInterval);
+        clearInterval(othelloState.gameTimerInterval);
+    }
+
+    function resetOthello() {
+        resetOthelloTimers();
+
+        othelloState = {
+            status: 'none',
+            isSolo: false,
+            board: [],
+            lastMove: null,
+            proposerId: null,
+            proposerNickname: null,
+            participants: [],
+            players: [],
+            turnOrder: [],
+            currentTurnIndex: 0,
+            turnStartTime: 0,
+            turnTimerInterval: null,
+            turnTimeLimit: 30,
+            secondsRemaining: 30,
+            gameStartTime: 0,
+            gameSecondsElapsed: 0,
+            gameTimerInterval: null,
+            history: [],
+            soloTurn: 'black'
+        };
+
+        const $boardWrapper = $othelloBoard.parentElement;
+        if ($boardWrapper) {
+            $boardWrapper.classList.remove('my-turn', 'other-turn');
+        }
+
+        $othelloLobby.hidden = true;
+        $othelloGame.hidden = true;
+        $othelloResult.hidden = true;
+    }
+
+    function showOthelloSubView(view) {
+        $othelloLobby.hidden = (view !== 'lobby');
+        $othelloGame.hidden = (view !== 'game');
+        $othelloResult.hidden = (view !== 'result');
     }
 
     function showGomokuSubView(view) {
