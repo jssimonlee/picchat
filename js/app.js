@@ -238,6 +238,16 @@
     let chatUnreadCount = 0;
     let isChatOpen = false;
 
+    function getSudokuTurnTimeLimit(difficulty) {
+        switch (difficulty) {
+            case 'easy': return 30;
+            case 'medium': return 60;
+            case 'hard': return 90;
+            case 'expert': return 120;
+            default: return 60;
+        }
+    }
+
     // Sudoku State
     let sudokuState = {
         status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
@@ -2448,8 +2458,19 @@
         });
 
         // Close button
-        $btnSudokuClose.addEventListener('click', () => {
-            $sudokuOverlay.hidden = true;
+        $btnSudokuClose.addEventListener('click', async () => {
+            if (sudokuState.status === 'playing') {
+                if (await showCustomConfirm('스도쿠 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
+                    cancelSudokuProposal();
+                }
+            } else if (sudokuState.status === 'proposing') {
+                if (await showCustomConfirm('스도쿠 제안을 취소하시겠습니까?')) {
+                    cancelSudokuProposal();
+                }
+            } else {
+                resetSudoku();
+                $sudokuOverlay.hidden = true;
+            }
         });
 
         // Propose button click
@@ -2609,6 +2630,8 @@
         sudokuState.status = 'playing';
         sudokuState.isSolo = true;
         sudokuState.difficulty = difficulty;
+        sudokuState.turnTimeLimit = getSudokuTurnTimeLimit(difficulty);
+        sudokuState.secondsRemaining = sudokuState.turnTimeLimit;
         sudokuState.board = puzzleData.puzzle;
         sudokuState.initialBoard = puzzleData.puzzle;
         sudokuState.solution = puzzleData.solution;
@@ -2773,6 +2796,8 @@
             sudokuState.status = 'playing';
             sudokuState.isSolo = false;
             sudokuState.difficulty = payload.difficulty;
+            sudokuState.turnTimeLimit = getSudokuTurnTimeLimit(payload.difficulty);
+            sudokuState.secondsRemaining = sudokuState.turnTimeLimit;
             sudokuState.gameMode = payload.gameMode || 'turn';
 
             sudokuState.participants.forEach(p => {
@@ -3671,6 +3696,14 @@
             }
         }
 
+        if (sudokuState.isSolo) {
+            $sudokuTurnStatus.innerHTML = `🧘 <b>혼자하기 모드</b> (제한 시간 없음)`;
+            updateSudokuLeaderboardUI();
+            $sudokuTurnTimerProgress.style.width = '100%';
+            $sudokuTurnTimerProgress.className = 'sudoku-progress-fill';
+            return;
+        }
+
         if (isMyTurn) {
             $sudokuTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">내 차례입니다!</span> (남은 시간: <span id="sudokuTurnTimerSecs">${sudokuState.secondsRemaining}</span>초)`;
         } else {
@@ -4163,8 +4196,19 @@
         });
 
         // Close button
-        $btnGomokuClose.addEventListener('click', () => {
-            $gomokuOverlay.hidden = true;
+        $btnGomokuClose.addEventListener('click', async () => {
+            if (gomokuState.status === 'playing') {
+                if (await showCustomConfirm('오목 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
+                    cancelGomokuProposal();
+                }
+            } else if (gomokuState.status === 'proposing') {
+                if (await showCustomConfirm('오목 제안을 취소하시겠습니까?')) {
+                    cancelGomokuProposal();
+                }
+            } else {
+                resetGomoku();
+                $gomokuOverlay.hidden = true;
+            }
         });
 
         // Propose button click
@@ -5193,8 +5237,19 @@
         });
 
         // Close button
-        $btnOthelloClose.addEventListener('click', () => {
-            $othelloOverlay.hidden = true;
+        $btnOthelloClose.addEventListener('click', async () => {
+            if (othelloState.status === 'playing') {
+                if (await showCustomConfirm('오셀로 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
+                    cancelOthelloProposal();
+                }
+            } else if (othelloState.status === 'proposing') {
+                if (await showCustomConfirm('오셀로 제안을 취소하시겠습니까?')) {
+                    cancelOthelloProposal();
+                }
+            } else {
+                resetOthello();
+                $othelloOverlay.hidden = true;
+            }
         });
 
         // Propose button click
@@ -6406,8 +6461,19 @@
         });
 
         // Close button
-        $btnMinesweeperClose.addEventListener('click', () => {
-            $minesweeperOverlay.hidden = true;
+        $btnMinesweeperClose.addEventListener('click', async () => {
+            if (minesweeperState.status === 'playing') {
+                if (await showCustomConfirm('지뢰찾기 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
+                    cancelMinesweeperProposal();
+                }
+            } else if (minesweeperState.status === 'proposing') {
+                if (await showCustomConfirm('지뢰찾기 제안을 취소하시겠습니까?')) {
+                    cancelMinesweeperProposal();
+                }
+            } else {
+                resetMinesweeper();
+                $minesweeperOverlay.hidden = true;
+            }
         });
 
         // Propose button click
