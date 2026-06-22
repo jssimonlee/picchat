@@ -7376,6 +7376,7 @@
         // Send chat message
         $btnSendChat.addEventListener('click', sendChatMessage);
         $chatInput.addEventListener('keydown', (e) => {
+            if (e.isComposing) return;
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendChatMessage();
