@@ -86,6 +86,7 @@
     const $sudokuPeerWrapper = document.getElementById('sudokuPeerWrapper');
     const $sudokuPeerBoard = document.getElementById('piccomm-sudoku-board-peer');
     const $sudokuTurnStatus = document.getElementById('sudokuTurnStatus');
+    const $sudokuTurnCard = document.getElementById('sudokuTurnCard');
     const $sudokuTurnTimerProgress = document.getElementById('sudokuTurnTimerProgress');
     const $sudokuLeaderboardList = document.getElementById('sudokuLeaderboardList');
     const $btnSudokuUndo = document.getElementById('btnSudokuUndo');
@@ -2593,10 +2594,11 @@
             
             // 모드별 레이아웃 및 뷰 세팅
             if (sudokuState.gameMode === 'speed') {
-                $sudokuWindow.style.maxWidth = '1120px';
+                $sudokuWindow.style.maxWidth = '880px';
                 const layout = $sudokuGame.querySelector('.sudoku-game-layout');
-                if (layout) layout.style.gridTemplateColumns = '2.2fr 1fr';
+                if (layout) layout.style.gridTemplateColumns = '1.2fr 1fr';
 
+                $sudokuTurnCard.hidden = true;
                 $sudokuPeerBoardArea.hidden = false;
                 $sudokuMyBoardTitle.hidden = false;
                 $sudokuMistakeLabel.textContent = '내 실수';
@@ -2616,6 +2618,7 @@
                 const layout = $sudokuGame.querySelector('.sudoku-game-layout');
                 if (layout) layout.style.gridTemplateColumns = '1.2fr 1fr';
 
+                $sudokuTurnCard.hidden = false;
                 $sudokuPeerBoardArea.hidden = true;
                 $sudokuMyBoardTitle.hidden = true;
                 $sudokuMistakeLabel.textContent = '공동 실수';
@@ -3808,10 +3811,11 @@
         $sudokuGameDiff.textContent = hostState.difficulty.toUpperCase();
 
         if (sudokuState.gameMode === 'speed') {
-            $sudokuWindow.style.maxWidth = '1120px';
+            $sudokuWindow.style.maxWidth = '880px';
             const layout = $sudokuGame.querySelector('.sudoku-game-layout');
-            if (layout) layout.style.gridTemplateColumns = '2.2fr 1fr';
+            if (layout) layout.style.gridTemplateColumns = '1.2fr 1fr';
 
+            $sudokuTurnCard.hidden = true;
             $sudokuPeerBoardArea.hidden = false;
             $sudokuMyBoardTitle.hidden = false;
             $sudokuMistakeLabel.textContent = '내 실수';
@@ -3832,6 +3836,7 @@
             const layout = $sudokuGame.querySelector('.sudoku-game-layout');
             if (layout) layout.style.gridTemplateColumns = '1.2fr 1fr';
 
+            $sudokuTurnCard.hidden = false;
             $sudokuPeerBoardArea.hidden = true;
             $sudokuMyBoardTitle.hidden = true;
             $sudokuMistakeLabel.textContent = '공동 실수';
@@ -3912,6 +3917,7 @@
         $sudokuWindow.style.maxWidth = '';
         const layout = $sudokuGame.querySelector('.sudoku-game-layout');
         if (layout) layout.style.gridTemplateColumns = '';
+        $sudokuTurnCard.hidden = false;
 
         $sudokuLobby.hidden = true;
         $sudokuGame.hidden = true;
