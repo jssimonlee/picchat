@@ -7404,6 +7404,22 @@
         $chatSidebar.hidden = !isChatOpen;
         $btnToggleChat.classList.toggle('active', isChatOpen);
 
+        // Add class to studio for margin transition
+        if ($studio) {
+            $studio.classList.toggle('chat-open', isChatOpen);
+        }
+
+        // Animate canvas resize during transition to prevent jumps
+        let count = 0;
+        const resizeInterval = setInterval(() => {
+            if (canvas) {
+                canvas.resize();
+                updateModificationHandles();
+            }
+            count++;
+            if (count > 20) clearInterval(resizeInterval); // Stop after 300ms (15ms * 20)
+        }, 15);
+
         if (isChatOpen) {
             chatUnreadCount = 0;
             $chatUnread.hidden = true;
