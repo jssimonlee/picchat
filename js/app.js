@@ -945,8 +945,14 @@
             };
 
             // Hover on the parent group container
-            $gamesGroup.addEventListener('mouseenter', showMenu);
-            $gamesGroup.addEventListener('mouseleave', hideMenu);
+            $gamesGroup.addEventListener('mouseenter', (e) => {
+                if (window.matchMedia('(pointer: coarse)').matches) return;
+                showMenu();
+            });
+            $gamesGroup.addEventListener('mouseleave', (e) => {
+                if (window.matchMedia('(pointer: coarse)').matches) return;
+                hideMenu();
+            });
 
             // Click toggle for touchscreen support
             $btnGames.addEventListener('click', (e) => {
