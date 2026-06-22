@@ -12,6 +12,9 @@
     const $lobby = document.getElementById('lobby');
     const $studio = document.getElementById('studio');
     const $nickname = document.getElementById('nickname');
+    const $chkCustomCode = document.getElementById('chkCustomCode');
+    const $customCodeContainer = document.getElementById('customCodeContainer');
+    const $customRoomInput = document.getElementById('customRoomInput');
     const $btnCreateRoom = document.getElementById('btnCreateRoom');
     const $btnJoinRoom = document.getElementById('btnJoinRoom');
     const $joinCode = document.getElementById('joinCode');
@@ -52,26 +55,36 @@
 
     // Sudoku Elements
     const $sudokuOverlay = document.getElementById('sudokuOverlay');
+    const $sudokuWindow = document.getElementById('sudokuWindow');
     const $btnSudokuClose = document.getElementById('btnSudokuClose');
     const $sudokuLobby = document.getElementById('sudokuLobby');
     const $sudokuLobbySetup = document.getElementById('sudokuLobbySetup');
     const $sudokuDifficulty = document.getElementById('sudokuDifficulty');
+    const $sudokuMode = document.getElementById('sudokuMode');
     const $btnSudokuPropose = document.getElementById('btnSudokuPropose');
     const $sudokuLobbyWaiting = document.getElementById('sudokuLobbyWaiting');
     const $sudokuLobbyWaitingTitle = document.getElementById('sudokuLobbyWaitingTitle');
+    const $sudokuWaitingModeText = document.getElementById('sudokuWaitingModeText');
     const $sudokuProposalList = document.getElementById('sudokuProposalList');
     const $btnSudokuCancel = document.getElementById('btnSudokuCancel');
     const $btnSudokuStart = document.getElementById('btnSudokuStart');
     const $sudokuLobbyInvite = document.getElementById('sudokuLobbyInvite');
     const $sudokuProposerName = document.getElementById('sudokuProposerName');
     const $sudokuProposalDifficulty = document.getElementById('sudokuProposalDifficulty');
+    const $sudokuProposalMode = document.getElementById('sudokuProposalMode');
     const $btnSudokuDecline = document.getElementById('btnSudokuDecline');
     const $btnSudokuAccept = document.getElementById('btnSudokuAccept');
     const $sudokuGame = document.getElementById('sudokuGame');
     const $sudokuGameDiff = document.getElementById('sudokuGameDiff');
     const $sudokuGameTimer = document.getElementById('sudokuGameTimer');
+    const $sudokuMistakeLabel = document.getElementById('sudokuMistakeLabel');
     const $sudokuHealthBars = document.getElementById('sudokuHealthBars');
+    const $sudokuMyBoardTitle = document.getElementById('sudokuMyBoardTitle');
+    const $sudokuMyWrapper = document.getElementById('sudokuMyWrapper');
     const $sudokuBoard = document.getElementById('piccomm-sudoku-board');
+    const $sudokuPeerBoardArea = document.getElementById('sudokuPeerBoardArea');
+    const $sudokuPeerWrapper = document.getElementById('sudokuPeerWrapper');
+    const $sudokuPeerBoard = document.getElementById('piccomm-sudoku-board-peer');
     const $sudokuTurnStatus = document.getElementById('sudokuTurnStatus');
     const $sudokuTurnTimerProgress = document.getElementById('sudokuTurnTimerProgress');
     const $sudokuLeaderboardList = document.getElementById('sudokuLeaderboardList');
@@ -174,13 +187,17 @@
     let sudokuState = {
         status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
         isSolo: false,
+        gameMode: 'turn', // 'turn' | 'speed'
         difficulty: 'medium',
         board: [],
+        peerBoard: [], // board state for peer in speed race mode
         initialBoard: [],
         solution: [],
         notes: [],
         selectedCell: null,
         mistakes: 0,
+        myMistakes: 0,
+        peerMistakes: 0,
         maxMistakes: 3,
         isNotesMode: false,
         selectedNumber: null,
@@ -363,6 +380,27 @@
                 enterStudio(network.roomCode);
             }
         });
+
+        // 방번호 직접 지정 토글 처리
+        $chkCustomCode.addEventListener('change', () => {
+            if ($chkCustomCode.checked) {
+                $customCodeContainer.classList.add('open');
+                $customRoomInput.focus();
+            } else {
+                $customCodeContainer.classList.remove('open');
+                $customRoomInput.value = '';
+            }
+        });
+
+        // 방번호 직접 입력 필드: 영문/숫자만 필터링 및 대문자 변환
+        $customRoomInput.addEventListener('input', () => {
+            let val = $customRoomInput.value.replace(/[^A-Za-z0-9]/g, '');
+            $customRoomInput.value = val.toUpperCase();
+        });
+
+        $customRoomInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $btnCreateRoom.click();
+        });
     }
 
     function getNickname() {
@@ -373,19 +411,34 @@
 
     async function createRoom() {
         const nick = getNickname();
+        let customCode = null;
+
+        if ($chkCustomCode.checked) {
+            const rawInput = $customRoomInput.value.trim();
+            if (rawInput.length !== 6) {
+                showLobbyStatus('방번호를 정확히 6자리 입력해 주세요.', 'error');
+                return;
+            }
+            customCode = rawInput.toUpperCase();
+        }
+
         $btnCreateRoom.disabled = true;
         showLobbyStatus('방을 만드는 중...', 'info');
 
         try {
             setupNetwork(nick);
-            const code = await network.createRoom(nick);
+            const code = await network.createRoom(nick, customCode);
             $roomCode.textContent = code;
             $roomCreated.hidden = false;
             $btnCopyCode.addEventListener('click', () => copyRoomCode(code));
             showLobbyStatus('방이 생성되었습니다!', 'success');
         } catch (err) {
             $btnCreateRoom.disabled = false;
-            showLobbyStatus('방 생성 실패: ' + err.message, 'error');
+            if (err.message && err.message.includes('unavailable-id')) {
+                showLobbyStatus('이미 사용 중인 방번호입니다. 다른 번호를 입력해주세요.', 'error');
+            } else {
+                showLobbyStatus('방 생성 실패: ' + err.message, 'error');
+            }
         }
     }
 
@@ -542,10 +595,14 @@
                 state.sudokuState = {
                     status: sudokuState.status,
                     difficulty: sudokuState.difficulty,
+                    gameMode: sudokuState.gameMode,
                     board: sudokuState.board,
+                    peerBoard: sudokuState.peerBoard,
                     initialBoard: sudokuState.initialBoard,
                     solution: sudokuState.solution,
                     mistakes: sudokuState.mistakes,
+                    myMistakes: sudokuState.myMistakes,
+                    peerMistakes: sudokuState.peerMistakes,
                     players: sudokuState.players,
                     turnOrder: sudokuState.turnOrder,
                     currentTurnIndex: sudokuState.currentTurnIndex,
@@ -2282,8 +2339,9 @@
             }
 
             // Input actions require the active player's turn
+            const isSpeedMode = sudokuState.gameMode === 'speed';
             const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
-            const isMyTurn = activePeerId === network.myPeerId;
+            const isMyTurn = isSpeedMode ? true : (activePeerId === network.myPeerId);
 
             if (e.key >= '1' && e.key <= '9') {
                 if (!isMyTurn) {
@@ -2321,10 +2379,12 @@
     }
 
     function proposeSudoku(difficulty) {
+        const gameMode = $sudokuMode.value || 'turn';
         // sendSudoku의 로컬 에코로 handleSudokuNetworkMessage가 호출되어 상태 및 UI가 설정됨
         network.sendSudoku({
             action: 'propose',
             difficulty: difficulty,
+            gameMode: gameMode,
             proposerId: network.myPeerId,
             proposerNickname: network.nickname,
             proposerColor: network.myColor
@@ -2415,6 +2475,7 @@
         if (action === 'propose') {
             sudokuState.status = 'proposing';
             sudokuState.difficulty = payload.difficulty;
+            sudokuState.gameMode = payload.gameMode || 'turn';
             sudokuState.proposerId = payload.proposerId;
             sudokuState.proposerNickname = payload.proposerNickname;
             sudokuState.participants = [
@@ -2428,6 +2489,10 @@
 
             $sudokuOverlay.hidden = false;
             
+            const modeText = sudokuState.gameMode === 'speed' ? '스피드 레이스' : '협동 턴제';
+            $sudokuWaitingModeText.textContent = modeText;
+            $sudokuProposalMode.textContent = modeText;
+
             if (payload.proposerId === network.myPeerId) {
                 showSudokuSubView('lobby');
                 $sudokuLobbySetup.hidden = true;
@@ -2470,6 +2535,7 @@
                 network.sendSudoku({
                     action: 'proposal-sync',
                     difficulty: sudokuState.difficulty,
+                    gameMode: sudokuState.gameMode,
                     proposerId: sudokuState.proposerId,
                     proposerNickname: sudokuState.proposerNickname,
                     participants: sudokuState.participants
@@ -2478,9 +2544,14 @@
         }
         else if (action === 'proposal-sync') {
             sudokuState.difficulty = payload.difficulty;
+            sudokuState.gameMode = payload.gameMode || 'turn';
             sudokuState.proposerId = payload.proposerId;
             sudokuState.proposerNickname = payload.proposerNickname;
             sudokuState.participants = payload.participants;
+
+            const modeText = sudokuState.gameMode === 'speed' ? '스피드 레이스' : '협동 턴제';
+            $sudokuWaitingModeText.textContent = modeText;
+            $sudokuProposalMode.textContent = modeText;
 
             updateSudokuProposalListUI();
         }
@@ -2488,17 +2559,21 @@
             sudokuState.status = 'playing';
             sudokuState.isSolo = false;
             sudokuState.difficulty = payload.difficulty;
+            sudokuState.gameMode = payload.gameMode || 'turn';
 
             sudokuState.participants.forEach(p => {
                 p.totalTime = 0;
                 p.correctCount = 0;
             });
-            sudokuState.board = payload.puzzle;
+            sudokuState.board = JSON.parse(JSON.stringify(payload.puzzle));
+            sudokuState.peerBoard = JSON.parse(JSON.stringify(payload.puzzle));
             sudokuState.initialBoard = payload.initialBoard;
             sudokuState.solution = payload.solution;
             sudokuState.notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
             sudokuState.selectedCell = null;
             sudokuState.mistakes = 0;
+            sudokuState.myMistakes = 0;
+            sudokuState.peerMistakes = 0;
             sudokuState.history = [];
 
             sudokuState.players = payload.players.map(p => ({
@@ -2516,7 +2591,38 @@
             showSudokuSubView('game');
             $sudokuGameDiff.textContent = payload.difficulty.toUpperCase();
             
-            buildSudokuBoardDOM();
+            // 모드별 레이아웃 및 뷰 세팅
+            if (sudokuState.gameMode === 'speed') {
+                $sudokuWindow.style.maxWidth = '1120px';
+                const layout = $sudokuGame.querySelector('.sudoku-game-layout');
+                if (layout) layout.style.gridTemplateColumns = '2.2fr 1fr';
+
+                $sudokuPeerBoardArea.hidden = false;
+                $sudokuMyBoardTitle.hidden = false;
+                $sudokuMistakeLabel.textContent = '내 실수';
+
+                // 상대방 닉네임 라벨 갱신
+                const peerPlayer = sudokuState.players.find(p => p.peerId !== network.myPeerId);
+                const peerName = peerPlayer ? peerPlayer.nickname : '상대방';
+                const peerTitleEl = $sudokuPeerBoardArea.querySelector('span');
+                if (peerTitleEl) {
+                    peerTitleEl.textContent = `${peerName} 보드판 (실시간 관전)`;
+                }
+
+                buildSudokuBoardDOM();
+                buildSudokuPeerBoardDOM();
+            } else {
+                $sudokuWindow.style.maxWidth = '880px';
+                const layout = $sudokuGame.querySelector('.sudoku-game-layout');
+                if (layout) layout.style.gridTemplateColumns = '1.2fr 1fr';
+
+                $sudokuPeerBoardArea.hidden = true;
+                $sudokuMyBoardTitle.hidden = true;
+                $sudokuMistakeLabel.textContent = '공동 실수';
+
+                buildSudokuBoardDOM();
+            }
+
             updateSudokuMistakesDisplay();
             updateSudokuNumpadState();
 
@@ -2525,8 +2631,15 @@
             startSudokuTurn();
         }
         else if (action === 'move') {
-            applySudokuMove(payload.peerId, payload.r, payload.c, payload.val, payload.isCorrect, payload.elapsedSecs);
+            applySudokuMove(payload.peerId, payload.r, payload.c, payload.val, payload.isCorrect, payload.elapsedSecs, payload.mistakes);
             // 호스트는 move를 다른 피어에게 릴레이
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'speed-win') {
+            const isMe = payload.peerId === network.myPeerId;
+            endSudokuGame(isMe, isMe ? undefined : 'peer_win');
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 network._broadcast({ type: 'sudoku', payload }, fromPeerId);
             }
@@ -2596,6 +2709,7 @@
         network.sendSudoku({
             action: 'start',
             difficulty: sudokuState.difficulty,
+            gameMode: sudokuState.gameMode,
             puzzle: puzzleData.puzzle,
             solution: puzzleData.solution,
             initialBoard: puzzleData.puzzle,
@@ -2671,8 +2785,9 @@
                 cell.addEventListener('dblclick', () => {
                     if (isSpectator) return;
                     
+                    const isSpeedMode = sudokuState.gameMode === 'speed';
                     const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
-                    const isMyTurn = activePeerId === network.myPeerId;
+                    const isMyTurn = isSpeedMode ? true : (activePeerId === network.myPeerId);
                     if (!isMyTurn) return;
 
                     if (sudokuState.board[r][c] !== 0) return;
@@ -2693,8 +2808,9 @@
         if (sudokuState.status !== 'playing') return;
 
         // 다른 사람 턴일 때는 클릭 반응 없음
+        const isSpeedMode = sudokuState.gameMode === 'speed';
         const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
-        const isMyTurn = activePeerId === network.myPeerId;
+        const isMyTurn = isSpeedMode ? true : (activePeerId === network.myPeerId);
         if (!isMyTurn) return;
 
         sudokuState.selectedCell = { r, c };
@@ -2735,8 +2851,9 @@
         if (sudokuState.status !== 'playing') return;
         if (!sudokuState.selectedCell) return;
 
+        const isSpeedMode = sudokuState.gameMode === 'speed';
         const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
-        const isMyTurn = activePeerId === network.myPeerId;
+        const isMyTurn = isSpeedMode ? true : (activePeerId === network.myPeerId);
         if (!isMyTurn) {
             showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
             return;
@@ -2763,22 +2880,29 @@
             return;
         }
 
+        const nextMyMistakes = sudokuState.myMistakes + (isCorrect ? 0 : 1);
+
         network.sendSudoku({
             action: 'move',
             peerId: network.myPeerId,
             r, c, val,
             isCorrect,
-            elapsedSecs: elapsed
+            elapsedSecs: elapsed,
+            mistakes: nextMyMistakes
         });
 
         // 게스트는 로컬 에코가 없으므로 수동으로 적용
         if (!network.isHost) {
-            applySudokuMove(network.myPeerId, r, c, val, isCorrect, elapsed);
+            applySudokuMove(network.myPeerId, r, c, val, isCorrect, elapsed, nextMyMistakes);
         }
     }
 
-    function applySudokuMove(peerId, r, c, val, isCorrect, elapsed) {
-        clearInterval(sudokuState.turnTimerInterval);
+    function applySudokuMove(peerId, r, c, val, isCorrect, elapsed, sentMistakes) {
+        const isSpeedMode = sudokuState.gameMode === 'speed';
+        
+        if (!isSpeedMode) {
+            clearInterval(sudokuState.turnTimerInterval);
+        }
 
         const player = sudokuState.participants.find(p => p.peerId === peerId);
         if (player) {
@@ -2786,50 +2910,121 @@
             if (isCorrect) player.correctCount++;
         }
 
-        const cellEl = getSudokuCellElement(r, c);
-        if (isCorrect) {
-            sudokuState.board[r][c] = val;
-            sudokuState.notes[r][c].clear();
-            removeSudokuNoteFromRelatedCells(r, c, val);
-            
-            if (cellEl) {
-                cellEl.textContent = val;
-                cellEl.classList.add('user-input');
-                cellEl.classList.remove('error-animation');
-                
-                cellEl.style.animation = 'none';
-                void cellEl.offsetWidth;
-                cellEl.style.animation = 'scaleIn 0.2s ease-out';
-            }
+        const isMe = peerId === network.myPeerId;
 
-            updateSudokuNumpadState();
-            selectSudokuCell(r, c);
-            checkSudokuWin();
-        } else {
-            sudokuState.mistakes++;
-            updateSudokuMistakesDisplay();
-
-            if (cellEl) {
-                cellEl.classList.add('error-animation');
-                cellEl.textContent = val;
-                setTimeout(() => {
-                    cellEl.classList.remove('error-animation');
-                    cellEl.textContent = sudokuState.board[r][c] !== 0 ? sudokuState.board[r][c] : '';
-                    if (sudokuState.board[r][c] === 0) {
-                        renderSudokuCellNotes(r, c);
+        if (isSpeedMode) {
+            if (isMe) {
+                const cellEl = getSudokuCellElement(r, c);
+                if (isCorrect) {
+                    sudokuState.board[r][c] = val;
+                    sudokuState.notes[r][c].clear();
+                    removeSudokuNoteFromRelatedCells(r, c, val);
+                    
+                    if (cellEl) {
+                        cellEl.textContent = val;
+                        cellEl.classList.add('user-input');
+                        cellEl.classList.remove('error-animation');
+                        
+                        cellEl.style.animation = 'none';
+                        void cellEl.offsetWidth;
+                        cellEl.style.animation = 'scaleIn 0.2s ease-out';
                     }
-                }, 500);
-            }
 
-            if (sudokuState.mistakes >= sudokuState.maxMistakes) {
-                endSudokuGame(false);
-                return;
+                    updateSudokuNumpadState();
+                    selectSudokuCell(r, c);
+                    checkSudokuWin();
+                } else {
+                    sudokuState.myMistakes = sentMistakes !== undefined ? sentMistakes : (sudokuState.myMistakes + 1);
+                    updateSudokuMistakesDisplay();
+
+                    if (cellEl) {
+                        cellEl.classList.add('error-animation');
+                        cellEl.textContent = val;
+                        setTimeout(() => {
+                            cellEl.classList.remove('error-animation');
+                            cellEl.textContent = sudokuState.board[r][c] !== 0 ? sudokuState.board[r][c] : '';
+                            if (sudokuState.board[r][c] === 0) {
+                                renderSudokuCellNotes(r, c);
+                            }
+                        }, 500);
+                    }
+
+                    if (sudokuState.myMistakes >= sudokuState.maxMistakes) {
+                        endSudokuGame(false, 'me_fail');
+                        return;
+                    }
+                }
+            } else {
+                // 상대방의 입력
+                if (isCorrect) {
+                    sudokuState.peerBoard[r][c] = val;
+                    updateSudokuPeerBoardCell(r, c, val);
+                } else {
+                    sudokuState.peerMistakes = sentMistakes !== undefined ? sentMistakes : (sudokuState.peerMistakes + 1);
+                    updateSudokuMistakesDisplay();
+
+                    const cellEl = $sudokuPeerBoard.querySelector(`.sudoku-cell[data-row="${r}"][data-col="${c}"]`);
+                    if (cellEl) {
+                        cellEl.classList.add('error-animation');
+                        cellEl.textContent = val;
+                        setTimeout(() => {
+                            cellEl.classList.remove('error-animation');
+                            cellEl.textContent = sudokuState.peerBoard[r][c] !== 0 ? sudokuState.peerBoard[r][c] : '';
+                        }, 500);
+                    }
+
+                    if (sudokuState.peerMistakes >= sudokuState.maxMistakes) {
+                        endSudokuGame(true, 'peer_fail');
+                        return;
+                    }
+                }
+            }
+        } else {
+            const cellEl = getSudokuCellElement(r, c);
+            if (isCorrect) {
+                sudokuState.board[r][c] = val;
+                sudokuState.notes[r][c].clear();
+                removeSudokuNoteFromRelatedCells(r, c, val);
+                
+                if (cellEl) {
+                    cellEl.textContent = val;
+                    cellEl.classList.add('user-input');
+                    cellEl.classList.remove('error-animation');
+                    
+                    cellEl.style.animation = 'none';
+                    void cellEl.offsetWidth;
+                    cellEl.style.animation = 'scaleIn 0.2s ease-out';
+                }
+
+                updateSudokuNumpadState();
+                selectSudokuCell(r, c);
+                checkSudokuWin();
+            } else {
+                sudokuState.mistakes++;
+                updateSudokuMistakesDisplay();
+
+                if (cellEl) {
+                    cellEl.classList.add('error-animation');
+                    cellEl.textContent = val;
+                    setTimeout(() => {
+                        cellEl.classList.remove('error-animation');
+                        cellEl.textContent = sudokuState.board[r][c] !== 0 ? sudokuState.board[r][c] : '';
+                        if (sudokuState.board[r][c] === 0) {
+                            renderSudokuCellNotes(r, c);
+                        }
+                    }, 500);
+                }
+
+                if (sudokuState.mistakes >= sudokuState.maxMistakes) {
+                    endSudokuGame(false);
+                    return;
+                }
             }
         }
 
         sudokuState.history = [];
 
-        if (sudokuState.status === 'playing') {
+        if (sudokuState.status === 'playing' && !isSpeedMode) {
             advanceSudokuTurn();
         }
     }
@@ -3070,8 +3265,9 @@
     function eraseSudokuCell() {
         if (!sudokuState.selectedCell) return;
         
+        const isSpeedMode = sudokuState.gameMode === 'speed';
         const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
-        const isMyTurn = activePeerId === network.myPeerId;
+        const isMyTurn = isSpeedMode ? true : (activePeerId === network.myPeerId);
         if (!isMyTurn) {
             showToast('⚠️ 지금은 자신의 턴이 아닙니다!');
             return;
@@ -3129,11 +3325,21 @@
             }
         }
         if (win) {
-            endSudokuGame(true);
+            if (sudokuState.gameMode === 'speed') {
+                network.sendSudoku({
+                    action: 'speed-win',
+                    peerId: network.myPeerId
+                });
+                if (!network.isHost) {
+                    endSudokuGame(true);
+                }
+            } else {
+                endSudokuGame(true);
+            }
         }
     }
 
-    function endSudokuGame(isWin) {
+    function endSudokuGame(isWin, reason) {
         clearInterval(sudokuState.turnTimerInterval);
         clearInterval(sudokuState.gameTimerInterval);
 
@@ -3141,14 +3347,36 @@
 
         showSudokuSubView('result');
 
-        if (isWin) {
-            $sudokuResultTitle.textContent = '🏆 완벽한 마무리! 🏆';
-            $sudokuResultTitle.className = '';
-            $sudokuResultMsg.textContent = `축하합니다! 공동 실수 ${sudokuState.mistakes}회로 스도쿠 해결에 성공했습니다!`;
+        const isSpeedMode = sudokuState.gameMode === 'speed';
+
+        if (isSpeedMode) {
+            if (reason === 'me_fail') {
+                $sudokuResultTitle.textContent = '💀 도전 실패 💀';
+                $sudokuResultTitle.className = 'error-title';
+                $sudokuResultMsg.textContent = `내가 3회 실수하여 게임에서 패배했습니다.`;
+            } else if (reason === 'peer_fail') {
+                $sudokuResultTitle.textContent = '🏆 완벽한 마무리! 🏆';
+                $sudokuResultTitle.className = '';
+                $sudokuResultMsg.textContent = `상대방이 3회 실수하여 탈락함에 따라 나의 기권승입니다!`;
+            } else if (isWin) {
+                $sudokuResultTitle.textContent = '🏆 스피드 레이스 승리! 🏆';
+                $sudokuResultTitle.className = '';
+                $sudokuResultMsg.textContent = `상대방보다 먼저 스도쿠를 완성하여 승리했습니다!`;
+            } else {
+                $sudokuResultTitle.textContent = '💀 패배 💀';
+                $sudokuResultTitle.className = 'error-title';
+                $sudokuResultMsg.textContent = `상대방이 먼저 스도쿠를 완성하여 패배했습니다.`;
+            }
         } else {
-            $sudokuResultTitle.textContent = '💀 도전 실패 💀';
-            $sudokuResultTitle.className = 'error-title';
-            $sudokuResultMsg.textContent = `실수 3회를 모두 기록하여 도전에 실패했습니다.`;
+            if (isWin) {
+                $sudokuResultTitle.textContent = '🏆 완벽한 마무리! 🏆';
+                $sudokuResultTitle.className = '';
+                $sudokuResultMsg.textContent = `축하합니다! 공동 실수 ${sudokuState.mistakes}회로 스도쿠 해결에 성공했습니다!`;
+            } else {
+                $sudokuResultTitle.textContent = '💀 도전 실패 💀';
+                $sudokuResultTitle.className = 'error-title';
+                $sudokuResultMsg.textContent = `실수 3회를 모두 기록하여 도전에 실패했습니다.`;
+            }
         }
 
         renderSudokuFinalLeaderboard();
@@ -3156,13 +3384,25 @@
 
     function updateSudokuMistakesDisplay() {
         const bars = $sudokuHealthBars.querySelectorAll('.sudoku-health-bar');
+        const isSpeedMode = sudokuState.gameMode === 'speed';
+        const mistakes = isSpeedMode ? sudokuState.myMistakes : sudokuState.mistakes;
+
         bars.forEach((bar, index) => {
-            if (index < sudokuState.mistakes) {
+            if (index < mistakes) {
                 bar.classList.add('active');
             } else {
                 bar.classList.remove('active');
             }
         });
+
+        if (isSpeedMode) {
+            const peerPlayer = sudokuState.players.find(p => p.peerId !== network.myPeerId);
+            const peerName = peerPlayer ? peerPlayer.nickname : '상대방';
+            const peerTitleEl = $sudokuPeerBoardArea.querySelector('span');
+            if (peerTitleEl) {
+                peerTitleEl.textContent = `${peerName} 보드판 (실시간 관전) (실수: ${sudokuState.peerMistakes}/3)`;
+            }
+        }
     }
 
     function startSudokuGameTimer() {
@@ -3179,8 +3419,24 @@
     function startSudokuTurn() {
         if (sudokuState.status !== 'playing') return;
 
+        const isSpeedMode = sudokuState.gameMode === 'speed';
+
         sudokuState.turnStartTime = performance.now();
         sudokuState.secondsRemaining = sudokuState.turnTimeLimit;
+
+        if (isSpeedMode) {
+            const $boardWrapper = $sudokuBoard.parentElement;
+            if ($boardWrapper) {
+                $boardWrapper.classList.add('my-turn');
+                $boardWrapper.classList.remove('other-turn');
+            }
+            $sudokuTurnStatus.innerHTML = `🏁 <span style="color:#2563eb; font-weight:bold;">스피드 레이스 진행 중!</span>`;
+            $sudokuTurnTimerProgress.style.width = '100%';
+            $sudokuTurnTimerProgress.className = 'sudoku-progress-fill';
+            
+            updateSudokuLeaderboardUI();
+            return;
+        }
 
         const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
         const isMyTurn = activePeerId === network.myPeerId;
@@ -3270,98 +3526,192 @@
 
     function updateSudokuLeaderboardUI() {
         $sudokuLeaderboardList.innerHTML = '';
+        const isSpeedMode = sudokuState.gameMode === 'speed';
 
-        const sorted = [...sudokuState.players].map(p => {
-            const match = sudokuState.participants.find(x => x.peerId === p.peerId);
-            const totalTime = match ? match.totalTime : 0;
-            const correctCount = match ? match.correctCount : 0;
-            const avg = correctCount > 0 ? (totalTime / correctCount) : Infinity;
-            return {
-                ...p,
-                totalTime,
-                correctCount,
-                avg
-            };
-        }).sort((a, b) => a.avg - b.avg);
+        if (isSpeedMode) {
+            sudokuState.players.forEach((p) => {
+                const item = document.createElement('div');
+                item.className = 'sudoku-leaderboard-item';
+                
+                if (p.peerId === network.myPeerId) {
+                    item.classList.add('active');
+                }
 
-        sorted.forEach((p, idx) => {
-            const item = document.createElement('div');
-            item.className = 'sudoku-leaderboard-item';
-            
-            const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
-            if (p.peerId === activePeerId) {
-                item.classList.add('active');
-            }
+                const pName = document.createElement('span');
+                pName.className = 'player-name';
+                
+                const dot = document.createElement('span');
+                dot.className = 'player-color-dot';
+                dot.style.background = p.color;
+                pName.appendChild(dot);
+                
+                const nameTxt = document.createTextNode(`${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
+                pName.appendChild(nameTxt);
+                item.appendChild(pName);
 
-            const pName = document.createElement('span');
-            pName.className = 'player-name';
-            
-            const dot = document.createElement('span');
-            dot.className = 'player-color-dot';
-            dot.style.background = p.color;
-            pName.appendChild(dot);
-            
-            const nameTxt = document.createTextNode(`${idx + 1}. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
-            pName.appendChild(nameTxt);
-            item.appendChild(pName);
+                const score = document.createElement('span');
+                score.className = 'player-score';
+                const mistakes = p.peerId === network.myPeerId ? sudokuState.myMistakes : sudokuState.peerMistakes;
+                score.textContent = `실수: ${mistakes}/3`;
+                item.appendChild(score);
 
-            const score = document.createElement('span');
-            score.className = 'player-score';
-            if (p.avg === Infinity) {
-                score.textContent = `- (0회)`;
-            } else {
-                score.textContent = `${p.avg.toFixed(1)}초 (${p.correctCount}회)`;
-            }
-            item.appendChild(score);
+                $sudokuLeaderboardList.appendChild(item);
+            });
+        } else {
+            const sorted = [...sudokuState.players].map(p => {
+                const match = sudokuState.participants.find(x => x.peerId === p.peerId);
+                const totalTime = match ? match.totalTime : 0;
+                const correctCount = match ? match.correctCount : 0;
+                const avg = correctCount > 0 ? (totalTime / correctCount) : Infinity;
+                return {
+                    ...p,
+                    totalTime,
+                    correctCount,
+                    avg
+                };
+            }).sort((a, b) => a.avg - b.avg);
 
-            $sudokuLeaderboardList.appendChild(item);
-        });
+            sorted.forEach((p, idx) => {
+                const item = document.createElement('div');
+                item.className = 'sudoku-leaderboard-item';
+                
+                const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
+                if (p.peerId === activePeerId) {
+                    item.classList.add('active');
+                }
+
+                const pName = document.createElement('span');
+                pName.className = 'player-name';
+                
+                const dot = document.createElement('span');
+                dot.className = 'player-color-dot';
+                dot.style.background = p.color;
+                pName.appendChild(dot);
+                
+                const nameTxt = document.createTextNode(`${idx + 1}. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
+                pName.appendChild(nameTxt);
+                item.appendChild(pName);
+
+                const score = document.createElement('span');
+                score.className = 'player-score';
+                if (p.avg === Infinity) {
+                    score.textContent = `- (0회)`;
+                } else {
+                    score.textContent = `${p.avg.toFixed(1)}초 (${p.correctCount}회)`;
+                }
+                item.appendChild(score);
+
+                $sudokuLeaderboardList.appendChild(item);
+            });
+        }
     }
 
     function renderSudokuFinalLeaderboard() {
         $sudokuFinalLeaderboardList.innerHTML = '';
+        const isSpeedMode = sudokuState.gameMode === 'speed';
 
-        const sorted = [...sudokuState.players].map(p => {
-            const match = sudokuState.participants.find(x => x.peerId === p.peerId);
-            const totalTime = match ? match.totalTime : 0;
-            const correctCount = match ? match.correctCount : 0;
-            const avg = correctCount > 0 ? (totalTime / correctCount) : Infinity;
-            return {
-                ...p,
-                totalTime,
-                correctCount,
-                avg
-            };
-        }).sort((a, b) => a.avg - b.avg);
+        if (isSpeedMode) {
+            sudokuState.players.forEach((p) => {
+                const item = document.createElement('div');
+                item.className = 'sudoku-leaderboard-item';
 
-        sorted.forEach((p, idx) => {
-            const item = document.createElement('div');
-            item.className = 'sudoku-leaderboard-item';
+                const pName = document.createElement('span');
+                pName.className = 'player-name';
+                
+                const dot = document.createElement('span');
+                dot.className = 'player-color-dot';
+                dot.style.background = p.color;
+                pName.appendChild(dot);
 
-            const pName = document.createElement('span');
-            pName.className = 'player-name';
-            
-            const dot = document.createElement('span');
-            dot.className = 'player-color-dot';
-            dot.style.background = p.color;
-            pName.appendChild(dot);
+                const nameTxt = document.createTextNode(`${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
+                pName.appendChild(nameTxt);
+                item.appendChild(pName);
 
-            const medal = idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : '';
-            const nameTxt = document.createTextNode(`${medal}${idx + 1}위. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
-            pName.appendChild(nameTxt);
-            item.appendChild(pName);
+                const score = document.createElement('span');
+                score.className = 'player-score';
+                const mistakes = p.peerId === network.myPeerId ? sudokuState.myMistakes : sudokuState.peerMistakes;
+                score.textContent = `실수: ${mistakes}/3`;
+                item.appendChild(score);
 
-            const score = document.createElement('span');
-            score.className = 'player-score';
-            if (p.avg === Infinity) {
-                score.textContent = `- (0회 맞춤)`;
-            } else {
-                score.textContent = `${p.avg.toFixed(1)}초 (성공 ${p.correctCount}회)`;
+                $sudokuFinalLeaderboardList.appendChild(item);
+            });
+        } else {
+            const sorted = [...sudokuState.players].map(p => {
+                const match = sudokuState.participants.find(x => x.peerId === p.peerId);
+                const totalTime = match ? match.totalTime : 0;
+                const correctCount = match ? match.correctCount : 0;
+                const avg = correctCount > 0 ? (totalTime / correctCount) : Infinity;
+                return {
+                    ...p,
+                    totalTime,
+                    correctCount,
+                    avg
+                };
+            }).sort((a, b) => a.avg - b.avg);
+
+            sorted.forEach((p, idx) => {
+                const item = document.createElement('div');
+                item.className = 'sudoku-leaderboard-item';
+
+                const pName = document.createElement('span');
+                pName.className = 'player-name';
+                
+                const dot = document.createElement('span');
+                dot.className = 'player-color-dot';
+                dot.style.background = p.color;
+                pName.appendChild(dot);
+
+                const medal = idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : '';
+                const nameTxt = document.createTextNode(`${medal}${idx + 1}위. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
+                pName.appendChild(nameTxt);
+                item.appendChild(pName);
+
+                const score = document.createElement('span');
+                score.className = 'player-score';
+                if (p.avg === Infinity) {
+                    score.textContent = `- (0회 맞춤)`;
+                } else {
+                    score.textContent = `${p.avg.toFixed(1)}초 (성공 ${p.correctCount}회)`;
+                }
+                item.appendChild(score);
+
+                $sudokuFinalLeaderboardList.appendChild(item);
+            });
+        }
+    }
+
+    function buildSudokuPeerBoardDOM() {
+        $sudokuPeerBoard.innerHTML = '';
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'sudoku-cell';
+                cell.dataset.row = r;
+                cell.dataset.col = c;
+
+                const val = sudokuState.peerBoard[r][c];
+                if (val !== 0) {
+                    cell.textContent = val;
+                    if (sudokuState.initialBoard[r][c] === 0) {
+                        cell.classList.add('user-input');
+                    }
+                }
+                $sudokuPeerBoard.appendChild(cell);
             }
-            item.appendChild(score);
+        }
+    }
 
-            $sudokuFinalLeaderboardList.appendChild(item);
-        });
+    function updateSudokuPeerBoardCell(r, c, val) {
+        const cellEl = $sudokuPeerBoard.querySelector(`.sudoku-cell[data-row="${r}"][data-col="${c}"]`);
+        if (cellEl) {
+            cellEl.textContent = val;
+            if (sudokuState.initialBoard[r][c] === 0) {
+                cellEl.classList.add('user-input');
+            }
+            cellEl.style.animation = 'none';
+            void cellEl.offsetWidth;
+            cellEl.style.animation = 'scaleIn 0.2s ease-out';
+        }
     }
 
     function handleSudokuPeerLeave(peerId) {
@@ -3436,12 +3786,15 @@
     function syncSudokuStateFromHost(hostState) {
         sudokuState.status = 'playing';
         sudokuState.difficulty = hostState.difficulty;
+        sudokuState.gameMode = hostState.gameMode || 'turn';
         sudokuState.board = hostState.board;
         sudokuState.initialBoard = hostState.initialBoard;
         sudokuState.solution = hostState.solution;
         sudokuState.notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
         sudokuState.selectedCell = null;
         sudokuState.mistakes = hostState.mistakes;
+        sudokuState.myMistakes = hostState.myMistakes || 0;
+        sudokuState.peerMistakes = hostState.peerMistakes || 0;
         sudokuState.history = [];
         sudokuState.players = hostState.players.map(p => ({
             ...p,
@@ -3454,7 +3807,38 @@
         showSudokuSubView('game');
         $sudokuGameDiff.textContent = hostState.difficulty.toUpperCase();
 
-        buildSudokuBoardDOM();
+        if (sudokuState.gameMode === 'speed') {
+            $sudokuWindow.style.maxWidth = '1120px';
+            const layout = $sudokuGame.querySelector('.sudoku-game-layout');
+            if (layout) layout.style.gridTemplateColumns = '2.2fr 1fr';
+
+            $sudokuPeerBoardArea.hidden = false;
+            $sudokuMyBoardTitle.hidden = false;
+            $sudokuMistakeLabel.textContent = '내 실수';
+
+            sudokuState.peerBoard = hostState.peerBoard || JSON.parse(JSON.stringify(hostState.initialBoard));
+
+            const peerPlayer = sudokuState.players.find(p => p.peerId !== network.myPeerId);
+            const peerName = peerPlayer ? peerPlayer.nickname : '상대방';
+            const peerTitleEl = $sudokuPeerBoardArea.querySelector('span');
+            if (peerTitleEl) {
+                peerTitleEl.textContent = `${peerName} 보드판 (실시간 관전)`;
+            }
+
+            buildSudokuBoardDOM();
+            buildSudokuPeerBoardDOM();
+        } else {
+            $sudokuWindow.style.maxWidth = '880px';
+            const layout = $sudokuGame.querySelector('.sudoku-game-layout');
+            if (layout) layout.style.gridTemplateColumns = '1.2fr 1fr';
+
+            $sudokuPeerBoardArea.hidden = true;
+            $sudokuMyBoardTitle.hidden = true;
+            $sudokuMistakeLabel.textContent = '공동 실수';
+
+            buildSudokuBoardDOM();
+        }
+
         updateSudokuMistakesDisplay();
         updateSudokuNumpadState();
 
@@ -3487,13 +3871,17 @@
         sudokuState = {
             status: 'none',
             isSolo: false,
+            gameMode: 'turn',
             difficulty: 'medium',
             board: [],
+            peerBoard: [],
             initialBoard: [],
             solution: [],
             notes: [],
             selectedCell: null,
             mistakes: 0,
+            myMistakes: 0,
+            peerMistakes: 0,
             maxMistakes: 3,
             isNotesMode: false,
             selectedNumber: null,
@@ -3519,6 +3907,11 @@
         if ($boardWrapper) {
             $boardWrapper.classList.remove('my-turn', 'other-turn');
         }
+
+        // 레이아웃 복원
+        $sudokuWindow.style.maxWidth = '';
+        const layout = $sudokuGame.querySelector('.sudoku-game-layout');
+        if (layout) layout.style.gridTemplateColumns = '';
 
         $sudokuLobby.hidden = true;
         $sudokuGame.hidden = true;

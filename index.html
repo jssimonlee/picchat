@@ -44,6 +44,19 @@
                 <input type="text" id="nickname" placeholder="이름을 입력하세요" maxlength="12" autocomplete="off">
             </div>
 
+            <div class="custom-code-option">
+                <label class="switch-container">
+                    <span>방번호 직접 지정하기</span>
+                    <input type="checkbox" id="chkCustomCode" style="display: none;">
+                    <span class="custom-switch">
+                        <span class="custom-switch-handle"></span>
+                    </span>
+                </label>
+                <div id="customCodeContainer">
+                    <input type="text" id="customRoomInput" placeholder="방번호 6자리 입력 (예: MYROOM)" maxlength="6" autocomplete="off">
+                </div>
+            </div>
+
             <div class="lobby-actions">
                 <button id="btnCreateRoom" class="btn btn-primary">
                     <span class="btn-icon">✦</span>
@@ -249,7 +262,7 @@
 
     <!-- ===== SUDOKU OVERLAY ===== -->
     <div id="sudokuOverlay" class="sudoku-overlay" hidden>
-        <div class="sudoku-window">
+        <div class="sudoku-window" id="sudokuWindow">
             <header class="sudoku-header">
                 <div class="sudoku-title">
                     <span class="sudoku-logo-icon">🧩</span>
@@ -264,15 +277,24 @@
             <div id="sudokuLobby" class="sudoku-view">
                 <div class="sudoku-lobby-setup" id="sudokuLobbySetup">
                     <h3>새 게임 제안</h3>
-                    <p>방에 있는 친구들과 턴제 스도쿠 대결을 펼쳐보세요. 평균 속도가 가장 빠른 사람이 승리합니다!</p>
-                    <div class="sudoku-setup-group">
-                        <label for="sudokuDifficulty">난이도</label>
-                        <select id="sudokuDifficulty">
-                            <option value="easy">Easy (쉬움)</option>
-                            <option value="medium" selected>Medium (보통)</option>
-                            <option value="hard">Hard (어려움)</option>
-                            <option value="expert">Expert (전문가)</option>
-                        </select>
+                    <p>방에 있는 친구들과 스도쿠 대결을 펼쳐보세요. 협동 턴제 또는 각자 대결하는 스피드 레이스 모드를 즐기실 수 있습니다!</p>
+                    <div class="sudoku-setup-group" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                        <div style="flex: 1; display: flex; flex-direction: column; text-align: left; gap: 4px;">
+                            <label for="sudokuDifficulty" style="font-size: 13px; font-weight: 600; color: #475569;">난이도</label>
+                            <select id="sudokuDifficulty">
+                                <option value="easy">Easy (쉬움)</option>
+                                <option value="medium" selected>Medium (보통)</option>
+                                <option value="hard">Hard (어려움)</option>
+                                <option value="expert">Expert (전문가)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; display: flex; flex-direction: column; text-align: left; gap: 4px;">
+                            <label for="sudokuMode" style="font-size: 13px; font-weight: 600; color: #475569;">게임 모드</label>
+                            <select id="sudokuMode">
+                                <option value="turn" selected>협동 턴제</option>
+                                <option value="speed">스피드 레이스</option>
+                            </select>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
                         <button id="btnSudokuPropose" class="btn btn-primary">스도쿠 제안하기</button>
@@ -282,7 +304,8 @@
 
                 <div class="sudoku-lobby-waiting" id="sudokuLobbyWaiting" hidden>
                     <h3 id="sudokuLobbyWaitingTitle">스도쿠 참가 대기 중</h3>
-                    <div class="sudoku-proposal-status">
+                    <p style="margin-top: 4px; font-size: 13px; color: #475569;">선택된 모드: <span id="sudokuWaitingModeText" style="font-weight: bold; color: #2563eb;">협동 턴제</span></p>
+                    <div class="sudoku-proposal-status" style="margin-top: 10px;">
                         <p>참가 동의 현황:</p>
                         <ul id="sudokuProposalList" class="sudoku-proposal-list">
                             <!-- Populated dynamically -->
@@ -299,6 +322,7 @@
                     <h3>스도쿠 게임 초대</h3>
                     <p><span id="sudokuProposerName" class="highlight-name"></span>님이 스도쿠 대결을 제안했습니다!</p>
                     <p>난이도: <span id="sudokuProposalDifficulty" class="highlight-diff">Medium</span></p>
+                    <p>게임 모드: <span id="sudokuProposalMode" class="highlight-diff" style="color: #2563eb;">협동 턴제</span></p>
                     <div class="sudoku-lobby-actions">
                         <button id="btnSudokuDecline" class="btn btn-secondary">거절</button>
                         <button id="btnSudokuAccept" class="btn btn-primary">참가</button>
@@ -321,7 +345,7 @@
                                 <span id="sudokuGameTimer" class="value">00:00</span>
                             </div>
                             <div class="sudoku-stat-item">
-                                <span class="label">공동 실수</span>
+                                <span class="label" id="sudokuMistakeLabel">공동 실수</span>
                                 <div class="sudoku-health-bars" id="sudokuHealthBars">
                                     <div class="sudoku-health-bar active"></div>
                                     <div class="sudoku-health-bar active"></div>
@@ -330,9 +354,24 @@
                             </div>
                         </div>
 
-                        <div class="sudoku-board-wrapper">
-                            <div class="sudoku-board" id="piccomm-sudoku-board">
-                                <!-- Generated by JS -->
+                        <div style="display: flex; gap: 20px; align-items: center; justify-content: center; width: 100%;">
+                            <!-- 내 스도쿠 보드 -->
+                            <div style="display: flex; flex-direction: column; align-items: center;">
+                                <span id="sudokuMyBoardTitle" style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px;" hidden>내 보드판 (조작 가능)</span>
+                                <div class="sudoku-board-wrapper" id="sudokuMyWrapper">
+                                    <div class="sudoku-board" id="piccomm-sudoku-board">
+                                        <!-- Generated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 상대방 스도쿠 보드 (스피드 레이스 시 노출) -->
+                            <div id="sudokuPeerBoardArea" style="display: flex; flex-direction: column; align-items: center;" hidden>
+                                <span style="font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px;">상대방 보드판 (실시간 관전)</span>
+                                <div class="sudoku-board-wrapper" id="sudokuPeerWrapper" style="max-width: 300px; pointer-events: none; opacity: 0.85;">
+                                    <div class="sudoku-board" id="piccomm-sudoku-board-peer" style="font-size: 0.75em;">
+                                        <!-- Generated by JS -->
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

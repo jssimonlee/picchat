@@ -67,12 +67,21 @@ class NetworkManager {
 
     /* ---------- Create Room (Host) ---------- */
 
-    createRoom(nickname) {
+    createRoom(nickname, customCode = null) {
         return new Promise((resolve, reject) => {
             this.isHost = true;
             this.nickname = nickname;
             this.myColor = this._nextColor();
-            this.roomCode = this._generateRoomCode();
+            
+            if (customCode) {
+                // Formatting as XXX-XXX
+                this.roomCode = customCode.slice(0, 3) + '-' + customCode.slice(3);
+                this.hasCustomCode = true;
+            } else {
+                this.roomCode = this._generateRoomCode();
+                this.hasCustomCode = false;
+            }
+            
             const peerId = this._roomCodeToPeerId(this.roomCode);
 
             this.peer = new Peer(peerId, {
@@ -95,10 +104,15 @@ class NetworkManager {
             this.peer.on('error', (err) => {
                 console.error('[Network] Error:', err);
                 if (err.type === 'unavailable-id') {
-                    // Room code collision, try again
-                    this.roomCode = this._generateRoomCode();
-                    this.peer.destroy();
-                    this.createRoom(nickname).then(resolve).catch(reject);
+                    if (this.hasCustomCode) {
+                        this.peer.destroy();
+                        reject(new Error('unavailable-id'));
+                    } else {
+                        // Room code collision, try again
+                        this.roomCode = this._generateRoomCode();
+                        this.peer.destroy();
+                        this.createRoom(nickname).then(resolve).catch(reject);
+                    }
                 } else {
                     this.onError(err.type === 'peer-unavailable'
                         ? '방을 찾을 수 없습니다. 코드를 확인해주세요.'

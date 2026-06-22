@@ -2112,3 +2112,83 @@ input, button, textarea {
     border-color: rgba(239, 68, 68, 0.85);
     box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2), 0 0 15px rgba(239, 68, 68, 0.3);
 }
+
+/* Custom Room Code Switch & Field Styles */
+.custom-code-option {
+    margin-top: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.switch-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.custom-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background-color: #cbd5e1;
+    border-radius: 12px;
+    transition: background-color 0.25s;
+}
+
+.custom-switch-handle {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform 0.25s;
+}
+
+input[type="checkbox"]:checked + .custom-switch {
+    background-color: var(--primary);
+}
+
+input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
+    transform: translateX(20px);
+}
+
+#customCodeContainer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    opacity: 0;
+}
+
+#customCodeContainer.open {
+    max-height: 60px;
+    opacity: 1;
+}
+
+#customRoomInput {
+    text-transform: uppercase;
+    width: 100%;
+    border: 1.5px solid var(--border);
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    color: var(--text);
+}
+
+#customRoomInput:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15);
+}
