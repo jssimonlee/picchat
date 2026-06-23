@@ -2067,7 +2067,7 @@ input, button, textarea {
 }
 
 .sudoku-cell.user-input {
-    color: #16a34a;
+    color: #2563eb;
     font-weight: 700;
 }
 
@@ -2689,6 +2689,10 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     font-weight: 700;
     aspect-ratio: 1;
     cursor: default;
+}
+
+#picchat-sudoku-board-peer .sudoku-cell.user-input {
+    color: #dc2626;
 }
 
 /* ========== MINESWEEPER GAME SPECIFIC STYLES ========== */
