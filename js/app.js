@@ -3678,6 +3678,22 @@
 
         const isSpeedMode = sudokuState.gameMode === 'speed';
 
+        // Record winnerId
+        if (isSpeedMode) {
+            if (reason === 'me_fail' || reason === 'peer_win') {
+                const peerPlayer = sudokuState.players.find(p => p.peerId !== network.myPeerId);
+                if (peerPlayer) {
+                    sudokuState.winnerId = peerPlayer.peerId;
+                }
+            } else if (isWin || reason === 'peer_fail') {
+                sudokuState.winnerId = network.myPeerId;
+            }
+        } else {
+            if (isWin) {
+                sudokuState.winnerId = network.myPeerId;
+            }
+        }
+
         // Set up in-game overlay texts
         let overlayBadgeValue = '🏆';
         let overlayTitleValue = '승리!';
@@ -4161,28 +4177,137 @@
         const isSpeedMode = sudokuState.gameMode === 'speed';
 
         if (isSpeedMode) {
-            sudokuState.players.forEach((p) => {
-                const item = document.createElement('div');
-                item.className = 'sudoku-leaderboard-item';
+            let totalEmpty = 0;
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    if (sudokuState.initialBoard[r][c] === 0) {
+                        totalEmpty++;
+                    }
+                }
+            }
 
-                const pName = document.createElement('span');
-                pName.className = 'player-name';
+            const playersData = sudokuState.players.map(p => {
+                const isMe = p.peerId === network.myPeerId;
+                const targetBoard = isMe ? sudokuState.board : sudokuState.peerBoard;
+                
+                let solved = 0;
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (sudokuState.initialBoard[r][c] === 0 && targetBoard[r] && targetBoard[r][c] !== 0) {
+                            solved++;
+                        }
+                    }
+                }
+
+                const mistakes = isMe ? sudokuState.myMistakes : sudokuState.peerMistakes;
+                const completedAll = solved === totalEmpty;
+                const isWinner = sudokuState.winnerId === p.peerId;
+
+                let baseScore = completedAll ? 5000 : 0;
+                let timeBonus = 0;
+                if (completedAll) {
+                    let targetTime = 600;
+                    const diff = (sudokuState.difficulty || 'medium').toLowerCase();
+                    if (diff === 'easy') targetTime = 300;
+                    else if (diff === 'medium') targetTime = 600;
+                    else if (diff === 'hard') targetTime = 900;
+                    else if (diff === 'expert') targetTime = 1200;
+                    timeBonus = Math.max(0, (targetTime - sudokuState.gameSecondsElapsed) * 10);
+                }
+                
+                const totalAttempts = solved + mistakes;
+                const accuracy = totalAttempts > 0 ? Math.round((solved / totalAttempts) * 100) : (completedAll ? 100 : 0);
+                const accuracyBonus = completedAll ? Math.round(accuracy * 20) : 0;
+                const mistakePenalty = mistakes * -500;
+                const score = Math.max(0, baseScore + timeBonus + accuracyBonus + mistakePenalty);
+
+                return {
+                    ...p,
+                    solved,
+                    mistakes,
+                    accuracy,
+                    score,
+                    isWinner,
+                    completedAll
+                };
+            });
+
+            // Sort by score desc
+            playersData.sort((a, b) => b.score - a.score);
+
+            playersData.forEach((p, idx) => {
+                const item = document.createElement('div');
+                item.className = `sudoku-leaderboard-item premium-style ${p.isWinner ? 'winner' : p.mistakes >= 3 ? 'loser' : ''}`;
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'leaderboard-info';
+
+                const nameRow = document.createElement('div');
+                nameRow.className = 'leaderboard-name-row';
                 
                 const dot = document.createElement('span');
                 dot.className = 'player-color-dot';
                 dot.style.background = p.color;
-                pName.appendChild(dot);
+                nameRow.appendChild(dot);
 
-                const nameTxt = document.createTextNode(`${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
-                pName.appendChild(nameTxt);
-                item.appendChild(pName);
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = `${idx + 1}위. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`;
+                nameRow.appendChild(nameSpan);
 
-                const score = document.createElement('span');
-                score.className = 'player-score';
-                const mistakes = p.peerId === network.myPeerId ? sudokuState.myMistakes : sudokuState.peerMistakes;
-                score.textContent = `실수: ${mistakes}/3`;
-                item.appendChild(score);
+                const badge = document.createElement('span');
+                badge.style.fontSize = '9px';
+                badge.style.fontWeight = '700';
+                badge.style.padding = '1px 5px';
+                badge.style.borderRadius = '3px';
+                badge.style.marginLeft = '8px';
+                if (p.isWinner) {
+                    badge.style.background = 'rgba(16, 185, 129, 0.15)';
+                    badge.style.color = '#059669';
+                    badge.textContent = 'WIN';
+                } else if (p.mistakes >= 3) {
+                    badge.style.background = 'rgba(239, 68, 68, 0.1)';
+                    badge.style.color = '#dc2626';
+                    badge.textContent = 'FAIL';
+                } else {
+                    badge.style.background = 'rgba(0, 0, 0, 0.05)';
+                    badge.style.color = '#64748b';
+                    badge.textContent = `${p.solved}/${totalEmpty}개`;
+                }
+                nameRow.appendChild(badge);
+                infoDiv.appendChild(nameRow);
 
+                const statsRow = document.createElement('div');
+                statsRow.className = 'leaderboard-stats-row';
+                
+                const solvedSpan = document.createElement('span');
+                solvedSpan.textContent = `🎯 해결: ${p.solved}/${totalEmpty}개 (${Math.round((p.solved/totalEmpty)*100)}%)`;
+                statsRow.appendChild(solvedSpan);
+
+                const mistakesSpan = document.createElement('span');
+                mistakesSpan.textContent = `❌ 실수: ${p.mistakes}회`;
+                statsRow.appendChild(mistakesSpan);
+
+                const accSpan = document.createElement('span');
+                accSpan.textContent = `🎯 정확도: ${p.accuracy}%`;
+                statsRow.appendChild(accSpan);
+
+                infoDiv.appendChild(statsRow);
+                item.appendChild(infoDiv);
+
+                const scoreDiv = document.createElement('div');
+                scoreDiv.className = 'leaderboard-score-row';
+
+                const scoreVal = document.createElement('span');
+                scoreVal.className = 'leaderboard-score-value';
+                scoreVal.textContent = `${p.score.toLocaleString()}점`;
+                scoreDiv.appendChild(scoreVal);
+
+                const scoreLabel = document.createElement('span');
+                scoreLabel.className = 'leaderboard-score-label';
+                scoreLabel.textContent = '최종 점수';
+                scoreDiv.appendChild(scoreLabel);
+
+                item.appendChild(scoreDiv);
                 $sudokuFinalLeaderboardList.appendChild(item);
             });
         } else {
@@ -4201,30 +4326,54 @@
 
             sorted.forEach((p, idx) => {
                 const item = document.createElement('div');
-                item.className = 'sudoku-leaderboard-item';
+                item.className = 'sudoku-leaderboard-item premium-style';
 
-                const pName = document.createElement('span');
-                pName.className = 'player-name';
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'leaderboard-info';
+
+                const nameRow = document.createElement('div');
+                nameRow.className = 'leaderboard-name-row';
                 
                 const dot = document.createElement('span');
                 dot.className = 'player-color-dot';
                 dot.style.background = p.color;
-                pName.appendChild(dot);
+                nameRow.appendChild(dot);
 
                 const medal = idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : '';
-                const nameTxt = document.createTextNode(`${medal}${idx + 1}위. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
-                pName.appendChild(nameTxt);
-                item.appendChild(pName);
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = `${medal}${idx + 1}위. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`;
+                nameRow.appendChild(nameSpan);
+                infoDiv.appendChild(nameRow);
 
-                const score = document.createElement('span');
-                score.className = 'player-score';
-                if (p.avg === Infinity) {
-                    score.textContent = `- (0회 맞춤)`;
-                } else {
-                    score.textContent = `${p.avg.toFixed(1)}초 (성공 ${p.correctCount}회)`;
-                }
-                item.appendChild(score);
+                const statsRow = document.createElement('div');
+                statsRow.className = 'leaderboard-stats-row';
+                
+                const solvesSpan = document.createElement('span');
+                solvesSpan.textContent = `🎯 기여: 성공 ${p.correctCount}회`;
+                statsRow.appendChild(solvesSpan);
 
+                const timeSpan = document.createElement('span');
+                timeSpan.textContent = `⏱️ 시간: ${p.avg === Infinity ? '-' : `${p.totalTime.toFixed(1)}초`}`;
+                statsRow.appendChild(timeSpan);
+
+                infoDiv.appendChild(statsRow);
+                item.appendChild(infoDiv);
+
+                const scoreDiv = document.createElement('div');
+                scoreDiv.className = 'leaderboard-score-row';
+
+                const scoreVal = document.createElement('span');
+                scoreVal.className = 'leaderboard-score-value';
+                scoreVal.style.color = '#3b82f6';
+                scoreVal.textContent = p.avg === Infinity ? '-' : `${p.avg.toFixed(1)}초`;
+                scoreDiv.appendChild(scoreVal);
+
+                const scoreLabel = document.createElement('span');
+                scoreLabel.className = 'leaderboard-score-label';
+                scoreLabel.textContent = '평균 속도';
+                scoreDiv.appendChild(scoreLabel);
+
+                item.appendChild(scoreDiv);
                 $sudokuFinalLeaderboardList.appendChild(item);
             });
         }
