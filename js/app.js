@@ -3234,10 +3234,15 @@
             clearInterval(sudokuState.turnTimerInterval);
         }
 
-        const player = sudokuState.participants.find(p => p.peerId === peerId);
+        const player = sudokuState.participants.find(p => p.peerId === peerId) || (sudokuState.isSolo ? sudokuState.participants[0] : null);
         if (player) {
             player.totalTime += elapsed;
             if (isCorrect) player.correctCount++;
+        }
+        const pObj = sudokuState.players.find(p => p.peerId === peerId) || (sudokuState.isSolo ? sudokuState.players[0] : null);
+        if (pObj) {
+            pObj.totalTime += elapsed;
+            if (isCorrect) pObj.correctCount++;
         }
 
         const isMe = peerId === network.myPeerId;
@@ -3843,7 +3848,7 @@
 
         const mistakesStr = `${myMistakes} / 3`;
 
-        const me = sudokuState.players.find(p => p.peerId === network.myPeerId) || sudokuState.participants.find(p => p.peerId === network.myPeerId);
+        const me = sudokuState.isSolo ? sudokuState.players[0] : (sudokuState.players.find(p => p.peerId === network.myPeerId) || sudokuState.participants.find(p => p.peerId === network.myPeerId));
         const correctCount = me ? me.correctCount : 0;
         const totalAttempts = correctCount + myMistakes;
         const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : (isWin ? 100 : 0);
@@ -4312,7 +4317,7 @@
             });
         } else {
             const sorted = [...sudokuState.players].map(p => {
-                const match = sudokuState.participants.find(x => x.peerId === p.peerId);
+                const match = sudokuState.participants.find(x => x.peerId === p.peerId) || sudokuState.participants[0];
                 const totalTime = match ? match.totalTime : 0;
                 const correctCount = match ? match.correctCount : 0;
                 const avg = correctCount > 0 ? (totalTime / correctCount) : Infinity;
