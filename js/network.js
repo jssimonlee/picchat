@@ -4,6 +4,9 @@
    Star topology: host relays all messages
    ======================================== */
 
+const CLOUDFLARE_WORKER_URL = 'https://picchat-turn.jssimonlee.workers.dev';
+
+
 class NetworkManager {
     constructor(callbacks = {}) {
         this.onAction = callbacks.onAction || (() => {});
@@ -73,39 +76,51 @@ class NetworkManager {
         return color;
     }
 
-    _getPeerConfig() {
+    async _getPeerConfig() {
+        let iceServers = [
+            { urls: 'stun:stun.relay.metered.ca:80' },
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            {
+                urls: 'turn:global.relay.metered.ca:80',
+                username: '65330acb4241246eee68ae02',
+                credential: 'S1pwGwv5ODO3UyIY'
+            },
+            {
+                urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+                username: '65330acb4241246eee68ae02',
+                credential: 'S1pwGwv5ODO3UyIY'
+            },
+            {
+                urls: 'turn:global.relay.metered.ca:443',
+                username: '65330acb4241246eee68ae02',
+                credential: 'S1pwGwv5ODO3UyIY'
+            },
+            {
+                urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+                username: '65330acb4241246eee68ae02',
+                credential: 'S1pwGwv5ODO3UyIY'
+            }
+        ];
+
+        try {
+            const response = await fetch(CLOUDFLARE_WORKER_URL);
+            if (response.ok) {
+                const dynamicServers = await response.json();
+                if (Array.isArray(dynamicServers) && dynamicServers.length > 0) {
+                    iceServers = dynamicServers;
+                }
+            }
+        } catch (e) {
+            console.warn('[Network] Failed to fetch dynamic TURN credentials from Cloudflare Worker, using static fallbacks', e);
+        }
+
         return {
             debug: 0,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.relay.metered.ca:80' },
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' },
-                    {
-                        urls: 'turn:global.relay.metered.ca:80',
-                        username: '65330acb4241246eee68ae02',
-                        credential: 'S1pwGwv5ODO3UyIY'
-                    },
-                    {
-                        urls: 'turn:global.relay.metered.ca:80?transport=tcp',
-                        username: '65330acb4241246eee68ae02',
-                        credential: 'S1pwGwv5ODO3UyIY'
-                    },
-                    {
-                        urls: 'turn:global.relay.metered.ca:443',
-                        username: '65330acb4241246eee68ae02',
-                        credential: 'S1pwGwv5ODO3UyIY'
-                    },
-                    {
-                        urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-                        username: '65330acb4241246eee68ae02',
-                        credential: 'S1pwGwv5ODO3UyIY'
-                    }
-                ]
-            }
+            config: { iceServers }
         };
     }
 
@@ -113,7 +128,7 @@ class NetworkManager {
     /* ---------- Create Room (Host) ---------- */
 
     createRoom(nickname, customCode = null) {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             this.isHost = true;
             this.nickname = nickname;
             this.myColor = this._nextColor();
@@ -129,7 +144,7 @@ class NetworkManager {
             
             const peerId = this._roomCodeToPeerId(this.roomCode);
 
-            const peerConfig = this._getPeerConfig();
+            const peerConfig = await this._getPeerConfig();
             this.peer = new Peer(peerId, peerConfig);
 
             this.peer.on('open', (id) => {
@@ -177,7 +192,7 @@ class NetworkManager {
     /* ---------- Join Room (Client) ---------- */
 
     joinRoom(roomCode, nickname) {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             this.isHost = false;
             this.nickname = nickname;
             this.myColor = this._nextColor();
@@ -186,7 +201,7 @@ class NetworkManager {
             const hostPeerId = this._roomCodeToPeerId(this.roomCode);
             const myPeerId = hostPeerId + '-' + Math.random().toString(36).substr(2, 6);
 
-            const peerConfig = this._getPeerConfig();
+            const peerConfig = await this._getPeerConfig();
             this.peer = new Peer(myPeerId, peerConfig);
 
             this.peer.on('open', (id) => {
