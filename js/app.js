@@ -2460,8 +2460,11 @@
         // Close button
         $btnSudokuClose.addEventListener('click', async () => {
             if (sudokuState.status === 'playing') {
-                if (await showCustomConfirm('스도쿠 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
-                    cancelSudokuProposal();
+                const msg = sudokuState.isSolo 
+                    ? '스도쿠 게임을 종료하시겠습니까?' 
+                    : '스도쿠 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+                if (await showCustomConfirm(msg)) {
+                    quitSudokuGame();
                 }
             } else if (sudokuState.status === 'proposing') {
                 if (await showCustomConfirm('스도쿠 제안을 취소하시겠습니까?')) {
@@ -2511,8 +2514,11 @@
 
         // Exit / Quit button
         $btnSudokuQuit.addEventListener('click', async () => {
-            if (await showCustomConfirm('스도쿠 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
-                cancelSudokuProposal();
+            const msg = sudokuState.isSolo 
+                ? '스도쿠 게임을 종료하시겠습니까?' 
+                : '스도쿠 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+            if (await showCustomConfirm(msg)) {
+                quitSudokuGame();
             }
         });
 
@@ -2902,6 +2908,12 @@
                 network._broadcast({ type: 'sudoku', payload }, fromPeerId);
             }
         }
+        else if (action === 'quit') {
+            applySudokuQuit(payload.peerId);
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            }
+        }
     }
 
     function cancelSudokuProposal() {
@@ -2998,7 +3010,24 @@
         });
 
         const acceptedCount = sudokuState.participants.filter(p => p.peerId !== sudokuState.proposerId && p.accepted === true).length;
-        $btnSudokuStart.disabled = (acceptedCount === 0);
+        
+        const isProposer = (sudokuState.proposerId === network.myPeerId);
+        const hasAccepted = sudokuState.participants.some(p => p.peerId === network.myPeerId && p.accepted === true);
+
+        if (isProposer || hasAccepted) {
+            $sudokuLobbySetup.hidden = true;
+            $sudokuLobbyInvite.hidden = true;
+            $sudokuLobbyWaiting.hidden = false;
+            $btnSudokuStart.hidden = false;
+            $btnSudokuStart.disabled = (acceptedCount === 0);
+            $btnSudokuCancel.hidden = !isProposer;
+            
+            if (isProposer) {
+                $sudokuLobbyWaitingTitle.textContent = '스도쿠 참가 대기 중';
+            } else {
+                $sudokuLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            }
+        }
     }
 
     function buildSudokuBoardDOM() {
@@ -4112,6 +4141,43 @@
         return `${m}:${s}`;
     }
 
+    function quitSudokuGame() {
+        if (sudokuState.isSolo) {
+            resetSudoku();
+            $sudokuOverlay.hidden = true;
+            return;
+        }
+
+        network.sendSudoku({
+            action: 'quit',
+            peerId: network.myPeerId
+        });
+        if (!network.isHost) {
+            applySudokuQuit(network.myPeerId);
+        }
+    }
+
+    function applySudokuQuit(quitterId) {
+        clearInterval(sudokuState.turnTimerInterval);
+        clearInterval(sudokuState.gameTimerInterval);
+
+        sudokuState.status = 'finished';
+        showSudokuSubView('result');
+
+        const isMe = quitterId === network.myPeerId;
+        if (isMe) {
+            $sudokuResultTitle.textContent = '💀 기권 패배 💀';
+            $sudokuResultTitle.className = 'error-title';
+            $sudokuResultMsg.textContent = '게임을 기권하여 패배하였습니다.';
+        } else {
+            $sudokuResultTitle.textContent = '🏆 기권 승리! 🏆';
+            $sudokuResultTitle.className = 'success-title';
+            const quitter = sudokuState.participants.find(p => p.peerId === quitterId);
+            const name = quitter ? quitter.nickname : '상대방';
+            $sudokuResultMsg.textContent = `${name}님이 기권하여 승리하였습니다!`;
+        }
+    }
+
     function resetSudokuTimers() {
         clearInterval(sudokuState.turnTimerInterval);
         clearInterval(sudokuState.gameTimerInterval);
@@ -4198,8 +4264,11 @@
         // Close button
         $btnGomokuClose.addEventListener('click', async () => {
             if (gomokuState.status === 'playing') {
-                if (await showCustomConfirm('오목 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
-                    cancelGomokuProposal();
+                const msg = gomokuState.isSolo 
+                    ? '오목 게임을 종료하시겠습니까?' 
+                    : '오목 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+                if (await showCustomConfirm(msg)) {
+                    quitGomokuGame();
                 }
             } else if (gomokuState.status === 'proposing') {
                 if (await showCustomConfirm('오목 제안을 취소하시겠습니까?')) {
@@ -4574,7 +4643,24 @@
         });
 
         const acceptedCount = gomokuState.participants.filter(p => p.peerId !== gomokuState.proposerId && p.accepted === true).length;
-        $btnGomokuStart.disabled = (acceptedCount === 0);
+        
+        const isProposer = (gomokuState.proposerId === network.myPeerId);
+        const hasAccepted = gomokuState.participants.some(p => p.peerId === network.myPeerId && p.accepted === true);
+
+        if (isProposer || hasAccepted) {
+            $gomokuLobbySetup.hidden = true;
+            $gomokuLobbyInvite.hidden = true;
+            $gomokuLobbyWaiting.hidden = false;
+            $btnGomokuStart.hidden = false;
+            $btnGomokuStart.disabled = (acceptedCount === 0);
+            $btnGomokuCancel.hidden = !isProposer;
+            
+            if (isProposer) {
+                $gomokuLobbyWaitingTitle.textContent = '오목 참가 대기 중';
+            } else {
+                $gomokuLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            }
+        }
     }
 
     function buildGomokuBoardDOM() {
@@ -5239,8 +5325,11 @@
         // Close button
         $btnOthelloClose.addEventListener('click', async () => {
             if (othelloState.status === 'playing') {
-                if (await showCustomConfirm('오셀로 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
-                    cancelOthelloProposal();
+                const msg = othelloState.isSolo 
+                    ? '오셀로 게임을 종료하시겠습니까?' 
+                    : '오셀로 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+                if (await showCustomConfirm(msg)) {
+                    quitOthelloGame();
                 }
             } else if (othelloState.status === 'proposing') {
                 if (await showCustomConfirm('오셀로 제안을 취소하시겠습니까?')) {
@@ -5617,7 +5706,24 @@
         });
 
         const acceptedCount = othelloState.participants.filter(p => p.peerId !== othelloState.proposerId && p.accepted === true).length;
-        $btnOthelloStart.disabled = (acceptedCount === 0);
+        
+        const isProposer = (othelloState.proposerId === network.myPeerId);
+        const hasAccepted = othelloState.participants.some(p => p.peerId === network.myPeerId && p.accepted === true);
+
+        if (isProposer || hasAccepted) {
+            $othelloLobbySetup.hidden = true;
+            $othelloLobbyInvite.hidden = true;
+            $othelloLobbyWaiting.hidden = false;
+            $btnOthelloStart.hidden = false;
+            $btnOthelloStart.disabled = (acceptedCount === 0);
+            $btnOthelloCancel.hidden = !isProposer;
+            
+            if (isProposer) {
+                $othelloLobbyWaitingTitle.textContent = '오셀로 참가 대기 중';
+            } else {
+                $othelloLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            }
+        }
     }
 
     function initOthelloBoard(board) {
@@ -6463,8 +6569,11 @@
         // Close button
         $btnMinesweeperClose.addEventListener('click', async () => {
             if (minesweeperState.status === 'playing') {
-                if (await showCustomConfirm('지뢰찾기 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)')) {
-                    cancelMinesweeperProposal();
+                const msg = minesweeperState.isSolo 
+                    ? '지뢰찾기 게임을 종료하시겠습니까?' 
+                    : '지뢰찾기 대결을 종료하시겠습니까? (참여자 전체의 게임이 취소됩니다)';
+                if (await showCustomConfirm(msg)) {
+                    quitMinesweeperGame();
                 }
             } else if (minesweeperState.status === 'proposing') {
                 if (await showCustomConfirm('지뢰찾기 제안을 취소하시겠습니까?')) {
@@ -7191,8 +7300,25 @@
             $minesweeperProposalList.appendChild(li);
         });
         
-        const allAccepted = minesweeperState.participants.every(p => p.accepted);
-        $btnMinesweeperStart.disabled = !(allAccepted && minesweeperState.participants.length >= 2);
+        const acceptedCount = minesweeperState.participants.filter(p => p.peerId !== minesweeperState.proposerId && p.accepted === true).length;
+        
+        const isProposer = (minesweeperState.proposerId === network.myPeerId);
+        const hasAccepted = minesweeperState.participants.some(p => p.peerId === network.myPeerId && p.accepted === true);
+
+        if (isProposer || hasAccepted) {
+            $minesweeperLobbySetup.hidden = true;
+            $minesweeperLobbyInvite.hidden = true;
+            $minesweeperLobbyWaiting.hidden = false;
+            $btnMinesweeperStart.hidden = false;
+            $btnMinesweeperStart.disabled = (acceptedCount === 0);
+            $btnMinesweeperCancel.hidden = !isProposer;
+            
+            if (isProposer) {
+                $minesweeperLobbyWaitingTitle.textContent = '지뢰찾기 참가 대기 중';
+            } else {
+                $minesweeperLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+            }
+        }
     }
 
     function handleMinesweeperNetworkMessage(fromPeerId, payload) {
@@ -7380,6 +7506,7 @@
             const quitter = minesweeperState.participants.find(p => p.peerId === payload.peerId);
             showToast(`${quitter ? quitter.nickname : '상대방'}님이 기권하였습니다.`);
             resetMinesweeper();
+            $minesweeperOverlay.hidden = true;
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 network._broadcast({ type: 'minesweeper', payload }, fromPeerId);
             }

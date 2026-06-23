@@ -240,6 +240,7 @@ input, button, textarea {
     transition: all 0.2s;
     position: relative;
     overflow: hidden;
+    white-space: nowrap;
 }
 .btn::after {
     content: '';
@@ -1806,7 +1807,8 @@ input, button, textarea {
 /* --- Lobby View --- */
 .sudoku-lobby-setup, .sudoku-lobby-waiting, .sudoku-lobby-invite {
     text-align: center;
-    max-width: 480px;
+    max-width: 560px;
+    width: 100%;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -1921,6 +1923,8 @@ input, button, textarea {
     gap: 12px;
     justify-content: center;
     margin-top: 12px;
+    flex-wrap: nowrap;
+    width: 100%;
 }
 
 .highlight-name {
