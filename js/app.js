@@ -3827,13 +3827,23 @@
         const nameText = activePlayer ? activePlayer.nickname : '알 수 없음';
 
         const $boardWrapper = $sudokuBoard.parentElement;
-        if ($boardWrapper) {
-            if (isMyTurn) {
+        if (isMyTurn) {
+            if ($boardWrapper) {
                 $boardWrapper.classList.add('my-turn');
                 $boardWrapper.classList.remove('other-turn');
-            } else {
+            }
+            if ($sudokuTurnCard) {
+                $sudokuTurnCard.classList.add('my-turn');
+                $sudokuTurnCard.classList.remove('other-turn');
+            }
+        } else {
+            if ($boardWrapper) {
                 $boardWrapper.classList.add('other-turn');
                 $boardWrapper.classList.remove('my-turn');
+            }
+            if ($sudokuTurnCard) {
+                $sudokuTurnCard.classList.add('other-turn');
+                $sudokuTurnCard.classList.remove('my-turn');
             }
         }
 
@@ -3846,7 +3856,7 @@
         }
 
         if (isMyTurn) {
-            $sudokuTurnStatus.innerHTML = `👑 <span style="color:#00d4ff; font-weight:bold;">내 차례입니다!</span> (남은 시간: <span id="sudokuTurnTimerSecs">${sudokuState.secondsRemaining}</span>초)`;
+            $sudokuTurnStatus.innerHTML = `👑 <span style="color:#10b981; font-weight:bold;">내 차례입니다!</span> (남은 시간: <span id="sudokuTurnTimerSecs">${sudokuState.secondsRemaining}</span>초)`;
         } else {
             $sudokuTurnStatus.innerHTML = `⏳ <b>${escapeHtml(nameText)}</b> 님의 턴 (남은 시간: <span id="sudokuTurnTimerSecs">${sudokuState.secondsRemaining}</span>초)`;
         }
@@ -4337,6 +4347,9 @@
         const $boardWrapper = $sudokuBoard.parentElement;
         if ($boardWrapper) {
             $boardWrapper.classList.remove('my-turn', 'other-turn');
+        }
+        if ($sudokuTurnCard) {
+            $sudokuTurnCard.classList.remove('my-turn', 'other-turn');
         }
 
         // 레이아웃 복원
