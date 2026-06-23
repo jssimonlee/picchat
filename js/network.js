@@ -83,27 +83,7 @@ class NetworkManager {
     async _preFetchConfig() {
         let iceServers = [
             { urls: 'stun:stun.relay.metered.ca:80' },
-            { urls: 'stun:stun.l.google.com:19302' },
-            {
-                urls: 'turn:global.relay.metered.ca:80',
-                username: '65330acb4241246eee68ae02',
-                credential: 'S1pwGwv5ODO3UyIY'
-            },
-            {
-                urls: 'turn:global.relay.metered.ca:80?transport=tcp',
-                username: '65330acb4241246eee68ae02',
-                credential: 'S1pwGwv5ODO3UyIY'
-            },
-            {
-                urls: 'turn:global.relay.metered.ca:443',
-                username: '65330acb4241246eee68ae02',
-                credential: 'S1pwGwv5ODO3UyIY'
-            },
-            {
-                urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-                username: '65330acb4241246eee68ae02',
-                credential: 'S1pwGwv5ODO3UyIY'
-            }
+            { urls: 'stun:stun.l.google.com:19302' }
         ];
 
         try {
