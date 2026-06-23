@@ -52,6 +52,10 @@ class NetworkManager {
             '#a855f7', '#ff6b9d', '#00d4ff', '#ff7f50'
         ];
         this._colorIndex = 0;
+
+        // Pre-fetch dynamic ICE servers to eliminate initial loading latency
+        this._cachedPeerConfig = null;
+        this._preFetchConfig();
     }
 
     /* ---------- Room Code Generation ---------- */
@@ -76,14 +80,10 @@ class NetworkManager {
         return color;
     }
 
-    async _getPeerConfig() {
+    async _preFetchConfig() {
         let iceServers = [
             { urls: 'stun:stun.relay.metered.ca:80' },
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
             {
                 urls: 'turn:global.relay.metered.ca:80',
                 username: '65330acb4241246eee68ae02',
@@ -115,13 +115,21 @@ class NetworkManager {
                 }
             }
         } catch (e) {
-            console.warn('[Network] Failed to fetch dynamic TURN credentials from Cloudflare Worker, using static fallbacks', e);
+            console.warn('[Network] Failed to pre-fetch dynamic TURN credentials from Cloudflare Worker, using static fallbacks', e);
         }
 
-        return {
+        this._cachedPeerConfig = {
             debug: 0,
             config: { iceServers }
         };
+    }
+
+    async _getPeerConfig() {
+        if (this._cachedPeerConfig) {
+            return this._cachedPeerConfig;
+        }
+        await this._preFetchConfig();
+        return this._cachedPeerConfig;
     }
 
 
@@ -793,6 +801,41 @@ class NetworkManager {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
             });
+        }
+    }
+
+    async isConnectionRelayed(recipientId = 'all') {
+        const checkPC = async (pc) => {
+            if (!pc) return false;
+            try {
+                const stats = await pc.getStats();
+                let isRelay = false;
+                stats.forEach(report => {
+                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                        const local = stats.get(report.localCandidateId);
+                        const remote = stats.get(report.remoteCandidateId);
+                        if ((local && local.candidateType === 'relay') || 
+                            (remote && remote.candidateType === 'relay')) {
+                            isRelay = true;
+                        }
+                    }
+                });
+                return isRelay;
+            } catch (e) {
+                return false;
+            }
+        };
+
+        if (recipientId === 'all') {
+            for (const [pid, info] of this.connections) {
+                if (await checkPC(info.conn?.peerConnection)) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            const info = this.connections.get(recipientId);
+            return await checkPC(info?.conn?.peerConnection);
         }
     }
 

@@ -7705,12 +7705,22 @@
                 isSelectingFile = true;
             });
 
-            $chatFileInput.addEventListener('change', (e) => {
+            $chatFileInput.addEventListener('change', async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
-                if (file.size > 5 * 1024 * 1024) {
-                    showToast('⚠️ 5MB 이하의 파일만 전송할 수 있습니다.');
+                const recipientId = $chatRecipient.value || 'all';
+                let isRelayed = false;
+                if (network) {
+                    isRelayed = await network.isConnectionRelayed(recipientId);
+                }
+
+                if (isRelayed && file.size > 20 * 1024 * 1024) {
+                    showToast('⚠️ 릴레이(TURN) 연결 상태에서는 20MB 이하의 파일만 전송할 수 있습니다.');
+                    $chatFileInput.value = '';
+                    return;
+                } else if (!isRelayed && file.size > 100 * 1024 * 1024) {
+                    showToast('⚠️ 직접 연결 상태에서는 100MB 이하의 파일만 전송할 수 있습니다.');
                     $chatFileInput.value = '';
                     return;
                 }
@@ -7718,7 +7728,6 @@
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const fileData = event.target.result;
-                    const recipientId = $chatRecipient.value || 'all';
                     if (network) {
                         network.sendFile(file.name, file.type, fileData, recipientId);
                     }
