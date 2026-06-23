@@ -7673,7 +7673,12 @@
         // File Attachment Click
         if ($btnAttachFile && $chatFileInput) {
             $btnAttachFile.addEventListener('click', () => {
+                isSelectingFile = true;
                 $chatFileInput.click();
+            });
+
+            $chatFileInput.addEventListener('click', () => {
+                isSelectingFile = true;
             });
 
             $chatFileInput.addEventListener('change', (e) => {
