@@ -224,6 +224,7 @@
     const $btnAttachFile = document.getElementById('btnAttachFile');
     const $chatFileInput = document.getElementById('chatFileInput');
     const $chatRecipient = document.getElementById('chatRecipient');
+    const $chatRecipientRow = document.getElementById('chatRecipientRow');
     const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
     const $btnGames = document.getElementById('btnGames');
@@ -2089,7 +2090,16 @@
     }
 
     function updateChatRecipientDropdown() {
-        if (!$chatRecipient) return;
+        if (!$chatRecipient || !$chatRecipientRow) return;
+
+        // Only show recipient selector when there are 3 or more people in the room (including myself)
+        if (knownParticipants.size >= 3) {
+            $chatRecipientRow.style.display = 'flex';
+        } else {
+            $chatRecipientRow.style.display = 'none';
+            $chatRecipient.value = 'all'; // reset to 'all' if list shrinks below 3
+            return;
+        }
 
         // Save selected value
         const previousSelected = $chatRecipient.value;
