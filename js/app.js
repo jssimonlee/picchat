@@ -237,6 +237,7 @@
     let cursorThrottle = 0;
     let isSelectingFile = false;
     let downloadTimeout = null;
+    let awayTimer = null;
     const remoteCursors = new Map(); // peerId -> DOM element
     const knownParticipants = new Map(); // peerId -> { nickname, color }
     let chatUnreadCount = 0;
@@ -407,18 +408,31 @@
                 }
                 return;
             }
-            if (network && network.myPeerId && !$studio.hidden) {
-                $awayOverlay.hidden = false;
-                network.sendPresence(true);
-                const me = knownParticipants.get(network.myPeerId);
-                if (me) {
-                    me.isAway = true;
-                    updateParticipantsUI();
-                }
+
+            if (awayTimer) {
+                clearTimeout(awayTimer);
             }
+
+            awayTimer = setTimeout(() => {
+                if (network && network.myPeerId && !$studio.hidden) {
+                    $awayOverlay.hidden = false;
+                    network.sendPresence(true);
+                    const me = knownParticipants.get(network.myPeerId);
+                    if (me) {
+                        me.isAway = true;
+                        updateParticipantsUI();
+                    }
+                }
+                awayTimer = null;
+            }, 5000);
         });
 
         window.addEventListener('focus', () => {
+            if (awayTimer) {
+                clearTimeout(awayTimer);
+                awayTimer = null;
+            }
+
             // Reset the file selection flag with a short delay to allow blur events to resolve
             setTimeout(() => {
                 isSelectingFile = false;
