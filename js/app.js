@@ -2685,14 +2685,6 @@
     }
 
     function guestRespondSudoku(accepted) {
-        network.sendSudoku({
-            action: 'join-response',
-            peerId: network.myPeerId,
-            nickname: network.nickname,
-            color: network.myColor,
-            accepted: accepted
-        });
-
         if (accepted) {
             $sudokuLobbyInvite.hidden = true;
             $sudokuLobbyWaiting.hidden = false;
@@ -2704,6 +2696,14 @@
             resetSudoku();
             $sudokuOverlay.hidden = true;
         }
+
+        network.sendSudoku({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
     }
 
     function handleSudokuNetworkMessage(fromPeerId, payload) {
@@ -4391,14 +4391,6 @@
     }
 
     function guestRespondGomoku(accepted) {
-        network.sendGomoku({
-            action: 'join-response',
-            peerId: network.myPeerId,
-            nickname: network.nickname,
-            color: network.myColor,
-            accepted: accepted
-        });
-
         if (accepted) {
             $gomokuLobbyInvite.hidden = true;
             $gomokuLobbyWaiting.hidden = false;
@@ -4410,6 +4402,14 @@
             resetGomoku();
             $gomokuOverlay.hidden = true;
         }
+
+        network.sendGomoku({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
     }
 
     function handleGomokuNetworkMessage(fromPeerId, payload) {
@@ -5453,14 +5453,6 @@
     }
 
     function guestRespondOthello(accepted) {
-        network.sendOthello({
-            action: 'join-response',
-            peerId: network.myPeerId,
-            nickname: network.nickname,
-            color: network.myColor,
-            accepted: accepted
-        });
-
         if (accepted) {
             $othelloLobbyInvite.hidden = true;
             $othelloLobbyWaiting.hidden = false;
@@ -5472,6 +5464,14 @@
             resetOthello();
             $othelloOverlay.hidden = true;
         }
+
+        network.sendOthello({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
     }
 
     function handleOthelloNetworkMessage(fromPeerId, payload) {
@@ -6652,14 +6652,6 @@
     }
 
     function guestRespondMinesweeper(accepted) {
-        network.sendMinesweeper({
-            action: 'join-response',
-            peerId: network.myPeerId,
-            nickname: network.nickname,
-            color: network.myColor,
-            accepted: accepted
-        });
-
         if (accepted) {
             $minesweeperLobbyInvite.hidden = true;
             $minesweeperLobbyWaiting.hidden = false;
@@ -6671,6 +6663,14 @@
             resetMinesweeper();
             $minesweeperOverlay.hidden = true;
         }
+
+        network.sendMinesweeper({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: accepted
+        });
     }
 
     function cancelMinesweeperProposal() {
