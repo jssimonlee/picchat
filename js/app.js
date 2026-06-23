@@ -8047,29 +8047,31 @@
         function drawLaser(alpha) {
             ctx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
             ctx.save();
-            ctx.globalAlpha = alpha * 0.7;
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.shadowColor = color;
-            ctx.shadowBlur = 12;
+            ctx.strokeStyle = color;
+
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
             for (let i = 1; i < points.length; i++) {
                 ctx.lineTo(points[i].x, points[i].y);
             }
+
+            // 1. Outer glow
+            ctx.globalAlpha = alpha * 0.15;
+            ctx.lineWidth = 20;
             ctx.stroke();
-            // Glow layer
-            ctx.globalAlpha = alpha * 0.3;
-            ctx.lineWidth = 8;
-            ctx.shadowBlur = 20;
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
+
+            // 2. Inner glow
+            ctx.globalAlpha = alpha * 0.40;
+            ctx.lineWidth = 10;
             ctx.stroke();
+
+            // 3. Core line
+            ctx.globalAlpha = alpha * 0.90;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
             ctx.restore();
         }
 

@@ -709,28 +709,31 @@ class DrawingCanvas {
     _drawLaserPath(ctx, path) {
         if (path.length < 2) return;
         ctx.save();
-        ctx.globalAlpha = 0.7;
-        ctx.strokeStyle = this.currentColor;
-        ctx.lineWidth = 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.shadowColor = this.currentColor;
-        ctx.shadowBlur = 12;
+        ctx.strokeStyle = this.currentColor;
+
         ctx.beginPath();
         ctx.moveTo(path[0].x, path[0].y);
         for (let i = 1; i < path.length; i++) {
             ctx.lineTo(path[i].x, path[i].y);
         }
+
+        // 1. Outer glow
+        ctx.globalAlpha = 0.15;
+        ctx.lineWidth = 20;
         ctx.stroke();
-        ctx.globalAlpha = 0.3;
-        ctx.lineWidth = 8;
-        ctx.shadowBlur = 20;
-        ctx.beginPath();
-        ctx.moveTo(path[0].x, path[0].y);
-        for (let i = 1; i < path.length; i++) {
-            ctx.lineTo(path[i].x, path[i].y);
-        }
+
+        // 2. Inner glow
+        ctx.globalAlpha = 0.40;
+        ctx.lineWidth = 10;
         ctx.stroke();
+
+        // 3. Core line
+        ctx.globalAlpha = 0.90;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
         ctx.restore();
     }
 
