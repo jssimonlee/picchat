@@ -2734,6 +2734,7 @@
         
         buildSudokuBoardDOM();
         updateSudokuMistakesDisplay();
+        updateSudokuProgress();
         updateSudokuNumpadState();
 
         resetSudokuTimers();
@@ -2928,6 +2929,7 @@
             }
 
             updateSudokuMistakesDisplay();
+            updateSudokuProgress();
             updateSudokuNumpadState();
 
             resetSudokuTimers();
@@ -3351,6 +3353,7 @@
         }
 
         sudokuState.history = [];
+        updateSudokuProgress();
 
         if (sudokuState.status === 'playing' && !isSpeedMode) {
             advanceSudokuTurn();
@@ -3730,6 +3733,58 @@
             if (peerTitleEl) {
                 peerTitleEl.textContent = `${peerName} 보드판 (실시간 관전) (실수: ${sudokuState.peerMistakes}/3)`;
             }
+        }
+    }
+
+    function updateSudokuProgress() {
+        if (sudokuState.status !== 'playing') return;
+
+        let totalToSolve = 0;
+        let mySolved = 0;
+        let peerSolved = 0;
+
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (sudokuState.initialBoard[r][c] === 0) {
+                    totalToSolve++;
+                    if (sudokuState.board[r][c] !== 0) mySolved++;
+                    if (sudokuState.peerBoard[r][c] !== 0) peerSolved++;
+                }
+            }
+        }
+
+        const isSpeedMode = sudokuState.gameMode === 'speed';
+        
+        // My progress
+        const myPercent = totalToSolve > 0 ? Math.round((mySolved / totalToSolve) * 100) : 0;
+        const $myProgressText = document.getElementById('sudokuMyProgressText');
+        const $myProgressBar = document.getElementById('sudokuMyProgressBar');
+        const $myProgressContainer = document.getElementById('sudokuMyProgressContainer');
+
+        if ($myProgressContainer) {
+            $myProgressContainer.style.display = isSpeedMode ? 'flex' : 'none';
+        }
+        if ($myProgressText) {
+            $myProgressText.textContent = `${myPercent}% (${mySolved}/${totalToSolve}개)`;
+        }
+        if ($myProgressBar) {
+            $myProgressBar.style.width = `${myPercent}%`;
+        }
+
+        // Peer progress (Speed Race only)
+        const peerPercent = totalToSolve > 0 ? Math.round((peerSolved / totalToSolve) * 100) : 0;
+        const $peerProgressText = document.getElementById('sudokuPeerProgressText');
+        const $peerProgressBar = document.getElementById('sudokuPeerProgressBar');
+        const $peerProgressContainer = document.getElementById('sudokuPeerProgressContainer');
+
+        if ($peerProgressContainer) {
+            $peerProgressContainer.style.display = (isSpeedMode && !sudokuState.isSolo) ? 'flex' : 'none';
+        }
+        if ($peerProgressText) {
+            $peerProgressText.textContent = `${peerPercent}% (${peerSolved}/${totalToSolve}개)`;
+        }
+        if ($peerProgressBar) {
+            $peerProgressBar.style.width = `${peerPercent}%`;
         }
     }
 
@@ -4178,6 +4233,7 @@
         }
 
         updateSudokuMistakesDisplay();
+        updateSudokuProgress();
         updateSudokuNumpadState();
 
         resetSudokuTimers();
@@ -4288,6 +4344,11 @@
         const layout = $sudokuGame.querySelector('.sudoku-game-layout');
         if (layout) layout.style.gridTemplateColumns = '';
         $sudokuTurnCard.hidden = false;
+
+        const $myProgressContainer = document.getElementById('sudokuMyProgressContainer');
+        const $peerProgressContainer = document.getElementById('sudokuPeerProgressContainer');
+        if ($myProgressContainer) $myProgressContainer.style.display = 'none';
+        if ($peerProgressContainer) $peerProgressContainer.style.display = 'none';
 
         $sudokuLobby.hidden = true;
         $sudokuGame.hidden = true;
