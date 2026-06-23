@@ -73,6 +73,43 @@ class NetworkManager {
         return color;
     }
 
+    _getPeerConfig() {
+        return {
+            debug: 0,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.relay.metered.ca:80' },
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    {
+                        urls: 'turn:global.relay.metered.ca:80',
+                        username: '65330acb4241246eee68ae02',
+                        credential: 'S1pwGwv5ODO3UyIY'
+                    },
+                    {
+                        urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+                        username: '65330acb4241246eee68ae02',
+                        credential: 'S1pwGwv5ODO3UyIY'
+                    },
+                    {
+                        urls: 'turn:global.relay.metered.ca:443',
+                        username: '65330acb4241246eee68ae02',
+                        credential: 'S1pwGwv5ODO3UyIY'
+                    },
+                    {
+                        urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+                        username: '65330acb4241246eee68ae02',
+                        credential: 'S1pwGwv5ODO3UyIY'
+                    }
+                ]
+            }
+        };
+    }
+
+
     /* ---------- Create Room (Host) ---------- */
 
     createRoom(nickname, customCode = null) {
@@ -92,30 +129,7 @@ class NetworkManager {
             
             const peerId = this._roomCodeToPeerId(this.roomCode);
 
-            const peerConfig = {
-                debug: 0,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:openrelay.metered.ca:80' },
-                        {
-                            urls: 'turn:openrelay.metered.ca:80',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        },
-                        {
-                            urls: 'turn:openrelay.metered.ca:443',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        },
-                        {
-                            urls: 'turns:openrelay.metered.ca:443?transport=tcp',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        }
-                    ]
-                }
-            };
+            const peerConfig = this._getPeerConfig();
             this.peer = new Peer(peerId, peerConfig);
 
             this.peer.on('open', (id) => {
@@ -172,30 +186,7 @@ class NetworkManager {
             const hostPeerId = this._roomCodeToPeerId(this.roomCode);
             const myPeerId = hostPeerId + '-' + Math.random().toString(36).substr(2, 6);
 
-            const peerConfig = {
-                debug: 0,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:openrelay.metered.ca:80' },
-                        {
-                            urls: 'turn:openrelay.metered.ca:80',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        },
-                        {
-                            urls: 'turn:openrelay.metered.ca:443',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        },
-                        {
-                            urls: 'turns:openrelay.metered.ca:443?transport=tcp',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        }
-                    ]
-                }
-            };
+            const peerConfig = this._getPeerConfig();
             this.peer = new Peer(myPeerId, peerConfig);
 
             this.peer.on('open', (id) => {
