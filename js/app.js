@@ -3207,6 +3207,7 @@
 
         if (sudokuState.isSolo) {
             applySudokuMove(network.myPeerId, r, c, val, isCorrect, elapsed);
+            sudokuState.turnStartTime = performance.now(); // Reset turn start time to prevent double-counting in Solo mode!
             return;
         }
 
@@ -3678,6 +3679,10 @@
     function endSudokuGame(isWin, reason) {
         clearInterval(sudokuState.turnTimerInterval);
         clearInterval(sudokuState.gameTimerInterval);
+
+        if (sudokuState.isSolo && sudokuState.gameStartTime > 0) {
+            sudokuState.gameSecondsElapsed = Math.floor((Date.now() - sudokuState.gameStartTime) / 1000);
+        }
 
         sudokuState.status = 'finished';
 
