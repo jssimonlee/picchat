@@ -48,8 +48,16 @@ class NetworkManager {
         this.myPeerId = '';
 
         this._peerColors = [
-            '#ff4757', '#2ed573', '#1e90ff', '#ffd32a',
-            '#a855f7', '#ff6b9d', '#00d4ff', '#ff7f50'
+            '#ef4444', // Vibrant Red
+            '#3b82f6', // Vibrant Blue
+            '#10b981', // Emerald Green
+            '#f59e0b', // Amber Orange
+            '#8b5cf6', // Vivid Purple
+            '#ec4899', // Hot Pink
+            '#06b6d4', // Bright Cyan
+            '#f97316', // Orange
+            '#14b8a6', // Teal
+            '#d946ef'  // Fuchsia Magenta
         ];
         this._colorIndex = 0;
 
@@ -317,14 +325,26 @@ class NetworkManager {
 
     _handleMessage(data, fromPeerId) {
         switch (data.type) {
+            case 'assign-color':
+                this.myColor = data.color;
+                this.onPeerJoin(this.myPeerId, this.nickname, this.myColor, false);
+                break;
+
             case 'join': {
                 const info = this.connections.get(fromPeerId);
+                const assignedColor = this._nextColor(); // Assign color sequentially
                 if (info) {
                     info.nickname = data.nickname;
-                    info.color = data.color;
+                    info.color = assignedColor;
                     info.isAway = false;
                 }
-                this.onPeerJoin(fromPeerId, data.nickname, data.color, false);
+                this.onPeerJoin(fromPeerId, data.nickname, assignedColor, false);
+
+                // Send confirmation with assigned color back to the newly joined guest
+                const conn = this.connections.get(fromPeerId);
+                if (conn) {
+                    conn.conn.send({ type: 'assign-color', color: assignedColor });
+                }
 
                 // If host, notify all other peers about the new user
                 if (this.isHost) {
@@ -332,7 +352,7 @@ class NetworkManager {
                         type: 'user-joined',
                         peerId: fromPeerId,
                         nickname: data.nickname,
-                        color: data.color
+                        color: assignedColor
                     }, fromPeerId);
 
                     // Send existing user list to the new peer
@@ -342,7 +362,6 @@ class NetworkManager {
                             users.push({ nickname: info.nickname, color: info.color, peerId: pid, isAway: info.isAway || false });
                         }
                     });
-                    const conn = this.connections.get(fromPeerId);
                     if (conn) {
                         conn.conn.send({ type: 'user-list', users });
                     }
