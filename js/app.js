@@ -221,6 +221,9 @@
     const $btnToggleChat = document.getElementById('btnToggleChat');
     const $btnCloseChat = document.getElementById('btnCloseChat');
     const $chatUnread = document.getElementById('chatUnread');
+    const $btnAttachFile = document.getElementById('btnAttachFile');
+    const $chatFileInput = document.getElementById('chatFileInput');
+    const $chatRecipient = document.getElementById('chatRecipient');
     const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
     const $btnGames = document.getElementById('btnGames');
@@ -700,8 +703,11 @@
             onMinesweeper: (fromPeerId, payload) => {
                 handleMinesweeperNetworkMessage(fromPeerId, payload);
             },
-            onChat: (fromPeerId, message, nickname, color) => {
-                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId);
+            onChat: (fromPeerId, message, nickname, color, recipientId) => {
+                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId);
+            },
+            onFileReceived: (fromPeerId, data) => {
+                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId);
             },
             onEmoji: (fromPeerId, emoji, nickname, color) => {
                 spawnFloatingEmoji(emoji);
@@ -2079,6 +2085,33 @@
             `;
             $participants.appendChild(tag);
         });
+        updateChatRecipientDropdown();
+    }
+
+    function updateChatRecipientDropdown() {
+        if (!$chatRecipient) return;
+
+        // Save selected value
+        const previousSelected = $chatRecipient.value;
+
+        // Clear and rebuild options
+        $chatRecipient.innerHTML = '<option value="all">전체 (모두에게)</option>';
+
+        knownParticipants.forEach((info, peerId) => {
+            if (peerId !== network.myPeerId) {
+                const opt = document.createElement('option');
+                opt.value = peerId;
+                opt.textContent = info.nickname;
+                $chatRecipient.appendChild(opt);
+            }
+        });
+
+        // Restore selected value if still exists
+        if (Array.from($chatRecipient.options).some(opt => opt.value === previousSelected)) {
+            $chatRecipient.value = previousSelected;
+        } else {
+            $chatRecipient.value = 'all';
+        }
     }
 
     /* ---------- Remote Cursors ---------- */
@@ -7637,6 +7670,35 @@
             }
         });
 
+        // File Attachment Click
+        if ($btnAttachFile && $chatFileInput) {
+            $btnAttachFile.addEventListener('click', () => {
+                $chatFileInput.click();
+            });
+
+            $chatFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.size > 5 * 1024 * 1024) {
+                    showToast('⚠️ 5MB 이하의 파일만 전송할 수 있습니다.');
+                    $chatFileInput.value = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const fileData = event.target.result;
+                    const recipientId = $chatRecipient.value || 'all';
+                    if (network) {
+                        network.sendFile(file.name, file.type, fileData, recipientId);
+                    }
+                    $chatFileInput.value = '';
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
         // Emoji quick buttons
         document.querySelectorAll('.emoji-quick-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -7690,26 +7752,42 @@
         const msg = $chatInput.value.trim();
         if (!msg || !network) return;
 
-        network.sendChat(msg);
+        const recipientId = $chatRecipient ? $chatRecipient.value : 'all';
+        network.sendChat(msg, recipientId);
         // Local echo for non-host
         if (!network.isHost) {
-            addChatMessage(network.nickname, msg, network.myColor, true);
+            addChatMessage(network.nickname, msg, network.myColor, true, recipientId);
         }
         $chatInput.value = '';
         $chatInput.focus();
     }
 
-    function addChatMessage(nickname, message, color, isMine) {
+    function addChatMessage(nickname, message, color, isMine, recipientId = 'all') {
         const msgEl = document.createElement('div');
-        msgEl.className = 'chat-msg' + (isMine ? ' mine' : '');
+        msgEl.className = 'chat-msg' + (isMine ? ' mine' : '') + (recipientId !== 'all' ? ' dm' : '');
 
         const nameEl = document.createElement('div');
         nameEl.className = 'chat-msg-name';
         nameEl.style.color = color;
-        nameEl.textContent = nickname;
+        
+        let recipientLabel = '';
+        if (recipientId !== 'all') {
+            if (isMine) {
+                const target = knownParticipants.get(recipientId);
+                const targetName = target ? target.nickname : '알 수 없음';
+                recipientLabel = ` 🔒 (귓속말 to ${escapeHtml(targetName)})`;
+            } else {
+                recipientLabel = ` 🔒 (귓속말)`;
+            }
+        }
+        nameEl.textContent = nickname + recipientLabel;
 
         const bubbleEl = document.createElement('div');
         bubbleEl.className = 'chat-msg-bubble';
+        if (recipientId !== 'all') {
+            bubbleEl.style.border = '1px dashed #cbd5e1';
+            bubbleEl.style.background = isMine ? '#f3e8ff' : '#f8fafc';
+        }
         bubbleEl.textContent = message;
 
         msgEl.appendChild(nameEl);
@@ -7725,6 +7803,129 @@
         $chatMessages.scrollTop = $chatMessages.scrollHeight;
 
         // Update unread badge if chat is closed
+        if (!isChatOpen) {
+            chatUnreadCount++;
+            $chatUnread.textContent = chatUnreadCount > 99 ? '99+' : chatUnreadCount;
+            $chatUnread.hidden = false;
+        }
+    }
+
+    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId) {
+        const msgEl = document.createElement('div');
+        msgEl.className = 'chat-msg' + (isMine ? ' mine' : '') + (recipientId !== 'all' ? ' dm' : '');
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'chat-msg-name';
+        nameEl.style.color = color;
+        
+        let recipientLabel = '';
+        if (recipientId !== 'all') {
+            if (isMine) {
+                const target = knownParticipants.get(recipientId);
+                const targetName = target ? target.nickname : '알 수 없음';
+                recipientLabel = ` 🔒 (귓속말 to ${escapeHtml(targetName)})`;
+            } else {
+                recipientLabel = ` 🔒 (귓속말)`;
+            }
+        }
+        nameEl.textContent = nickname + recipientLabel;
+
+        const bubbleEl = document.createElement('div');
+        bubbleEl.className = 'chat-msg-bubble file-card';
+        bubbleEl.style.padding = '10px';
+        bubbleEl.style.display = 'flex';
+        bubbleEl.style.flexDirection = 'column';
+        bubbleEl.style.gap = '8px';
+        bubbleEl.style.background = isMine ? '#e0d7ff' : '#f1f5f9';
+        bubbleEl.style.color = '#1e293b';
+        bubbleEl.style.border = recipientId !== 'all' ? '1px dashed #a855f7' : '1px solid rgba(0,0,0,0.08)';
+
+        const detailsRow = document.createElement('div');
+        detailsRow.style.display = 'flex';
+        detailsRow.style.alignItems = 'center';
+        detailsRow.style.gap = '8px';
+
+        const fileIcon = document.createElement('span');
+        fileIcon.style.fontSize = '24px';
+        if (fileType.startsWith('image/')) {
+            fileIcon.textContent = '🖼️';
+        } else if (fileType.startsWith('video/')) {
+            fileIcon.textContent = '🎥';
+        } else if (fileType.startsWith('audio/')) {
+            fileIcon.textContent = '🎵';
+        } else if (fileType.includes('pdf')) {
+            fileIcon.textContent = '📕';
+        } else {
+            fileIcon.textContent = '📁';
+        }
+
+        const nameAndSize = document.createElement('div');
+        nameAndSize.style.display = 'flex';
+        nameAndSize.style.flexDirection = 'column';
+        nameAndSize.style.overflow = 'hidden';
+
+        const fileNameEl = document.createElement('span');
+        fileNameEl.style.fontWeight = '600';
+        fileNameEl.style.fontSize = '13px';
+        fileNameEl.style.whiteSpace = 'nowrap';
+        fileNameEl.style.overflow = 'hidden';
+        fileNameEl.style.textOverflow = 'ellipsis';
+        fileNameEl.style.maxWidth = '180px';
+        fileNameEl.textContent = fileName;
+
+        const fileTypeEl = document.createElement('span');
+        fileTypeEl.style.fontSize = '10px';
+        fileTypeEl.style.color = '#64748b';
+        fileTypeEl.textContent = fileType.split('/')[1]?.toUpperCase() || 'FILE';
+
+        nameAndSize.appendChild(fileNameEl);
+        nameAndSize.appendChild(fileTypeEl);
+
+        detailsRow.appendChild(fileIcon);
+        detailsRow.appendChild(nameAndSize);
+        bubbleEl.appendChild(detailsRow);
+
+        if (fileType.startsWith('image/')) {
+            const imgPreview = document.createElement('img');
+            imgPreview.src = fileData;
+            imgPreview.style.maxWidth = '100%';
+            imgPreview.style.maxHeight = '150px';
+            imgPreview.style.borderRadius = '6px';
+            imgPreview.style.marginTop = '4px';
+            imgPreview.style.cursor = 'pointer';
+            imgPreview.addEventListener('click', () => {
+                const w = window.open();
+                if (w) w.document.write(`<img src="${fileData}" style="max-width:100%; height:auto;" />`);
+            });
+            bubbleEl.appendChild(imgPreview);
+        }
+
+        const downloadBtn = document.createElement('a');
+        downloadBtn.href = fileData;
+        downloadBtn.download = fileName;
+        downloadBtn.className = 'btn btn-primary';
+        downloadBtn.style.padding = '6px 12px';
+        downloadBtn.style.fontSize = '12px';
+        downloadBtn.style.width = 'auto';
+        downloadBtn.style.marginTop = '4px';
+        downloadBtn.style.alignSelf = 'flex-end';
+        downloadBtn.style.display = 'inline-flex';
+        downloadBtn.style.alignItems = 'center';
+        downloadBtn.style.gap = '4px';
+        downloadBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 다운로드`;
+        
+        bubbleEl.appendChild(downloadBtn);
+
+        msgEl.appendChild(nameEl);
+        msgEl.appendChild(bubbleEl);
+        $chatMessages.appendChild(msgEl);
+
+        while ($chatMessages.children.length > 200) {
+            $chatMessages.removeChild($chatMessages.firstChild);
+        }
+
+        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+
         if (!isChatOpen) {
             chatUnreadCount++;
             $chatUnread.textContent = chatUnreadCount > 99 ? '99+' : chatUnreadCount;

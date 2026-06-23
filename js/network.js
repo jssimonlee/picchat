@@ -26,6 +26,7 @@ class NetworkManager {
         this.onOthello = callbacks.onOthello || (() => {});
         this.onMinesweeper = callbacks.onMinesweeper || (() => {});
         this.onChat = callbacks.onChat || (() => {});
+        this.onFileReceived = callbacks.onFileReceived || (() => {});
         this.onEmoji = callbacks.onEmoji || (() => {});
         this.onLaser = callbacks.onLaser || (() => {});
         this.onDrawStart = callbacks.onDrawStart || (() => {});
@@ -460,10 +461,51 @@ class NetworkManager {
                 this.onMinesweeper(fromPeerId, data.payload);
                 break;
 
-            case 'chat':
-                this.onChat(fromPeerId, data.message, data.nickname, data.color);
-                if (this.isHost) this._broadcast(data, fromPeerId);
+            case 'chat': {
+                const recipientId = data.recipientId || 'all';
+                if (this.isHost) {
+                    if (recipientId === 'all') {
+                        this._broadcast(data, fromPeerId);
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, 'all');
+                    } else if (recipientId === this.myPeerId) {
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId);
+                    } else {
+                        // Relay to the specific connection
+                        const info = this.connections.get(recipientId);
+                        if (info) {
+                            try { info.conn.send(data); } catch(e) {}
+                        }
+                    }
+                } else {
+                    if (recipientId === 'all' || recipientId === this.myPeerId) {
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId);
+                    }
+                }
                 break;
+            }
+
+            case 'file': {
+                const recipientId = data.recipientId || 'all';
+                if (this.isHost) {
+                    if (recipientId === 'all') {
+                        this._broadcast(data, fromPeerId);
+                        this.onFileReceived(fromPeerId, data);
+                    } else if (recipientId === this.myPeerId) {
+                        this.onFileReceived(fromPeerId, data);
+                    } else {
+                        // Forward to the specific recipient
+                        const info = this.connections.get(recipientId);
+                        if (info) {
+                            try { info.conn.send(data); } catch(e) {}
+                        }
+                    }
+                } else {
+                    if (recipientId === 'all' || recipientId === this.myPeerId) {
+                        this.onFileReceived(fromPeerId, data);
+                    }
+                }
+                break;
+            }
 
             case 'emoji':
                 this.onEmoji(fromPeerId, data.emoji, data.nickname, data.color);
@@ -676,15 +718,63 @@ class NetworkManager {
         }
     }
 
-    sendChat(message) {
-        const data = { type: 'chat', message, nickname: this.nickname, color: this.myColor };
+    sendChat(message, recipientId = 'all') {
+        const data = { 
+            type: 'chat', 
+            message, 
+            nickname: this.nickname, 
+            color: this.myColor,
+            recipientId
+        };
         if (this.isHost) {
-            this._broadcast(data);
-            this.onChat(this.myPeerId, message, this.nickname, this.myColor);
+            if (recipientId === 'all') {
+                this._broadcast(data);
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, 'all');
+            } else if (recipientId === this.myPeerId) {
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId);
+            } else {
+                const info = this.connections.get(recipientId);
+                if (info) {
+                    try { info.conn.send(data); } catch(e) {}
+                }
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId);
+            }
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
             });
+        }
+    }
+
+    sendFile(fileName, fileType, fileData, recipientId = 'all') {
+        const data = {
+            type: 'file',
+            fileName,
+            fileType,
+            fileData,
+            recipientId,
+            nickname: this.nickname,
+            color: this.myColor
+        };
+
+        if (this.isHost) {
+            if (recipientId === 'all') {
+                this._broadcast(data);
+                this.onFileReceived(this.myPeerId, data);
+            } else if (recipientId === this.myPeerId) {
+                this.onFileReceived(this.myPeerId, data);
+            } else {
+                const info = this.connections.get(recipientId);
+                if (info) {
+                    try { info.conn.send(data); } catch(e) {}
+                }
+                this.onFileReceived(this.myPeerId, data);
+            }
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+            this.onFileReceived(this.myPeerId, data);
         }
     }
 
