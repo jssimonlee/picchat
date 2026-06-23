@@ -46,6 +46,7 @@ class NetworkManager {
         this.nickname = '';
         this.myColor = '';
         this.myPeerId = '';
+        this.coordinatorId = '';
 
         this._peerColors = [
             '#ef4444', // Vibrant Red
@@ -133,20 +134,39 @@ class NetworkManager {
                 // Formatting as XXX-XXX
                 this.roomCode = customCode.slice(0, 3) + '-' + customCode.slice(3);
                 this.hasCustomCode = true;
+
+                // Query DB to see if the custom code is already active
+                try {
+                    const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/rooms/${this.roomCode}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.peerIds && data.peerIds.length > 0) {
+                            reject(new Error('unavailable-id'));
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Network] Pre-check for room code failed:', e);
+                }
             } else {
                 this.roomCode = this._generateRoomCode();
                 this.hasCustomCode = false;
             }
             
-            const peerId = this._roomCodeToPeerId(this.roomCode);
+            // Random host peer ID to avoid collision
+            const peerId = this._roomCodeToPeerId(this.roomCode) + '-peer-' + Math.random().toString(36).substr(2, 6);
+            this.coordinatorId = peerId;
 
             const peerConfig = await this._getPeerConfig();
             this.peer = new Peer(peerId, peerConfig);
 
-            this.peer.on('open', (id) => {
+            this.peer.on('open', async (id) => {
                 this.myPeerId = id;
                 console.log('[Network] Room created:', this.roomCode, 'PeerId:', id);
                 this.onReady();
+
+                // Save initial peer ID to database
+                await this._syncRoomWithDb([this.myPeerId]);
 
                 // Host listens for incoming connections
                 this.peer.on('connection', (conn) => {
@@ -194,60 +214,81 @@ class NetworkManager {
             this.myColor = this._nextColor();
             this.roomCode = roomCode.toUpperCase();
 
-            const hostPeerId = this._roomCodeToPeerId(this.roomCode);
-            const myPeerId = hostPeerId + '-' + Math.random().toString(36).substr(2, 6);
+            try {
+                // 1. Query DB to see active peer IDs in this room
+                const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/rooms/${this.roomCode}`);
+                if (!response.ok) throw new Error('Failed to query room DB');
+                
+                const data = await response.json();
+                const peerIds = data.peerIds || [];
+                
+                if (peerIds.length === 0) {
+                    reject(new Error('peer-unavailable'));
+                    return;
+                }
 
-            const peerConfig = await this._getPeerConfig();
-            this.peer = new Peer(myPeerId, peerConfig);
+                // Connect to the oldest active peer (the current coordinator/host)
+                const hostPeerId = peerIds[0];
+                this.coordinatorId = hostPeerId;
 
-            this.peer.on('open', (id) => {
-                this.myPeerId = id;
-                console.log('[Network] My PeerId:', id, '→ connecting to host:', hostPeerId);
+                const myPeerId = this._roomCodeToPeerId(this.roomCode) + '-peer-' + Math.random().toString(36).substr(2, 6);
+                const peerConfig = await this._getPeerConfig();
+                
+                this.peer = new Peer(myPeerId, peerConfig);
 
-                const conn = this.peer.connect(hostPeerId, {
-                    reliable: true,
-                    metadata: { nickname: this.nickname, color: this.myColor }
-                });
+                this.peer.on('open', (id) => {
+                    this.myPeerId = id;
+                    console.log('[Network] My PeerId:', id, '→ connecting to host:', hostPeerId);
 
-                conn.on('open', () => {
-                    console.log('[Network] Connected to host');
-                    this.connections.set(hostPeerId, {
-                        conn,
-                        nickname: 'Host',
-                        color: '#ffffff'
+                    const conn = this.peer.connect(hostPeerId, {
+                        reliable: true,
+                        metadata: { nickname: this.nickname, color: this.myColor }
                     });
 
-                    this._setupDataHandler(conn, hostPeerId);
+                    conn.on('open', () => {
+                        console.log('[Network] Connected to host');
+                        this.connections.set(hostPeerId, {
+                            conn,
+                            nickname: 'Host',
+                            color: '#ffffff'
+                        });
 
-                    // Send join info to host
-                    conn.send({
-                        type: 'join',
-                        nickname: this.nickname,
-                        color: this.myColor,
-                        peerId: this.myPeerId
+                        this._setupDataHandler(conn, hostPeerId);
+
+                        // Send join info to host
+                        conn.send({
+                            type: 'join',
+                            nickname: this.nickname,
+                            color: this.myColor,
+                            peerId: this.myPeerId
+                        });
+
+                        // Request full state
+                        conn.send({ type: 'state-request' });
+
+                        this.onReady();
+                        resolve();
                     });
 
-                    // Request full state
-                    conn.send({ type: 'state-request' });
-
-                    this.onReady();
-                    resolve();
+                    conn.on('error', (err) => {
+                        console.error('[Network] Connection error to host:', err);
+                        // Try connection recovery / migration immediately
+                        this._handleHostMigration().then(() => resolve()).catch(reject);
+                    });
                 });
 
-                conn.on('error', (err) => {
-                    console.error('[Network] Connection error:', err);
-                    this.onError('연결 실패: ' + err.message);
+                this.peer.on('error', (err) => {
+                    console.error('[Network] Peer error:', err);
+                    this.onError(err.type === 'peer-unavailable'
+                        ? '방을 찾을 수 없습니다. 코드를 확인해주세요.'
+                        : '연결 오류가 발생했습니다.');
                     reject(err);
                 });
-            });
 
-            this.peer.on('error', (err) => {
-                console.error('[Network] Peer error:', err);
-                this.onError(err.type === 'peer-unavailable'
-                    ? '방을 찾을 수 없습니다. 코드를 확인해주세요.'
-                    : '연결 오류가 발생했습니다.');
-                reject(err);
-            });
+            } catch (e) {
+                console.error('[Network] Join failed:', e);
+                reject(new Error('peer-unavailable'));
+            }
         });
     }
 
@@ -266,6 +307,11 @@ class NetworkManager {
             this._setupDataHandler(conn, peerId);
 
             console.log('[Network] Peer connected:', nickname);
+
+            // Sync database when guest joins
+            if (this.isHost) {
+                this._syncRoomWithDb(this.getActivePeerIds());
+            }
         });
 
         conn.on('close', () => {
@@ -314,9 +360,16 @@ class NetworkManager {
             this.connections.delete(peerId);
             this.onPeerLeave(peerId, peer.nickname);
 
-            // If host, notify others
+            // If host, notify others and sync DB
             if (this.isHost) {
                 this._broadcast({ type: 'user-left', peerId, nickname: peer.nickname }, peerId);
+                this._syncRoomWithDb(this.getActivePeerIds());
+            } else {
+                // If guest, and host left, trigger migration
+                if (peerId === this.coordinatorId) {
+                    console.log('[Network] Coordinator left, starting host migration...');
+                    this._handleHostMigration();
+                }
             }
         }
     }
@@ -883,8 +936,123 @@ class NetworkManager {
     }
 
     getHostPeerId() {
-        if (this.isHost) return this.myPeerId;
-        return this.roomCode ? this._roomCodeToPeerId(this.roomCode) : null;
+        return this.coordinatorId || null;
+    }
+
+    /* ---------- Database Synchronizer & Peer Recovery ---------- */
+
+    async _syncRoomWithDb(peerIds) {
+        try {
+            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/rooms/${this.roomCode}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ peerIds })
+            });
+            if (!response.ok) {
+                console.warn('[Network] Failed to sync room peer IDs to D1 database');
+            }
+        } catch (e) {
+            console.error('[Network] Database sync request failed:', e);
+        }
+    }
+
+    getActivePeerIds() {
+        const ids = [this.myPeerId];
+        this.connections.forEach((info, pid) => {
+            ids.push(pid);
+        });
+        return ids;
+    }
+
+    async _handleHostMigration() {
+        try {
+            console.log('[Network] Querying database for remaining active peers...');
+            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/rooms/${this.roomCode}`);
+            if (!response.ok) throw new Error('Database query error');
+
+            const data = await response.json();
+            let peerIds = data.peerIds || [];
+
+            // Filter out the dead coordinator
+            peerIds = peerIds.filter(id => id !== this.coordinatorId);
+
+            if (peerIds.length === 0) {
+                console.log('[Network] No peers left in room. Staying as idle client.');
+                return;
+            }
+
+            const nextCoordinatorId = peerIds[0];
+
+            if (nextCoordinatorId === this.myPeerId) {
+                // I am the new Host!
+                console.log('[Network] I am the oldest remaining peer. Promoting to Host/Coordinator.');
+                this.isHost = true;
+                this.coordinatorId = this.myPeerId;
+                this.connections.clear();
+
+                // Re-bind connection handler for incoming guests
+                this.peer.on('connection', (conn) => {
+                    this._handleIncomingConnection(conn);
+                });
+
+                // Sync new state to DB
+                await this._syncRoomWithDb(this.getActivePeerIds());
+
+                // Trigger self onPeerJoin update to notify UI of promotion
+                this.onPeerJoin(this.myPeerId, this.nickname, this.myColor, false);
+                
+                // Show notification in studio
+                if (typeof showToast === 'function') {
+                    showToast('👑 내가 방장이 되었습니다! 방이 유지됩니다.');
+                }
+            } else {
+                // Connect to the new Host
+                console.log('[Network] Promoting peer ' + nextCoordinatorId + ' to Host. Connecting...');
+                this.coordinatorId = nextCoordinatorId;
+                this.connections.clear();
+
+                this._connectToCoordinator(nextCoordinatorId);
+            }
+        } catch (e) {
+            console.error('[Network] Host migration failed:', e);
+        }
+    }
+
+    _connectToCoordinator(coordinatorId) {
+        const conn = this.peer.connect(coordinatorId, {
+            reliable: true,
+            metadata: { nickname: this.nickname, color: this.myColor }
+        });
+
+        conn.on('open', () => {
+            console.log('[Network] Reconnected to the new Host:', coordinatorId);
+            this.connections.set(coordinatorId, {
+                conn,
+                nickname: 'Host',
+                color: '#ffffff'
+            });
+
+            this._setupDataHandler(conn, coordinatorId);
+
+            // Notify new host of our details
+            conn.send({
+                type: 'join',
+                nickname: this.nickname,
+                color: this.myColor,
+                peerId: this.myPeerId
+            });
+
+            // Request state-request to sync canvas
+            conn.send({ type: 'state-request' });
+        });
+
+        conn.on('error', (err) => {
+            console.error('[Network] Failed to connect to the new Host:', err);
+            // Retrying migration to find next host candidate
+            setTimeout(() => {
+                this._handleHostMigration();
+            }, 1000);
+        });
     }
 
     /* ---------- Getters ---------- */
