@@ -3676,10 +3676,79 @@
 
         sudokuState.status = 'finished';
 
-        showSudokuSubView('result');
-
         const isSpeedMode = sudokuState.gameMode === 'speed';
 
+        // Set up in-game overlay texts
+        let overlayBadgeValue = '🏆';
+        let overlayTitleValue = '승리!';
+        let overlayTitleClass = 'win';
+        let overlaySubtitleValue = '축하합니다! 완벽한 마무리입니다.';
+
+        if (isSpeedMode) {
+            if (reason === 'me_fail') {
+                overlayBadgeValue = '💀';
+                overlayTitleValue = '도전 실패';
+                overlayTitleClass = 'lose';
+                overlaySubtitleValue = '내가 3회 실수하여 패배했습니다.';
+            } else if (reason === 'peer_fail') {
+                overlayBadgeValue = '🏆';
+                overlayTitleValue = '기권 승리!';
+                overlayTitleClass = 'win';
+                overlaySubtitleValue = '상대방이 3회 실수로 탈락하여 승리했습니다!';
+            } else if (isWin) {
+                overlayBadgeValue = '🏆';
+                overlayTitleValue = '레이스 승리!';
+                overlayTitleClass = 'win';
+                overlaySubtitleValue = '상대방보다 먼저 완성하여 승리했습니다!';
+            } else {
+                overlayBadgeValue = '💀';
+                overlayTitleValue = '패배';
+                overlayTitleClass = 'lose';
+                overlaySubtitleValue = '상대방이 먼저 완성하여 패배했습니다.';
+            }
+        } else {
+            if (isWin) {
+                overlayBadgeValue = '🏆';
+                overlayTitleValue = '도전 성공!';
+                overlayTitleClass = 'win';
+                overlaySubtitleValue = '스도쿠를 성공적으로 완성했습니다!';
+            } else {
+                overlayBadgeValue = '💀';
+                overlayTitleValue = '도전 실패';
+                overlayTitleClass = 'lose';
+                overlaySubtitleValue = '실수 3회를 모두 기록하여 패배했습니다.';
+            }
+        }
+
+        // Apply to overlay
+        const overlay = document.getElementById('sudokuGameOverlay');
+        const badge = document.getElementById('sudokuOverlayBadge');
+        const title = document.getElementById('sudokuOverlayTitle');
+        const subtitle = document.getElementById('sudokuOverlaySubtitle');
+
+        if (badge) badge.textContent = overlayBadgeValue;
+        if (title) {
+            title.textContent = overlayTitleValue;
+            title.className = `sudoku-game-overlay-title ${overlayTitleClass}`;
+        }
+        if (subtitle) subtitle.textContent = overlaySubtitleValue;
+
+        // Show overlay
+        if (overlay) {
+            overlay.classList.add('active');
+            
+            // Win: Confetti / Lose: Screen Shake
+            if (overlayTitleClass === 'win') {
+                triggerSudokuConfetti(overlay);
+            } else {
+                $sudokuGame.classList.add('sudoku-shake');
+                setTimeout(() => {
+                    $sudokuGame.classList.remove('sudoku-shake');
+                }, 600);
+            }
+        }
+
+        // Set up results text for the final screen
         if (isSpeedMode) {
             if (reason === 'me_fail') {
                 $sudokuResultTitle.textContent = '💀 도전 실패 💀';
@@ -3710,7 +3779,87 @@
             }
         }
 
-        renderSudokuFinalLeaderboard();
+        // Wait 3 seconds, then transition to result screen
+        setTimeout(() => {
+            if (overlay) {
+                overlay.classList.remove('active');
+            }
+            
+            showSudokuSubView('result');
+            updateSudokuStatistics(isWin, reason);
+            renderSudokuFinalLeaderboard();
+        }, 3000);
+    }
+
+    function triggerSudokuConfetti(container) {
+        if (!container) return;
+        const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+        for (let i = 0; i < 80; i++) {
+            const confetti = document.createElement('div');
+            confetti.className = 'sudoku-confetti';
+            
+            const sizeWidth = Math.random() * 6 + 4;
+            const sizeHeight = Math.random() * 10 + 6;
+            confetti.style.width = `${sizeWidth}px`;
+            confetti.style.height = `${sizeHeight}px`;
+            confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            confetti.style.left = `${Math.random() * 100}%`;
+            confetti.style.top = `${Math.random() * 20}%`;
+            confetti.style.opacity = String(Math.random());
+            
+            confetti.style.setProperty('--dx', `${(Math.random() - 0.5) * 200}px`);
+            confetti.style.animationDelay = `${Math.random() * 1.5}s`;
+            confetti.style.animationDuration = `${Math.random() * 2 + 1.5}s`;
+            
+            container.appendChild(confetti);
+            
+            setTimeout(() => confetti.remove(), 4000);
+        }
+    }
+
+    function updateSudokuStatistics(isWin, reason) {
+        const isSpeedMode = sudokuState.gameMode === 'speed';
+        const myMistakes = isSpeedMode ? sudokuState.myMistakes : sudokuState.mistakes;
+
+        const minutes = Math.floor(sudokuState.gameSecondsElapsed / 60);
+        const seconds = sudokuState.gameSecondsElapsed % 60;
+        const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+        const mistakesStr = `${myMistakes} / 3`;
+
+        const me = sudokuState.players.find(p => p.peerId === network.myPeerId) || sudokuState.participants.find(p => p.peerId === network.myPeerId);
+        const correctCount = me ? me.correctCount : 0;
+        const totalAttempts = correctCount + myMistakes;
+        const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : (isWin ? 100 : 0);
+        const accuracyStr = `${accuracy}%`;
+
+        let baseScore = isWin ? 5000 : 0;
+        let timeBonus = 0;
+        
+        if (isWin) {
+            let targetTime = 600;
+            const diff = (sudokuState.difficulty || 'medium').toLowerCase();
+            if (diff === 'easy') targetTime = 300;
+            else if (diff === 'medium') targetTime = 600;
+            else if (diff === 'hard') targetTime = 900;
+            else if (diff === 'expert') targetTime = 1200;
+            
+            timeBonus = Math.max(0, (targetTime - sudokuState.gameSecondsElapsed) * 10);
+        }
+
+        const accuracyBonus = isWin ? Math.round(accuracy * 20) : 0;
+        const mistakePenalty = myMistakes * -500;
+        const finalScore = Math.max(0, baseScore + timeBonus + accuracyBonus + mistakePenalty);
+
+        const $timeVal = document.getElementById('sudokuStatTime');
+        const $mistakesVal = document.getElementById('sudokuStatMistakes');
+        const $accuracyVal = document.getElementById('sudokuStatAccuracy');
+        const $scoreVal = document.getElementById('sudokuStatScore');
+
+        if ($timeVal) $timeVal.textContent = timeStr;
+        if ($mistakesVal) $mistakesVal.textContent = mistakesStr;
+        if ($accuracyVal) $accuracyVal.textContent = accuracyStr;
+        if ($scoreVal) $scoreVal.textContent = `${finalScore.toLocaleString()}점`;
     }
 
     function updateSudokuMistakesDisplay() {

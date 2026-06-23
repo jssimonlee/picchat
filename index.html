@@ -397,6 +397,15 @@
 
             <!-- Sudoku Game Playing -->
             <div id="sudokuGame" class="sudoku-view" hidden>
+                <!-- Game result overlay (for dramatic transitions) -->
+                <div id="sudokuGameOverlay" class="sudoku-game-overlay">
+                    <div class="sudoku-game-overlay-card">
+                        <div id="sudokuOverlayBadge" class="sudoku-game-overlay-badge">🏆</div>
+                        <div id="sudokuOverlayTitle" class="sudoku-game-overlay-title win">승리!</div>
+                        <div id="sudokuOverlaySubtitle" class="sudoku-game-overlay-subtitle">잠시 후 결과창으로 이동합니다...</div>
+                    </div>
+                </div>
+
                 <div class="sudoku-game-layout">
                     <!-- Left column: Board -->
                     <div class="sudoku-game-left">
@@ -523,7 +532,33 @@
                     <span class="overlay-kicker" id="sudokuResultKicker">게임 결과</span>
                     <h2 id="sudokuResultTitle">도전 성공!</h2>
                     <p id="sudokuResultMsg">실수 없이 퍼즐을 완성했습니다.</p>
-                    
+
+                    <!-- Sudoku Game Statistics & Score Dashboard -->
+                    <div id="sudokuResultStats" class="sudoku-stats-dashboard" style="margin: 15px 0 20px 0;">
+                        <div class="sudoku-stats-grid">
+                            <div class="sudoku-stat-card">
+                                <span class="stat-icon">⏱️</span>
+                                <span class="stat-label">소요 시간</span>
+                                <span class="stat-value" id="sudokuStatTime">00:00</span>
+                            </div>
+                            <div class="sudoku-stat-card">
+                                <span class="stat-icon">❌</span>
+                                <span class="stat-label">실수 횟수</span>
+                                <span class="stat-value" id="sudokuStatMistakes">0/3</span>
+                            </div>
+                            <div class="sudoku-stat-card">
+                                <span class="stat-icon">🎯</span>
+                                <span class="stat-label">정확도</span>
+                                <span class="stat-value" id="sudokuStatAccuracy">0%</span>
+                            </div>
+                            <div class="sudoku-stat-card highlight">
+                                <span class="stat-icon">✨</span>
+                                <span class="stat-label">최종 점수</span>
+                                <span class="stat-value" id="sudokuStatScore">0점</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="sudoku-final-leaderboard">
                         <h3>🏆 최종 순위표 (평균 입력 속도)</h3>
                         <div class="sudoku-leaderboard-list" id="sudokuFinalLeaderboardList">
