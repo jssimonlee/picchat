@@ -1558,7 +1558,10 @@
             };
 
             // Create and add image action via canvas (handles unique ID generation and network sync automatically)
-            canvas.addImageAction(activeDataUrl, canvasX, canvasY, canvasW, canvasH);
+            const createdAction = canvas.addImageAction(activeDataUrl, canvasX, canvasY, canvasW, canvasH);
+            if (createdAction && pdfInfo) {
+                pdfInfoMap.set(createdAction.id, pdfInfo);
+            }
 
             showToast('🖼️ 이미지가 캔버스에 배치되었습니다');
             $placer.remove();
@@ -1578,6 +1581,7 @@
 
     /* ---------- Placed Image & Text Modification Handles & Edit Menu ---------- */
 
+    const pdfInfoMap = new Map();
     let activeEditMenu = null;
 
     function getTextSize(text, fontSize) {
@@ -1783,6 +1787,9 @@
         // Clear active menu/placer if any
         if (activeEditMenu) activeEditMenu.remove();
 
+        let activeDataUrl = action.dataUrl;
+        const pdfInfo = pdfInfoMap.get(action.id);
+
         // 1. Hide the original action on canvas by setting canvas.editingActionId
         canvas.editingActionId = action.id;
         canvas.redrawAll();
@@ -1802,17 +1809,17 @@
         const scaleX = rect.width / canvas.CANVAS_WIDTH;
         const scaleY = rect.height / canvas.CANVAS_HEIGHT;
 
-        // Calculate dimensions
         let actionWidth, actionHeight;
         let $textDiv = null;
+        let $img = null;
 
         if (action.type === 'image') {
             actionWidth = action.width;
             actionHeight = action.height;
 
             // Add the image
-            const $img = document.createElement('img');
-            $img.src = action.dataUrl;
+            $img = document.createElement('img');
+            $img.src = activeDataUrl;
             $img.className = 'placer-img';
             $editor.appendChild($img);
         } else {
@@ -1888,6 +1895,58 @@
         const $btnCancel = document.createElement('button');
         $btnCancel.className = 'btn-placer btn-placer-cancel';
         $btnCancel.textContent = '취소';
+
+        if (action.type === 'image' && pdfInfo) {
+            const $pageControls = document.createElement('div');
+            $pageControls.className = 'placer-pdf-controls';
+            
+            const $btnPrev = document.createElement('button');
+            $btnPrev.className = 'btn-placer btn-placer-cancel';
+            $btnPrev.textContent = '◀';
+            
+            const $pageIndicator = document.createElement('span');
+            $pageIndicator.className = 'placer-pdf-page-num';
+            $pageIndicator.textContent = `${pdfInfo.currentPage} / ${pdfInfo.totalPages}`;
+            
+            const $btnNext = document.createElement('button');
+            $btnNext.className = 'btn-placer btn-placer-cancel';
+            $btnNext.textContent = '▶';
+            
+            const updateEditorPage = async (newPage) => {
+                if (newPage < 1 || newPage > pdfInfo.totalPages) return;
+                pdfInfo.currentPage = newPage;
+                $pageIndicator.textContent = `${pdfInfo.currentPage} / ${pdfInfo.totalPages}`;
+                
+                showToast(`🔄 PDF ${pdfInfo.currentPage}페이지를 렌더링 중입니다...`);
+                try {
+                    const newPng = await renderPdfPageToDataUrl(pdfInfo.pdf, pdfInfo.currentPage);
+                    activeDataUrl = newPng;
+                    if ($img) $img.src = newPng;
+                    
+                    imgAspect = $img.naturalHeight / $img.naturalWidth;
+                    const w = parseFloat(getComputedStyle($editor).width) || 400;
+                    const h = w * imgAspect;
+                    $editor.style.height = h + 'px';
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 페이지 렌더링에 실패했습니다.');
+                }
+            };
+            
+            $btnPrev.addEventListener('click', (e) => {
+                e.stopPropagation();
+                updateEditorPage(pdfInfo.currentPage - 1);
+            });
+            $btnNext.addEventListener('click', (e) => {
+                e.stopPropagation();
+                updateEditorPage(pdfInfo.currentPage + 1);
+            });
+            
+            $pageControls.appendChild($btnPrev);
+            $pageControls.appendChild($pageIndicator);
+            $pageControls.appendChild($btnNext);
+            $toolbar.appendChild($pageControls);
+        }
 
         $toolbar.appendChild($btnApply);
         if ($btnEditText) {
@@ -2041,6 +2100,9 @@
             } else {
                 action.width = editorRect.width * cScaleX;
                 action.height = editorRect.height * cScaleY;
+                if (activeDataUrl) {
+                    action.dataUrl = activeDataUrl;
+                }
             }
 
             // Commit change
