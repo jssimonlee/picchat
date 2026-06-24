@@ -1084,11 +1084,32 @@
         });
     }
 
-    async function renderPdfPageToDataUrl(arrayBuffer) {
+    function base64ToArrayBuffer(dataUrl) {
+        if (!dataUrl.startsWith('data:')) return null;
+        try {
+            const base64Data = dataUrl.split(',')[1];
+            const binString = atob(base64Data);
+            const bytes = new Uint8Array(binString.length);
+            for (let i = 0; i < binString.length; i++) {
+                bytes[i] = binString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        } catch (e) {
+            console.error('Base64 to ArrayBuffer failed', e);
+            return null;
+        }
+    }
+
+    async function renderPdfPageToDataUrl(arrayBufferOrPdf, pageNum = 1) {
         const pdfjsLib = await loadPdfJs();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1);
+        let pdf;
+        if (arrayBufferOrPdf && typeof arrayBufferOrPdf.numPages === 'number') {
+            pdf = arrayBufferOrPdf;
+        } else {
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBufferOrPdf });
+            pdf = await loadingTask.promise;
+        }
+        const page = await pdf.getPage(pageNum);
         
         const scale = 2.0;
         const viewport = page.getViewport({ scale });
@@ -1183,9 +1204,20 @@
             reader.onload = async (evt) => {
                 try {
                     const arrayBuffer = evt.target.result;
-                    const pngDataUrl = await renderPdfPageToDataUrl(arrayBuffer);
-                    startImagePlacer(pngDataUrl);
-                    showToast('📕 PDF 1페이지를 이미지로 변환하여 배치합니다.');
+                    const pdfjsLib = await loadPdfJs();
+                    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                    const pdf = await loadingTask.promise;
+                    
+                    const pdfInfo = {
+                        arrayBuffer: arrayBuffer,
+                        pdf: pdf,
+                        currentPage: 1,
+                        totalPages: pdf.numPages
+                    };
+                    
+                    const pngDataUrl = await renderPdfPageToDataUrl(pdf, 1);
+                    startImagePlacer(pngDataUrl, pdfInfo);
+                    showToast(`📕 PDF 로딩 완료 (총 ${pdf.numPages}페이지). 배치를 준비합니다.`);
                 } catch (err) {
                     console.error(err);
                     showToast('⚠️ PDF 파일 로딩에 실패했습니다.');
@@ -1250,10 +1282,12 @@
 
     /* ---------- Image Placement Layer ---------- */
 
-    function startImagePlacer(dataUrl) {
+    function startImagePlacer(dataUrl, pdfInfo = null) {
         // Remove any existing placer
         const existing = document.getElementById('imagePlacer');
         if (existing) existing.remove();
+
+        let activeDataUrl = dataUrl;
 
         // Create the placer container
         const $placer = document.createElement('div');
@@ -1278,6 +1312,54 @@
         const $toolbar = document.createElement('div');
         $toolbar.className = 'placer-toolbar';
         
+        let $pageControls = null;
+        if (pdfInfo) {
+            $pageControls = document.createElement('div');
+            $pageControls.className = 'placer-pdf-controls';
+            
+            const $btnPrev = document.createElement('button');
+            $btnPrev.className = 'btn-placer btn-placer-cancel';
+            $btnPrev.textContent = '◀';
+            
+            const $pageIndicator = document.createElement('span');
+            $pageIndicator.className = 'placer-pdf-page-num';
+            $pageIndicator.textContent = `${pdfInfo.currentPage} / ${pdfInfo.totalPages}`;
+            
+            const $btnNext = document.createElement('button');
+            $btnNext.className = 'btn-placer btn-placer-cancel';
+            $btnNext.textContent = '▶';
+            
+            const updatePlacerPage = async (newPage) => {
+                if (newPage < 1 || newPage > pdfInfo.totalPages) return;
+                pdfInfo.currentPage = newPage;
+                $pageIndicator.textContent = `${pdfInfo.currentPage} / ${pdfInfo.totalPages}`;
+                
+                showToast(`🔄 PDF ${pdfInfo.currentPage}페이지를 렌더링 중입니다...`);
+                try {
+                    const newPng = await renderPdfPageToDataUrl(pdfInfo.pdf, pdfInfo.currentPage);
+                    activeDataUrl = newPng;
+                    $img.src = newPng;
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 페이지 렌더링에 실패했습니다.');
+                }
+            };
+            
+            $btnPrev.addEventListener('click', (e) => {
+                e.stopPropagation();
+                updatePlacerPage(pdfInfo.currentPage - 1);
+            });
+            $btnNext.addEventListener('click', (e) => {
+                e.stopPropagation();
+                updatePlacerPage(pdfInfo.currentPage + 1);
+            });
+            
+            $pageControls.appendChild($btnPrev);
+            $pageControls.appendChild($pageIndicator);
+            $pageControls.appendChild($btnNext);
+            $toolbar.appendChild($pageControls);
+        }
+
         const $btnApply = document.createElement('button');
         $btnApply.className = 'btn-placer btn-placer-apply';
         $btnApply.textContent = '적용';
@@ -1305,10 +1387,14 @@
 
         // Once the image is loaded, adjust height to maintain aspect ratio
         $img.onload = () => {
-            const aspect = $img.naturalHeight / $img.naturalWidth;
-            const h = 400 * aspect;
+            imgAspect = $img.naturalHeight / $img.naturalWidth;
+            const w = parseFloat(getComputedStyle($placer).width) || 400;
+            const h = w * imgAspect;
             $placer.style.height = h + 'px';
-            $placer.style.top = ((containerRect.height - h) / 2) + 'px';
+            if (!$placer.dataset.loaded) {
+                $placer.style.top = ((containerRect.height - h) / 2) + 'px';
+                $placer.dataset.loaded = 'true';
+            }
         };
 
         // Append to container
@@ -1464,7 +1550,7 @@
             // Create image action
             const action = {
                 type: 'image',
-                dataUrl: dataUrl,
+                dataUrl: activeDataUrl,
                 x: canvasX,
                 y: canvasY,
                 width: canvasW,
@@ -1472,7 +1558,7 @@
             };
 
             // Create and add image action via canvas (handles unique ID generation and network sync automatically)
-            canvas.addImageAction(dataUrl, canvasX, canvasY, canvasW, canvasH);
+            canvas.addImageAction(activeDataUrl, canvasX, canvasY, canvasW, canvasH);
 
             showToast('🖼️ 이미지가 캔버스에 배치되었습니다');
             $placer.remove();
@@ -8596,19 +8682,25 @@
                         startImagePlacer(resized);
                         showToast('🖼️ 이미지 배치를 준비합니다.');
                     } else if (isPdf) {
-                        let arrayBuffer;
-                        if (fileData.startsWith('data:')) {
-                            const base64Data = fileData.split(',')[1];
-                            const binString = atob(base64Data);
-                            arrayBuffer = new Uint8Array(binString.length);
-                            for (let i = 0; i < binString.length; i++) {
-                                arrayBuffer[i] = binString.charCodeAt(i);
-                            }
-                            arrayBuffer = arrayBuffer.buffer;
+                        const arrayBuffer = base64ToArrayBuffer(fileData);
+                        if (arrayBuffer) {
+                            const pdfjsLib = await loadPdfJs();
+                            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                            const pdf = await loadingTask.promise;
+                            
+                            const pdfInfo = {
+                                arrayBuffer: arrayBuffer,
+                                pdf: pdf,
+                                currentPage: 1,
+                                totalPages: pdf.numPages
+                            };
+                            
+                            const pngDataUrl = await renderPdfPageToDataUrl(pdf, 1);
+                            startImagePlacer(pngDataUrl, pdfInfo);
+                            showToast(`📕 PDF 로딩 완료 (총 ${pdf.numPages}페이지). 배치를 준비합니다.`);
+                        } else {
+                            showToast('⚠️ PDF 데이터를 읽는 데 실패했습니다.');
                         }
-                        const pngDataUrl = await renderPdfPageToDataUrl(arrayBuffer);
-                        startImagePlacer(pngDataUrl);
-                        showToast('📕 PDF 1페이지를 이미지로 변환하여 배치를 준비합니다.');
                     } else if (isTxt) {
                         let text = '';
                         if (fileData.startsWith('data:')) {
@@ -8703,38 +8795,98 @@
             pre.textContent = text;
             $body.appendChild(pre);
         } else if (fileType.includes('pdf')) {
-            let objectUrl = fileData;
-            if (fileData.startsWith('data:')) {
-                try {
-                    const arr = fileData.split(',');
-                    const mime = arr[0].match(/:(.*?);/)[1];
-                    const bstr = atob(arr[1]);
-                    let n = bstr.length;
-                    const u8arr = new Uint8Array(n);
-                    while (n--) {
-                        u8arr[n] = bstr.charCodeAt(n);
-                    }
-                    const blob = new Blob([u8arr], { type: mime });
-                    objectUrl = URL.createObjectURL(blob);
-                } catch (e) {
-                    console.error('Blob conversion failed, using direct dataUrl', e);
-                }
+            const arrayBuffer = base64ToArrayBuffer(fileData);
+            if (!arrayBuffer) {
+                $body.textContent = 'PDF 데이터를 불러올 수 없습니다.';
+                return;
             }
-
-            const embed = document.createElement('embed');
-            embed.src = objectUrl;
-            embed.type = 'application/pdf';
-            embed.className = 'preview-pdf-embed';
-            $body.appendChild(embed);
             
-            const newTabLink = document.createElement('a');
-            newTabLink.href = objectUrl;
-            newTabLink.target = '_blank';
-            newTabLink.className = 'btn btn-secondary';
-            newTabLink.style.marginTop = '10px';
-            newTabLink.style.display = 'inline-block';
-            newTabLink.textContent = '↗️ 새 창에서 PDF 보기';
-            $body.appendChild(newTabLink);
+            showToast('🔄 PDF를 로딩 중입니다...');
+            
+            // Create UI elements first
+            const $pdfContainer = document.createElement('div');
+            $pdfContainer.className = 'preview-pdf-container';
+            
+            const $controls = document.createElement('div');
+            $controls.className = 'pdf-preview-controls';
+            
+            const $btnPrev = document.createElement('button');
+            $btnPrev.className = 'btn btn-secondary';
+            $btnPrev.textContent = '◀ 이전';
+            $btnPrev.style.fontSize = '12px';
+            $btnPrev.style.padding = '6px 12px';
+            
+            const $pageIndicator = document.createElement('span');
+            $pageIndicator.className = 'pdf-preview-page-indicator';
+            $pageIndicator.textContent = 'Page: -- / --';
+            
+            const $btnNext = document.createElement('button');
+            $btnNext.className = 'btn btn-secondary';
+            $btnNext.textContent = '다음 ▶';
+            $btnNext.style.fontSize = '12px';
+            $btnNext.style.padding = '6px 12px';
+            
+            $controls.appendChild($btnPrev);
+            $controls.appendChild($pageIndicator);
+            $controls.appendChild($btnNext);
+            
+            const $imgWrapper = document.createElement('div');
+            $imgWrapper.className = 'pdf-preview-img-wrapper';
+            
+            const $img = document.createElement('img');
+            $imgWrapper.appendChild($img);
+            
+            $pdfContainer.appendChild($controls);
+            $pdfContainer.appendChild($imgWrapper);
+            
+            $body.appendChild($pdfContainer);
+
+            // Asynchronously load the PDF document and render it
+            (async () => {
+                try {
+                    const pdfjsLib = await loadPdfJs();
+                    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                    const pdf = await loadingTask.promise;
+                    const totalPages = pdf.numPages;
+                    let currentPage = 1;
+                    
+                    const renderPage = async (pageNo) => {
+                        if (pageNo < 1 || pageNo > totalPages) return;
+                        currentPage = pageNo;
+                        $pageIndicator.textContent = `Page: ${currentPage} / ${totalPages}`;
+                        
+                        try {
+                            const pngData = await renderPdfPageToDataUrl(pdf, currentPage);
+                            $img.src = pngData;
+                        } catch (e) {
+                            console.error(e);
+                            showToast('⚠️ 페이지를 렌더링하지 못했습니다.');
+                        }
+                    };
+                    
+                    $btnPrev.addEventListener('click', () => renderPage(currentPage - 1));
+                    $btnNext.addEventListener('click', () => renderPage(currentPage + 1));
+                    
+                    // Add external new-tab view link
+                    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+                    const objectUrl = URL.createObjectURL(blob);
+                    
+                    const newTabLink = document.createElement('a');
+                    newTabLink.href = objectUrl;
+                    newTabLink.target = '_blank';
+                    newTabLink.className = 'btn btn-secondary';
+                    newTabLink.style.marginTop = '10px';
+                    newTabLink.style.display = 'inline-block';
+                    newTabLink.textContent = '↗️ 새 창에서 원본 PDF 보기';
+                    $pdfContainer.appendChild(newTabLink);
+
+                    // Render the first page initially
+                    await renderPage(1);
+                } catch (err) {
+                    console.error(err);
+                    $body.textContent = 'PDF를 로딩하는 중 오류가 발생했습니다.';
+                }
+            })();
         }
     }
 

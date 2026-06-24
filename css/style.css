@@ -1386,6 +1386,67 @@ input, button, textarea {
     background: rgba(255, 255, 255, 0.2);
 }
 
+.placer-pdf-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    padding-right: 8px;
+}
+.placer-pdf-page-num {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
+    min-width: 50px;
+    text-align: center;
+    user-select: none;
+}
+
+.preview-pdf-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+.pdf-preview-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+}
+.pdf-preview-page-indicator {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f1f1;
+    min-width: 80px;
+    text-align: center;
+}
+.pdf-preview-img-wrapper {
+    width: 100%;
+    max-height: 60vh;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px;
+}
+.pdf-preview-img-wrapper img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+
 /* ========== PLACED IMAGE HANDLES & EDIT MENU ========== */
 .image-handle-el {
     position: absolute;
