@@ -8572,12 +8572,74 @@
             });
         }
 
+        let placeOnCanvasBtn = null;
+        const isImage = fileType.startsWith('image/');
+        const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
+        const isTxt = fileType.startsWith('text/') || fileName.endsWith('.txt');
+
+        if (isImage || isPdf || isTxt) {
+            placeOnCanvasBtn = document.createElement('button');
+            placeOnCanvasBtn.className = 'btn btn-secondary';
+            placeOnCanvasBtn.style.padding = '6px 12px';
+            placeOnCanvasBtn.style.fontSize = '12px';
+            placeOnCanvasBtn.style.width = 'auto';
+            placeOnCanvasBtn.style.display = 'inline-flex';
+            placeOnCanvasBtn.style.alignItems = 'center';
+            placeOnCanvasBtn.style.gap = '4px';
+            placeOnCanvasBtn.innerHTML = `📌 캔버스에 배치`;
+
+            placeOnCanvasBtn.addEventListener('click', async () => {
+                try {
+                    showToast('🔄 캔버스 배치를 위해 파일을 처리 중입니다...');
+                    if (isImage) {
+                        const resized = await resizeImageDataUrl(fileData, 1920, 1080);
+                        startImagePlacer(resized);
+                        showToast('🖼️ 이미지 배치를 준비합니다.');
+                    } else if (isPdf) {
+                        let arrayBuffer;
+                        if (fileData.startsWith('data:')) {
+                            const base64Data = fileData.split(',')[1];
+                            const binString = atob(base64Data);
+                            arrayBuffer = new Uint8Array(binString.length);
+                            for (let i = 0; i < binString.length; i++) {
+                                arrayBuffer[i] = binString.charCodeAt(i);
+                            }
+                            arrayBuffer = arrayBuffer.buffer;
+                        }
+                        const pngDataUrl = await renderPdfPageToDataUrl(arrayBuffer);
+                        startImagePlacer(pngDataUrl);
+                        showToast('📕 PDF 1페이지를 이미지로 변환하여 배치를 준비합니다.');
+                    } else if (isTxt) {
+                        let text = '';
+                        if (fileData.startsWith('data:')) {
+                            const base64Data = fileData.split(',')[1];
+                            const binString = atob(base64Data);
+                            const bytes = new Uint8Array(binString.length);
+                            for (let i = 0; i < binString.length; i++) {
+                                bytes[i] = binString.charCodeAt(i);
+                            }
+                            text = new TextDecoder('utf-8').decode(bytes);
+                        } else {
+                            text = fileData;
+                        }
+                        const pngDataUrl = textToDataUrl(text, '#1e293b');
+                        startImagePlacer(pngDataUrl);
+                        showToast('📄 텍스트 파일을 노트 카드로 변환하여 배치를 준비합니다.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 캔버스 배치 중 에러가 발생했습니다.');
+                }
+            });
+        }
+
         const btnRow = document.createElement('div');
         btnRow.style.display = 'flex';
         btnRow.style.gap = '8px';
         btnRow.style.marginTop = '6px';
         btnRow.style.justifyContent = 'flex-end';
 
+        if (placeOnCanvasBtn) btnRow.appendChild(placeOnCanvasBtn);
         if (previewBtn) btnRow.appendChild(previewBtn);
         btnRow.appendChild(downloadBtn);
         
