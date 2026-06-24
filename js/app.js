@@ -1128,6 +1128,345 @@
         return canvas.toDataURL('image/png');
     }
 
+    function loadMarkedJs() {
+        return new Promise((resolve, reject) => {
+            if (window.marked) {
+                resolve(window.marked);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js';
+            script.onload = () => resolve(window.marked);
+            script.onerror = () => reject(new Error('marked.js 로딩에 실패했습니다.'));
+            document.head.appendChild(script);
+        });
+    }
+
+    function loadPrismJs() {
+        return new Promise((resolve, reject) => {
+            if (window.Prism) {
+                resolve(window.Prism);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js';
+            script.onload = () => resolve(window.Prism);
+            script.onerror = () => reject(new Error('Prism.js 로딩에 실패했습니다.'));
+            document.head.appendChild(script);
+        });
+    }
+
+    async function loadPrismLanguage(lang) {
+        const prism = await loadPrismJs();
+        if (prism.languages[lang]) return prism;
+        
+        const aliases = {
+            js: 'javascript',
+            ts: 'typescript',
+            jsx: 'jsx',
+            tsx: 'tsx',
+            py: 'python',
+            rb: 'ruby',
+            cs: 'csharp',
+            cpp: 'cpp',
+            go: 'go',
+            rs: 'rust',
+            yml: 'yaml',
+            yaml: 'yaml',
+            sh: 'bash',
+            bash: 'bash',
+            json: 'json',
+            sql: 'sql',
+            html: 'markup',
+            css: 'css',
+            xml: 'markup'
+        };
+        const targetLang = aliases[lang] || lang;
+        if (prism.languages[targetLang]) return prism;
+
+        return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-${targetLang}.min.js`;
+            script.onload = () => resolve(window.Prism);
+            script.onerror = () => {
+                console.warn(`Prism language component for ${targetLang} failed to load, fallback to plain text`);
+                resolve(window.Prism);
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    function getFileExtension(fileName) {
+        return fileName.split('.').pop().toLowerCase();
+    }
+
+    const codeExtensions = new Set([
+        'js', 'jsx', 'ts', 'tsx', 'py', 'java', 'cpp', 'c', 'h', 'hpp', 
+        'cs', 'go', 'rb', 'php', 'swift', 'kt', 'rs', 'html', 'css', 
+        'sh', 'json', 'yml', 'yaml', 'sql', 'xml'
+    ]);
+
+    function isCodeFile(fileName) {
+        return codeExtensions.has(getFileExtension(fileName));
+    }
+
+    function htmlToImageSvg(height, width, css, htmlContent) {
+        const svgString = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+                <foreignObject width="100%" height="100%">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="margin: 0; padding: 0;">
+                        <style>
+                            ${css}
+                        </style>
+                        ${htmlContent}
+                    </div>
+                </foreignObject>
+            </svg>
+        `;
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString.trim());
+    }
+
+    async function codeToDataUrl(code, ext) {
+        const prism = await loadPrismLanguage(ext);
+        
+        const aliases = {
+            js: 'javascript',
+            ts: 'typescript',
+            jsx: 'jsx',
+            tsx: 'tsx',
+            py: 'python',
+            rb: 'ruby',
+            cs: 'csharp',
+            cpp: 'cpp',
+            go: 'go',
+            rs: 'rust',
+            yml: 'yaml',
+            yaml: 'yaml',
+            sh: 'bash',
+            bash: 'bash',
+            json: 'json',
+            sql: 'sql',
+            html: 'markup',
+            css: 'css',
+            xml: 'markup'
+        };
+        const targetLang = aliases[ext] || ext;
+        const grammar = prism.languages[targetLang] || prism.languages.clike || prism.languages.javascript;
+        
+        // Escape HTML tags in source code so it renders correctly in Prism
+        const element = document.createElement('div');
+        element.innerText = code;
+        const escapedRaw = element.innerHTML;
+        
+        const highlightedHtml = prism.highlight(code, grammar, targetLang);
+        
+        const themeCss = `
+            .code-card {
+                box-sizing: border-box;
+                width: 800px;
+                padding: 24px;
+                background: #272822;
+                color: #f8f8f2;
+                font-family: 'Consolas', 'Monaco', 'Andale Mono', 'Ubuntu Mono', monospace;
+                font-size: 14px;
+                line-height: 1.5;
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            }
+            .code-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .dot {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+            }
+            .dot.red { background: #ff5f56; }
+            .dot.yellow { background: #ffbd2e; }
+            .dot.green { background: #27c93f; }
+            .code-title {
+                margin-left: 8px;
+                font-size: 13px;
+                color: #a6e22e;
+                font-weight: bold;
+            }
+            pre {
+                margin: 0;
+                white-space: pre-wrap;
+                word-break: break-all;
+            }
+            .token.comment, .token.prolog, .token.doctype, .token.cdata { color: #8292a2; }
+            .token.punctuation { color: #f8f8f2; }
+            .token.namespace { opacity: .7; }
+            .token.property, .token.tag, .token.constant, .token.symbol, .token.deleted { color: #f92672; }
+            .token.boolean, .token.number { color: #ae81ff; }
+            .token.selector, .token.attr-name, .token.string, .token.char, .token.inserted { color: #a6e22e; }
+            .token.operator, .token.entity, .token.url, .language-css .token.string, .style .token.string { color: #f8f8f2; }
+            .token.atrule, .token.attr-value, .token.function, .token.class-name { color: #e6db74; }
+            .token.keyword { color: #66d9ef; }
+            .token.regex, .token.important, .token.variable { color: #fd971f; }
+        `;
+
+        const linesCount = code.split('\n').length;
+        const estimatedHeight = Math.max(150, 70 + linesCount * 21);
+        
+        return htmlToImageSvg(estimatedHeight, 800, themeCss, `
+            <div class="code-card">
+                <div class="code-header">
+                    <div class="dot red"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                    <span class="code-title">${targetLang.toUpperCase()} CODE</span>
+                </div>
+                <pre><code>${highlightedHtml}</code></pre>
+            </div>
+        `);
+    }
+
+    async function markdownToDataUrl(mdText) {
+        const marked = await loadMarkedJs();
+        const parsedHtml = marked.parse(mdText);
+        
+        const css = `
+            .md-card {
+                box-sizing: border-box;
+                width: 700px;
+                padding: 32px;
+                background: #ffffff;
+                color: #24292f;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                font-size: 15px;
+                line-height: 1.6;
+                border-radius: 12px;
+                border: 1px solid #d0d7de;
+                box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+            }
+            .md-card h1 { font-size: 24px; border-bottom: 1px solid #d8dee4; padding-bottom: 8px; margin-top: 0; margin-bottom: 16px; color: #1f2328; }
+            .md-card h2 { font-size: 20px; border-bottom: 1px solid #d8dee4; padding-bottom: 6px; margin-top: 24px; margin-bottom: 12px; color: #1f2328; }
+            .md-card h3 { font-size: 17px; margin-top: 20px; margin-bottom: 8px; color: #1f2328; }
+            .md-card p { margin-top: 0; margin-bottom: 16px; }
+            .md-card ul, .md-card ol { padding-left: 20px; margin-top: 0; margin-bottom: 16px; }
+            .md-card li { margin-bottom: 4px; }
+            .md-card code { padding: 2px 6px; font-size: 85%; background-color: rgba(175,184,193,0.2); border-radius: 6px; font-family: monospace; }
+            .md-card pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; background-color: #f6f8fa; border-radius: 6px; margin-bottom: 16px; }
+            .md-card pre code { background: none; padding: 0; font-size: 100%; }
+            .md-card blockquote { padding: 0 1em; color: #57606a; border-left: .25em solid #d0d7de; margin: 0 0 16px 0; }
+            .md-card strong { font-weight: 600; }
+            .md-card hr { height: .25em; padding: 0; margin: 24px 0; background-color: #d8dee4; border: 0; }
+        `;
+        
+        const linesCount = mdText.split('\n').length;
+        const estimatedHeight = Math.max(200, 80 + Math.ceil(mdText.length / 3.5) * 20 + linesCount * 12);
+
+        return htmlToImageSvg(estimatedHeight, 700, css, `
+            <div class="md-card">
+                ${parsedHtml}
+            </div>
+        `);
+    }
+
+    function csvToDataUrl(csvText) {
+        const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        if (lines.length === 0) return textToDataUrl('빈 CSV 파일입니다.', '#1e293b');
+        
+        const rows = lines.map(line => {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"' || char === "'") {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        });
+
+        const tableHeader = rows[0].map(cell => `<th>${cell}</th>`).join('');
+        const tableBody = rows.slice(1).map(row => {
+            const cells = row.map(cell => `<td>${cell}</td>`).join('');
+            return `<tr>${cells}</tr>`;
+        }).join('');
+
+        const css = `
+            .csv-card {
+                box-sizing: border-box;
+                width: 750px;
+                padding: 24px;
+                background: #ffffff;
+                border-radius: 12px;
+                border: 1px solid #e2e8f0;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+                font-family: 'Inter', sans-serif;
+            }
+            .csv-title {
+                font-size: 13px;
+                font-weight: bold;
+                color: #64748b;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 12px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+                text-align: left;
+            }
+            th {
+                background: #f1f5f9;
+                color: #334155;
+                font-weight: 600;
+                padding: 10px 12px;
+                border-bottom: 2px solid #cbd5e1;
+            }
+            td {
+                padding: 10px 12px;
+                border-bottom: 1px solid #e2e8f0;
+                color: #475569;
+            }
+            tr:nth-child(even) {
+                background: #f8fafc;
+            }
+            tr:hover {
+                background: #f1f5f9;
+            }
+        `;
+
+        const estimatedHeight = Math.max(120, 80 + rows.length * 39);
+
+        return htmlToImageSvg(estimatedHeight, 750, css, `
+            <div class="csv-card">
+                <div class="csv-title">
+                    📊 DATA SHEET (${rows.length - 1} rows)
+                </div>
+                <table>
+                    <thead>
+                        <tr>${tableHeader}</tr>
+                    </thead>
+                    <tbody>
+                        ${tableBody}
+                    </tbody>
+                </table>
+            </div>
+        `);
+    }
+
     function textToDataUrl(text, color) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -1188,6 +1527,9 @@
         const resetInput = () => { e.target.value = ''; };
 
         const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+        const isMd = file.name.endsWith('.md') || file.name.endsWith('.markdown');
+        const isCsv = file.name.endsWith('.csv');
+        const isCode = isCodeFile(file.name);
         const isTxt = file.type === 'text/plain' || file.name.endsWith('.txt');
 
         const maxSize = isPdf ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
@@ -1225,6 +1567,52 @@
                 resetInput();
             };
             reader.readAsArrayBuffer(file);
+        } else if (isMd) {
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const text = evt.target.result;
+                    const pngDataUrl = await markdownToDataUrl(text);
+                    startImagePlacer(pngDataUrl);
+                    showToast('📄 마크다운 문서를 카드 이미지로 변환하여 배치를 준비합니다.');
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 마크다운 파일 로딩에 실패했습니다.');
+                }
+                resetInput();
+            };
+            reader.readAsText(file, 'utf-8');
+        } else if (isCsv) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const text = evt.target.result;
+                    const pngDataUrl = csvToDataUrl(text);
+                    startImagePlacer(pngDataUrl);
+                    showToast('📊 CSV 데이터를 테이블 카드로 변환하여 배치를 준비합니다.');
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ CSV 파일 로딩에 실패했습니다.');
+                }
+                resetInput();
+            };
+            reader.readAsText(file, 'utf-8');
+        } else if (isCode) {
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const text = evt.target.result;
+                    const ext = getFileExtension(file.name);
+                    const pngDataUrl = await codeToDataUrl(text, ext);
+                    startImagePlacer(pngDataUrl);
+                    showToast('💻 소스코드를 하이라이트된 코드로 변환하여 배치를 준비합니다.');
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 코드 파일 로딩에 실패했습니다.');
+                }
+                resetInput();
+            };
+            reader.readAsText(file, 'utf-8');
         } else if (isTxt) {
             const reader = new FileReader();
             reader.onload = (evt) => {
@@ -8638,6 +9026,7 @@
 
         const fileIcon = document.createElement('span');
         fileIcon.style.fontSize = '24px';
+        const fileExt = getFileExtension(fileName);
         if (fileType.startsWith('image/')) {
             fileIcon.textContent = '🖼️';
         } else if (fileType.startsWith('video/')) {
@@ -8646,6 +9035,14 @@
             fileIcon.textContent = '🎵';
         } else if (fileType.includes('pdf')) {
             fileIcon.textContent = '📕';
+        } else if (fileExt === 'md' || fileExt === 'markdown') {
+            fileIcon.textContent = '📝';
+        } else if (fileExt === 'csv') {
+            fileIcon.textContent = '📊';
+        } else if (isCodeFile(fileName)) {
+            fileIcon.textContent = '💻';
+        } else if (fileExt === 'txt') {
+            fileIcon.textContent = '📄';
         } else {
             fileIcon.textContent = '📁';
         }
@@ -8704,7 +9101,15 @@
         downloadBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 다운로드`;
         
         let previewBtn = null;
-        if (fileType.includes('pdf') || fileType.startsWith('text/') || fileName.endsWith('.txt')) {
+        const isImage = fileType.startsWith('image/');
+        const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
+        const isMd = fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileType === 'text/markdown';
+        const isCsv = fileName.endsWith('.csv') || fileType === 'text/csv';
+        const isCode = isCodeFile(fileName);
+        const isTxt = fileType.startsWith('text/') || fileName.endsWith('.txt');
+
+        const isPreviewable = isPdf || isTxt || isMd || isCsv || isCode;
+        if (isPreviewable) {
             previewBtn = document.createElement('button');
             previewBtn.className = 'btn btn-secondary';
             previewBtn.style.padding = '6px 12px';
@@ -8721,11 +9126,8 @@
         }
 
         let placeOnCanvasBtn = null;
-        const isImage = fileType.startsWith('image/');
-        const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
-        const isTxt = fileType.startsWith('text/') || fileName.endsWith('.txt');
 
-        if (isImage || isPdf || isTxt) {
+        if (isImage || isPdf || isTxt || isMd || isCsv || isCode) {
             placeOnCanvasBtn = document.createElement('button');
             placeOnCanvasBtn.className = 'btn btn-secondary';
             placeOnCanvasBtn.style.padding = '6px 12px';
@@ -8763,6 +9165,55 @@
                         } else {
                             showToast('⚠️ PDF 데이터를 읽는 데 실패했습니다.');
                         }
+                    } else if (isMd) {
+                        let text = '';
+                        if (fileData.startsWith('data:')) {
+                            const base64Data = fileData.split(',')[1];
+                            const binString = atob(base64Data);
+                            const bytes = new Uint8Array(binString.length);
+                            for (let i = 0; i < binString.length; i++) {
+                                bytes[i] = binString.charCodeAt(i);
+                            }
+                            text = new TextDecoder('utf-8').decode(bytes);
+                        } else {
+                            text = fileData;
+                        }
+                        const pngDataUrl = await markdownToDataUrl(text);
+                        startImagePlacer(pngDataUrl);
+                        showToast('📄 마크다운 문서를 카드 이미지로 변환하여 배치를 준비합니다.');
+                    } else if (isCsv) {
+                        let text = '';
+                        if (fileData.startsWith('data:')) {
+                            const base64Data = fileData.split(',')[1];
+                            const binString = atob(base64Data);
+                            const bytes = new Uint8Array(binString.length);
+                            for (let i = 0; i < binString.length; i++) {
+                                bytes[i] = binString.charCodeAt(i);
+                            }
+                            text = new TextDecoder('utf-8').decode(bytes);
+                        } else {
+                            text = fileData;
+                        }
+                        const pngDataUrl = csvToDataUrl(text);
+                        startImagePlacer(pngDataUrl);
+                        showToast('📊 CSV 데이터를 테이블 카드로 변환하여 배치를 준비합니다.');
+                    } else if (isCode) {
+                        let text = '';
+                        if (fileData.startsWith('data:')) {
+                            const base64Data = fileData.split(',')[1];
+                            const binString = atob(base64Data);
+                            const bytes = new Uint8Array(binString.length);
+                            for (let i = 0; i < binString.length; i++) {
+                                bytes[i] = binString.charCodeAt(i);
+                            }
+                            text = new TextDecoder('utf-8').decode(bytes);
+                        } else {
+                            text = fileData;
+                        }
+                        const ext = getFileExtension(fileName);
+                        const pngDataUrl = await codeToDataUrl(text, ext);
+                        startImagePlacer(pngDataUrl);
+                        showToast('💻 소스코드를 하이라이트된 코드로 변환하여 배치를 준비합니다.');
                     } else if (isTxt) {
                         let text = '';
                         if (fileData.startsWith('data:')) {
@@ -8834,7 +9285,211 @@
         };
         $btnClose.addEventListener('click', closePreview);
 
-        if (fileType.startsWith('text/') || fileName.endsWith('.txt')) {
+        const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
+        const isMd = fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileType === 'text/markdown';
+        const isCsv = fileName.endsWith('.csv') || fileType === 'text/csv';
+        const isCode = isCodeFile(fileName);
+        const isTxt = (fileType.startsWith('text/') && !isMd && !isCsv && !isCode) || fileName.endsWith('.txt');
+
+        if (isMd) {
+            let text = '';
+            try {
+                if (fileData.startsWith('data:')) {
+                    const base64Data = fileData.split(',')[1];
+                    const binString = atob(base64Data);
+                    const bytes = new Uint8Array(binString.length);
+                    for (let i = 0; i < binString.length; i++) {
+                        bytes[i] = binString.charCodeAt(i);
+                    }
+                    text = new TextDecoder('utf-8').decode(bytes);
+                } else {
+                    text = fileData;
+                }
+            } catch (e) {
+                text = '마크다운을 읽지 못했습니다.';
+            }
+
+            const $mdDiv = document.createElement('div');
+            $mdDiv.className = 'markdown-body';
+            $mdDiv.style.padding = '20px';
+            $mdDiv.style.background = '#fff';
+            $mdDiv.style.color = '#24292f';
+            $mdDiv.style.borderRadius = '8px';
+            $mdDiv.style.maxHeight = '65vh';
+            $mdDiv.style.overflowY = 'auto';
+            $mdDiv.style.textAlign = 'left';
+            
+            const mdStyle = document.createElement('style');
+            mdStyle.innerHTML = `
+                .markdown-body h1, .markdown-body h2 { border-bottom: 1px solid #d8dee4; padding-bottom: 6px; }
+                .markdown-body pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
+                .markdown-body code { font-family: monospace; background: rgba(175,184,193,0.2); padding: 2px 4px; border-radius: 4px; }
+            `;
+            $mdDiv.appendChild(mdStyle);
+            
+            (async () => {
+                const marked = await loadMarkedJs();
+                const container = document.createElement('div');
+                container.innerHTML = marked.parse(text);
+                $mdDiv.appendChild(container);
+            })();
+
+            $body.appendChild($mdDiv);
+        } else if (isCsv) {
+            let text = '';
+            try {
+                if (fileData.startsWith('data:')) {
+                    const base64Data = fileData.split(',')[1];
+                    const binString = atob(base64Data);
+                    const bytes = new Uint8Array(binString.length);
+                    for (let i = 0; i < binString.length; i++) {
+                        bytes[i] = binString.charCodeAt(i);
+                    }
+                    text = new TextDecoder('utf-8').decode(bytes);
+                } else {
+                    text = fileData;
+                }
+            } catch (e) {
+                text = 'CSV 파일을 읽지 못했습니다.';
+            }
+
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const rows = lines.map(line => {
+                const result = [];
+                let current = '';
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"' || char === "'") {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        result.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                result.push(current.trim());
+                return result;
+            });
+
+            const $tableWrapper = document.createElement('div');
+            $tableWrapper.style.maxHeight = '65vh';
+            $tableWrapper.style.overflow = 'auto';
+            $tableWrapper.style.borderRadius = '8px';
+            
+            const $table = document.createElement('table');
+            $table.style.width = '100%';
+            $table.style.borderCollapse = 'collapse';
+            $table.style.background = '#fff';
+            $table.style.color = '#334155';
+            $table.style.fontSize = '13px';
+            $table.style.textAlign = 'left';
+
+            if (rows.length > 0) {
+                const $thead = document.createElement('thead');
+                const $trHead = document.createElement('tr');
+                rows[0].forEach(cell => {
+                    const $th = document.createElement('th');
+                    $th.textContent = cell;
+                    $th.style.background = '#f1f5f9';
+                    $th.style.padding = '10px 12px';
+                    $th.style.borderBottom = '2px solid #cbd5e1';
+                    $trHead.appendChild($th);
+                });
+                $thead.appendChild($trHead);
+                $table.appendChild($thead);
+
+                const $tbody = document.createElement('tbody');
+                rows.slice(1).forEach((row, rIdx) => {
+                    const $tr = document.createElement('tr');
+                    $tr.style.background = rIdx % 2 === 0 ? '#fff' : '#f8fafc';
+                    row.forEach(cell => {
+                        const $td = document.createElement('td');
+                        $td.textContent = cell;
+                        $td.style.padding = '8px 12px';
+                        $td.style.borderBottom = '1px solid #e2e8f0';
+                        $tr.appendChild($td);
+                    });
+                    $tbody.appendChild($tr);
+                });
+                $table.appendChild($tbody);
+            }
+
+            $tableWrapper.appendChild($table);
+            $body.appendChild($tableWrapper);
+        } else if (isCode) {
+            let text = '';
+            try {
+                if (fileData.startsWith('data:')) {
+                    const base64Data = fileData.split(',')[1];
+                    const binString = atob(base64Data);
+                    const bytes = new Uint8Array(binString.length);
+                    for (let i = 0; i < binString.length; i++) {
+                        bytes[i] = binString.charCodeAt(i);
+                    }
+                    text = new TextDecoder('utf-8').decode(bytes);
+                } else {
+                    text = fileData;
+                }
+            } catch (e) {
+                text = '코드 파일을 읽지 못했습니다.';
+            }
+
+            const $pre = document.createElement('pre');
+            $pre.style.margin = '0';
+            $pre.style.padding = '16px';
+            $pre.style.background = '#272822';
+            $pre.style.color = '#f8f8f2';
+            $pre.style.borderRadius = '8px';
+            $pre.style.maxHeight = '65vh';
+            $pre.style.overflow = 'auto';
+            $pre.style.textAlign = 'left';
+            $pre.style.fontFamily = 'monospace';
+
+            const $code = document.createElement('code');
+            $code.textContent = text;
+            $pre.appendChild($code);
+            $body.appendChild($pre);
+
+            (async () => {
+                const ext = getFileExtension(fileName);
+                const prism = await loadPrismLanguage(ext);
+                const aliases = {
+                    js: 'javascript',
+                    ts: 'typescript',
+                    jsx: 'jsx',
+                    tsx: 'tsx',
+                    py: 'python',
+                    rb: 'ruby',
+                    cs: 'csharp',
+                    cpp: 'cpp',
+                    go: 'go',
+                    rs: 'rust',
+                    yml: 'yaml',
+                    yaml: 'yaml',
+                    sh: 'bash',
+                    bash: 'bash',
+                    json: 'json',
+                    sql: 'sql',
+                    html: 'markup',
+                    css: 'css',
+                    xml: 'markup'
+                };
+                const targetLang = aliases[ext] || ext;
+                $code.className = `language-${targetLang}`;
+                
+                if (!document.getElementById('prism-theme-link')) {
+                    const link = document.createElement('link');
+                    link.id = 'prism-theme-link';
+                    link.rel = 'stylesheet';
+                    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css';
+                    document.head.appendChild(link);
+                }
+                
+                prism.highlightElement($code);
+            })();
+        } else if (isTxt) {
             let text = '';
             try {
                 if (fileData.startsWith('data:')) {
@@ -8856,7 +9511,7 @@
             pre.className = 'preview-text-content';
             pre.textContent = text;
             $body.appendChild(pre);
-        } else if (fileType.includes('pdf')) {
+        } else if (isPdf) {
             const arrayBuffer = base64ToArrayBuffer(fileData);
             if (!arrayBuffer) {
                 $body.textContent = 'PDF 데이터를 불러올 수 없습니다.';
