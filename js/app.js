@@ -9732,11 +9732,23 @@
                     if (shape === 'line') {
                         ctx.moveTo(x1, y1);
                         ctx.lineTo(x2, y2);
-                    } else if (shape === 'rect') {
+                    } else if (shape === 'rectangle') {
                         ctx.rect(x1, y1, x2 - x1, y2 - y1);
                     } else if (shape === 'circle') {
-                        const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                        ctx.arc(x1, y1, radius, 0, 2 * Math.PI);
+                        const rx = Math.abs(x2 - x1) / 2;
+                        const ry = Math.abs(y2 - y1) / 2;
+                        const cx = x1 + (x2 - x1) / 2;
+                        const cy = y1 + (y2 - y1) / 2;
+                        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                    } else if (shape === 'arrow') {
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                        const headLen = Math.max(15, (action.size || 3) * 4);
+                        const angle = Math.atan2(y2 - y1, x2 - x1);
+                        ctx.moveTo(x2, y2);
+                        ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+                        ctx.moveTo(x2, y2);
+                        ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
                     }
                 }
             };

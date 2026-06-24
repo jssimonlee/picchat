@@ -214,7 +214,7 @@ class DrawingCanvas {
             this.onDrawEnd(this.currentPathId);
         }
 
-        if (this.isLaserMode && ['pen', 'brush', 'line', 'rect', 'circle'].includes(this.currentTool)) {
+        if (this.isLaserMode && ['pen', 'brush', 'line', 'rectangle', 'circle', 'arrow'].includes(this.currentTool)) {
             let laserAction = null;
             if (this._isFreehandTool()) {
                 if (this.currentPath.length > 0) {

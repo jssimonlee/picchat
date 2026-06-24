@@ -579,7 +579,11 @@ class NetworkManager {
                 break;
 
             case 'laser':
-                this.onLaser(fromPeerId, data.points, data.color);
+                if (data.action) {
+                    this.onLaser(fromPeerId, data.action);
+                } else {
+                    this.onLaser(fromPeerId, data.points, data.color);
+                }
                 if (this.isHost) this._broadcast(data, fromPeerId);
                 break;
 
@@ -891,8 +895,14 @@ class NetworkManager {
         }
     }
 
-    sendLaser(points, color) {
-        const data = { type: 'laser', points, color };
+    sendLaser(pointsOrAction, color) {
+        const data = { type: 'laser' };
+        if (Array.isArray(pointsOrAction)) {
+            data.points = pointsOrAction;
+            data.color = color;
+        } else {
+            data.action = pointsOrAction;
+        }
         if (this.isHost) {
             this._broadcast(data);
         } else {
