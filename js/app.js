@@ -1067,28 +1067,158 @@
 
     /* ---------- Image Upload ---------- */
 
+    function loadPdfJs() {
+        return new Promise((resolve, reject) => {
+            if (window.pdfjsLib) {
+                resolve(window.pdfjsLib);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+            script.onload = () => {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+                resolve(window.pdfjsLib);
+            };
+            script.onerror = () => reject(new Error('PDF.js 로딩에 실패했습니다.'));
+            document.head.appendChild(script);
+        });
+    }
+
+    async function renderPdfPageToDataUrl(arrayBuffer) {
+        const pdfjsLib = await loadPdfJs();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        
+        const scale = 2.0;
+        const viewport = page.getViewport({ scale });
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+        };
+        
+        await page.render(renderContext).promise;
+        return canvas.toDataURL('image/png');
+    }
+
+    function textToDataUrl(text, color) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const allLines = text.split('\n');
+        const maxLines = 50;
+        const lines = allLines.slice(0, maxLines);
+        if (allLines.length > maxLines) {
+            lines.push('... (내용이 너무 길어 생략되었습니다) ...');
+        }
+        
+        const fontSize = 24;
+        ctx.font = `${fontSize}px 'Inter', sans-serif`;
+        
+        let maxWidth = 0;
+        lines.forEach(line => {
+            const metrics = ctx.measureText(line);
+            if (metrics.width > maxWidth) {
+                maxWidth = metrics.width;
+            }
+        });
+        
+        const padding = 20;
+        canvas.width = Math.max(100, maxWidth + padding * 2);
+        canvas.height = lines.length * (fontSize * 1.3) + padding * 2;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.lineWidth = 2;
+        const radius = 8;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
+        } else {
+            ctx.rect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.font = `${fontSize}px 'Inter', sans-serif`;
+        ctx.fillStyle = color || '#1e293b';
+        ctx.textBaseline = 'top';
+        
+        const lineHeight = fontSize * 1.3;
+        lines.forEach((line, i) => {
+            ctx.fillText(line, padding, padding + i * lineHeight);
+        });
+        
+        return canvas.toDataURL('image/png');
+    }
+
     function handleImageUpload(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Check file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            showToast('⚠️ 이미지 크기는 5MB 이하만 가능합니다');
+        const resetInput = () => { e.target.value = ''; };
+
+        const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+        const isTxt = file.type === 'text/plain' || file.name.endsWith('.txt');
+
+        const maxSize = isPdf ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            showToast(`⚠️ 파일 크기는 ${isPdf ? '10MB' : '5MB'} 이하만 가능합니다`);
+            resetInput();
             return;
         }
 
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-            const dataUrl = evt.target.result;
+        showToast('🔄 파일을 처리 중입니다...');
 
-            // Resize image if too large
-            const resized = await resizeImageDataUrl(dataUrl, 1920, 1080);
-
-            startImagePlacer(resized);
-        };
-        reader.readAsDataURL(file);
-        // Reset input so the same file can be selected again
-        e.target.value = '';
+        if (isPdf) {
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const arrayBuffer = evt.target.result;
+                    const pngDataUrl = await renderPdfPageToDataUrl(arrayBuffer);
+                    startImagePlacer(pngDataUrl);
+                    showToast('📕 PDF 1페이지를 이미지로 변환하여 배치합니다.');
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ PDF 파일 로딩에 실패했습니다.');
+                }
+                resetInput();
+            };
+            reader.readAsArrayBuffer(file);
+        } else if (isTxt) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const text = evt.target.result;
+                    const pngDataUrl = textToDataUrl(text, canvas ? canvas.currentColor : '#1e293b');
+                    startImagePlacer(pngDataUrl);
+                    showToast('📄 텍스트 파일을 노트 카드로 변환하여 배치합니다.');
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 텍스트 파일 로딩에 실패했습니다.');
+                }
+                resetInput();
+            };
+            reader.readAsText(file, 'utf-8');
+        } else {
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const dataUrl = evt.target.result;
+                const resized = await resizeImageDataUrl(dataUrl, 1920, 1080);
+                startImagePlacer(resized);
+                showToast('🖼️ 이미지 배치를 준비합니다.');
+                resetInput();
+            };
+            reader.readAsDataURL(file);
+        }
     }
 
     function resizeImageDataUrl(dataUrl, maxW, maxH) {
@@ -8420,14 +8550,38 @@
         downloadBtn.style.padding = '6px 12px';
         downloadBtn.style.fontSize = '12px';
         downloadBtn.style.width = 'auto';
-        downloadBtn.style.marginTop = '4px';
-        downloadBtn.style.alignSelf = 'flex-end';
         downloadBtn.style.display = 'inline-flex';
         downloadBtn.style.alignItems = 'center';
         downloadBtn.style.gap = '4px';
         downloadBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 다운로드`;
         
-        bubbleEl.appendChild(downloadBtn);
+        let previewBtn = null;
+        if (fileType.includes('pdf') || fileType.startsWith('text/') || fileName.endsWith('.txt')) {
+            previewBtn = document.createElement('button');
+            previewBtn.className = 'btn btn-secondary';
+            previewBtn.style.padding = '6px 12px';
+            previewBtn.style.fontSize = '12px';
+            previewBtn.style.width = 'auto';
+            previewBtn.style.display = 'inline-flex';
+            previewBtn.style.alignItems = 'center';
+            previewBtn.style.gap = '4px';
+            previewBtn.innerHTML = `👁️ 보기`;
+            
+            previewBtn.addEventListener('click', () => {
+                openFilePreviewModal(fileName, fileType, fileData);
+            });
+        }
+
+        const btnRow = document.createElement('div');
+        btnRow.style.display = 'flex';
+        btnRow.style.gap = '8px';
+        btnRow.style.marginTop = '6px';
+        btnRow.style.justifyContent = 'flex-end';
+
+        if (previewBtn) btnRow.appendChild(previewBtn);
+        btnRow.appendChild(downloadBtn);
+        
+        bubbleEl.appendChild(btnRow);
 
         msgEl.appendChild(nameEl);
         msgEl.appendChild(bubbleEl);
@@ -8443,6 +8597,82 @@
             chatUnreadCount++;
             $chatUnread.textContent = chatUnreadCount > 99 ? '99+' : chatUnreadCount;
             $chatUnread.hidden = false;
+        }
+    }
+
+    function openFilePreviewModal(fileName, fileType, fileData) {
+        const $modal = document.getElementById('previewModal');
+        const $title = document.getElementById('previewModalTitle');
+        const $body = document.getElementById('previewModalBody');
+        const $btnClose = document.getElementById('btnPreviewClose');
+
+        $title.textContent = `파일 미리보기: ${fileName}`;
+        $body.innerHTML = '';
+
+        $modal.hidden = false;
+
+        const closePreview = () => {
+            $modal.hidden = true;
+            $body.innerHTML = '';
+            $btnClose.removeEventListener('click', closePreview);
+        };
+        $btnClose.addEventListener('click', closePreview);
+
+        if (fileType.startsWith('text/') || fileName.endsWith('.txt')) {
+            let text = '';
+            try {
+                if (fileData.startsWith('data:')) {
+                    const base64Data = fileData.split(',')[1];
+                    const binString = atob(base64Data);
+                    const bytes = new Uint8Array(binString.length);
+                    for (let i = 0; i < binString.length; i++) {
+                        bytes[i] = binString.charCodeAt(i);
+                    }
+                    text = new TextDecoder('utf-8').decode(bytes);
+                } else {
+                    text = fileData;
+                }
+            } catch (e) {
+                text = '파일 내용을 읽는 데 실패했습니다.';
+            }
+
+            const pre = document.createElement('pre');
+            pre.className = 'preview-text-content';
+            pre.textContent = text;
+            $body.appendChild(pre);
+        } else if (fileType.includes('pdf')) {
+            let objectUrl = fileData;
+            if (fileData.startsWith('data:')) {
+                try {
+                    const arr = fileData.split(',');
+                    const mime = arr[0].match(/:(.*?);/)[1];
+                    const bstr = atob(arr[1]);
+                    let n = bstr.length;
+                    const u8arr = new Uint8Array(n);
+                    while (n--) {
+                        u8arr[n] = bstr.charCodeAt(n);
+                    }
+                    const blob = new Blob([u8arr], { type: mime });
+                    objectUrl = URL.createObjectURL(blob);
+                } catch (e) {
+                    console.error('Blob conversion failed, using direct dataUrl', e);
+                }
+            }
+
+            const embed = document.createElement('embed');
+            embed.src = objectUrl;
+            embed.type = 'application/pdf';
+            embed.className = 'preview-pdf-embed';
+            $body.appendChild(embed);
+            
+            const newTabLink = document.createElement('a');
+            newTabLink.href = objectUrl;
+            newTabLink.target = '_blank';
+            newTabLink.className = 'btn btn-secondary';
+            newTabLink.style.marginTop = '10px';
+            newTabLink.style.display = 'inline-block';
+            newTabLink.textContent = '↗️ 새 창에서 PDF 보기';
+            $body.appendChild(newTabLink);
         }
     }
 

@@ -210,7 +210,7 @@
                 <button class="tool-btn" id="btnUploadImage" title="이미지 업로드 (I)">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
                 </button>
-                <input type="file" id="imageInput" accept="image/*" hidden>
+                <input type="file" id="imageInput" accept="image/*,application/pdf,text/plain" hidden>
             </div>
             <div class="tool-divider"></div>
             <div class="tool-section">
@@ -992,6 +992,19 @@
             <div class="confirm-modal-actions">
                 <button id="btnConfirmCancel" class="btn-confirm btn-confirm-cancel">취소</button>
                 <button id="btnConfirmOk" class="btn-confirm btn-confirm-ok">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Preview Modal -->
+    <div id="previewModal" class="preview-modal" hidden>
+        <div class="preview-modal-content">
+            <div class="preview-modal-header">
+                <h3 id="previewModalTitle">파일 미리보기</h3>
+                <button id="btnPreviewClose" class="preview-modal-close">&times;</button>
+            </div>
+            <div id="previewModalBody" class="preview-modal-body">
+                <!-- Injected dynamically -->
             </div>
         </div>
     </div>
