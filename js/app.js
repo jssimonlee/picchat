@@ -233,6 +233,7 @@
     /* ---------- State ---------- */
 
     let canvas = null;
+    let localLaserMode = false;
     let network = null;
     let cursorThrottle = 0;
     let isSelectingFile = false;
@@ -819,11 +820,11 @@
                     network.sendCursor(x, y);
                 }
             },
-            onLaserStroke: (points, color) => {
+            onLaserStroke: (pointsOrAction, color) => {
                 // Show local laser fade effect
-                showLocalLaser(points, color);
+                showLocalLaser(pointsOrAction, color);
                 // Broadcast to others
-                network.sendLaser(points, color);
+                network.sendLaser(pointsOrAction, color);
             },
             onDrawStart: (pathId, tool, color, size, opacity, point) => {
                 network.sendDrawStart(pathId, tool, color, size, opacity, point);
@@ -835,6 +836,8 @@
                 network.sendDrawEnd(pathId);
             }
         });
+
+        canvas.setLaserMode(localLaserMode);
 
         // Resize canvas to fit
         canvas.resize();
@@ -880,11 +883,12 @@
         const $btnLaserMode = document.getElementById('btnLaserMode');
         if ($btnLaserMode) {
             $btnLaserMode.addEventListener('click', () => {
-                if (!canvas) return;
-                const newState = !canvas.isLaserMode;
-                canvas.setLaserMode(newState);
-                $btnLaserMode.classList.toggle('active', newState);
-                showToast(newState ? '🔦 레이저 모드가 활성화되었습니다. 그리는 도형이 잠시 후 사라집니다.' : '🔦 레이저 모드가 비활성화되었습니다.');
+                localLaserMode = !localLaserMode;
+                if (canvas) {
+                    canvas.setLaserMode(localLaserMode);
+                }
+                $btnLaserMode.classList.toggle('active', localLaserMode);
+                showToast(localLaserMode ? '🔦 레이저 모드가 활성화되었습니다. 그리는 도형이 잠시 후 사라집니다.' : '🔦 레이저 모드가 비활성화되었습니다.');
             });
         }
 
