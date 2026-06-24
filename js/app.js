@@ -1198,7 +1198,7 @@
             reader.onload = (evt) => {
                 try {
                     const text = evt.target.result;
-                    const pngDataUrl = textToDataUrl(text, canvas ? canvas.currentColor : '#1e293b');
+                    const pngDataUrl = textToDataUrl(text, '#1e293b');
                     startImagePlacer(pngDataUrl);
                     showToast('📄 텍스트 파일을 노트 카드로 변환하여 배치합니다.');
                 } catch (err) {
