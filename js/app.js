@@ -906,8 +906,6 @@
                     $tempCanvas.style.cursor = 'cell';
                 } else if (btn.dataset.tool === 'fill') {
                     $tempCanvas.style.cursor = 'crosshair';
-                } else if (btn.dataset.tool === 'laser') {
-                    $tempCanvas.style.cursor = 'default';
                 } else {
                     $tempCanvas.style.cursor = 'crosshair';
                 }
@@ -2723,14 +2721,20 @@
                 'p': 'pen', 'b': 'brush', 'e': 'eraser',
                 'l': 'line', 'r': 'rectangle', 'c': 'circle',
                 'a': 'arrow', 't': 'text', 'i': 'upload',
-                'f': 'fill', 'v': 'laser'
+                'f': 'fill'
             };
-            const tool = toolMap[e.key.toLowerCase()];
-            if (tool === 'upload') {
-                $imageInput.click();
-            } else if (tool === 'laser') {
+            const key = e.key.toLowerCase();
+
+            // Laser mode toggle (V key)
+            if (key === 'v') {
                 const btn = document.getElementById('btnLaserMode');
                 if (btn) btn.click();
+                return;
+            }
+
+            const tool = toolMap[key];
+            if (tool === 'upload') {
+                $imageInput.click();
             } else if (tool) {
                 const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
                 if (btn) btn.click();

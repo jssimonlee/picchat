@@ -150,7 +150,7 @@ class DrawingCanvas {
         this.isDrawing = true;
         this.currentPathId = 'p-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
 
-        if (this._isFreehandTool() || this.currentTool === 'laser') {
+        if (this._isFreehandTool()) {
             this.currentPath = [point];
         }
 
@@ -167,14 +167,7 @@ class DrawingCanvas {
         if (!this.isDrawing) return;
         const point = this._getCanvasPoint(e);
 
-        if (this.currentTool === 'laser') {
-            this.currentPath.push(point);
-            this.lastPoint = point;
-            this.redrawTemp();
-            if (this.onDrawMove) {
-                this.onDrawMove(this.currentPathId, point, null);
-            }
-        } else if (this._isFreehandTool()) {
+        if (this._isFreehandTool()) {
             this.currentPath.push(point);
             this.lastPoint = point;
             this.redrawTemp();
@@ -194,19 +187,7 @@ class DrawingCanvas {
         if (!this.isDrawing) return;
         this.isDrawing = false;
 
-        if (this.currentTool === 'laser') {
-            const laserPath = [...this.currentPath];
-            if (this.onDrawEnd) this.onDrawEnd(this.currentPathId);
-            this.redrawTemp();
-            this.currentPath = [];
-            this.startPoint = null;
-            this.lastPoint = null;
-            this.currentPathId = null;
-            if (this.onLaserStroke) {
-                this.onLaserStroke(laserPath, this.currentColor);
-            }
-            return;
-        }
+
 
         const point = this._getCanvasPoint(e);
 
@@ -388,7 +369,7 @@ class DrawingCanvas {
 
         // 2. Draw local active path
         if (this.isDrawing) {
-            if (this.currentTool === 'laser') {
+            if (this.isLaserMode && this._isFreehandTool()) {
                 this._drawLaserPath(this.tempCtx, this.currentPath);
             } else if (this._isFreehandTool()) {
                 this._drawFreehandPath(this.tempCtx, this.currentPath);
