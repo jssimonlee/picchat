@@ -876,6 +876,18 @@
     /* ---------- Tool Events ---------- */
 
     function setupToolEvents() {
+        // Laser Mode toggle button
+        const $btnLaserMode = document.getElementById('btnLaserMode');
+        if ($btnLaserMode) {
+            $btnLaserMode.addEventListener('click', () => {
+                if (!canvas) return;
+                const newState = !canvas.isLaserMode;
+                canvas.setLaserMode(newState);
+                $btnLaserMode.classList.toggle('active', newState);
+                showToast(newState ? '🔦 레이저 모드가 활성화되었습니다. 그리는 도형이 잠시 후 사라집니다.' : '🔦 레이저 모드가 비활성화되었습니다.');
+            });
+        }
+
         // Tool buttons
         document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2712,6 +2724,9 @@
             const tool = toolMap[e.key.toLowerCase()];
             if (tool === 'upload') {
                 $imageInput.click();
+            } else if (tool === 'laser') {
+                const btn = document.getElementById('btnLaserMode');
+                if (btn) btn.click();
             } else if (tool) {
                 const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
                 if (btn) btn.click();
@@ -9650,18 +9665,32 @@
        LASER POINTER
        ============================================== */
 
-    function showLocalLaser(points, color) {
+    function showLocalLaser(pointsOrAction, color) {
         if (!canvas) return;
-        _animateLaserFade(points, color);
+        _animateLaserFade(pointsOrAction, color);
     }
 
-    function showRemoteLaser(points, color) {
+    function showRemoteLaser(pointsOrAction, color) {
         if (!canvas) return;
-        _animateLaserFade(points, color);
+        _animateLaserFade(pointsOrAction, color);
     }
 
-    function _animateLaserFade(points, color) {
-        if (!canvas || !points || points.length < 2) return;
+    function _animateLaserFade(pointsOrAction, color) {
+        if (!canvas || !pointsOrAction) return;
+
+        let action;
+        if (Array.isArray(pointsOrAction)) {
+            action = {
+                type: 'freehand',
+                points: pointsOrAction,
+                color: color || '#ff4a4a',
+                size: 3
+            };
+        } else {
+            action = pointsOrAction;
+        }
+
+        if (action.type === 'freehand' && (!action.points || action.points.length < 2)) return;
 
         // Create an overlay canvas for the laser effect
         const laserCanvas = document.createElement('canvas');
@@ -9685,27 +9714,47 @@
             ctx.save();
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.strokeStyle = color;
+            ctx.strokeStyle = action.color || color || '#ff4a4a';
 
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
+            const drawPath = () => {
+                ctx.beginPath();
+                if (action.type === 'freehand') {
+                    ctx.moveTo(action.points[0].x, action.points[0].y);
+                    for (let i = 1; i < action.points.length; i++) {
+                        ctx.lineTo(action.points[i].x, action.points[i].y);
+                    }
+                } else if (action.type === 'shape') {
+                    const { shape, x1, y1, x2, y2 } = action;
+                    if (shape === 'line') {
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                    } else if (shape === 'rect') {
+                        ctx.rect(x1, y1, x2 - x1, y2 - y1);
+                    } else if (shape === 'circle') {
+                        const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+                        ctx.arc(x1, y1, radius, 0, 2 * Math.PI);
+                    }
+                }
+            };
+
+            const size = action.size || 3;
 
             // 1. Outer glow
             ctx.globalAlpha = alpha * 0.15;
-            ctx.lineWidth = 20;
+            ctx.lineWidth = size * 6;
+            drawPath();
             ctx.stroke();
 
             // 2. Inner glow
             ctx.globalAlpha = alpha * 0.40;
-            ctx.lineWidth = 10;
+            ctx.lineWidth = size * 3;
+            drawPath();
             ctx.stroke();
 
             // 3. Core line
             ctx.globalAlpha = alpha * 0.90;
-            ctx.lineWidth = 3;
+            ctx.lineWidth = Math.max(1.5, size * 0.8);
+            drawPath();
             ctx.stroke();
 
             ctx.restore();

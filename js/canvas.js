@@ -48,6 +48,7 @@ class DrawingCanvas {
         this.textInputEl = options.textInputEl || null;
         this._textCallback = null;
         this.onLaserStroke = options.onLaserStroke || null;
+        this.isLaserMode = false;
 
         this._init();
     }
@@ -211,6 +212,43 @@ class DrawingCanvas {
 
         if (this.onDrawEnd) {
             this.onDrawEnd(this.currentPathId);
+        }
+
+        if (this.isLaserMode && ['pen', 'brush', 'line', 'rect', 'circle'].includes(this.currentTool)) {
+            let laserAction = null;
+            if (this._isFreehandTool()) {
+                if (this.currentPath.length > 0) {
+                    const simplified = this._simplifyPath(this.currentPath);
+                    laserAction = {
+                        type: 'freehand',
+                        points: simplified,
+                        color: this.currentColor,
+                        size: this.currentTool === 'brush' ? this.currentSize * 2.5 : this.currentSize
+                    };
+                }
+            } else {
+                laserAction = {
+                    type: 'shape',
+                    shape: this.currentTool,
+                    x1: this.startPoint.x,
+                    y1: this.startPoint.y,
+                    x2: point.x,
+                    y2: point.y,
+                    color: this.currentColor,
+                    size: this.currentSize
+                };
+            }
+
+            this.currentPath = [];
+            this.startPoint = null;
+            this.lastPoint = null;
+            this.currentPathId = null;
+            this.redrawTemp();
+
+            if (laserAction && this.onLaserStroke) {
+                this.onLaserStroke(laserAction);
+            }
+            return;
         }
 
         if (this._isFreehandTool()) {
@@ -884,6 +922,7 @@ class DrawingCanvas {
     /* ---------- Setters ---------- */
 
     setTool(tool) { this.currentTool = tool; }
+    setLaserMode(enable) { this.isLaserMode = !!enable; }
     setColor(color) { this.currentColor = color; }
     setSize(size) { this.currentSize = size; }
     setOpacity(opacity) { this.currentOpacity = opacity; }
