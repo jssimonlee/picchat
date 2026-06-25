@@ -7942,9 +7942,10 @@
         }
     }
 
-    async function fetchWordsFromDB(vocabId, offset, limit) {
+    async function fetchWordsFromDB(vocabId, limit, excludeIds = []) {
         try {
-            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/words/speedrun?vocabularyId=${vocabId}&offset=${offset}&limit=${limit}`);
+            const excludeStr = excludeIds.join(',');
+            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/words/speedrun?vocabularyId=${vocabId}&limit=${limit}&exclude=${excludeStr}`);
             if (response.ok) {
                 const words = await response.json();
                 console.log('[Speedrun] Fetched Words:', words);
@@ -8156,7 +8157,7 @@
         const vocabName = $speedrunVocabulary.options[$speedrunVocabulary.selectedIndex].textContent.split(' (')[0];
         
         showToast('🔄 단어를 불러오는 중입니다...');
-        const initialWords = await fetchWordsFromDB(vocabId, 0, 50);
+        const initialWords = await fetchWordsFromDB(vocabId, 50, []);
         if (initialWords.length < 5) {
             showToast('⚠️ 불러올 수 있는 단어가 부족합니다.');
             return;
@@ -8186,7 +8187,7 @@
         const vocabId = speedrunState.vocabularyId;
         
         showToast('🔄 단어를 불러오는 중입니다...');
-        const initialWords = await fetchWordsFromDB(vocabId, 0, 50);
+        const initialWords = await fetchWordsFromDB(vocabId, 50, []);
         if (initialWords.length < 5) {
             showToast('⚠️ 불러올 수 있는 단어가 부족합니다.');
             return;
@@ -8252,6 +8253,9 @@
 
         const currentWord = speedrunState.words[speedrunState.currentIndex];
         $speedrunWordBox.textContent = currentWord.english;
+        // Reset wrong answer visual feedback styling
+        $speedrunWordBox.style.backgroundColor = '';
+        $speedrunWordBox.style.borderColor = '';
         $speedrunCurrentIndex.textContent = String(speedrunState.currentIndex + 1);
 
         // Generate Multiple Choices
@@ -8328,6 +8332,9 @@
             speedrunState.myScore++;
         } else {
             clickedBtn.classList.add('incorrect');
+            // Flash the word box red as an incorrect feedback screen
+            $speedrunWordBox.style.backgroundColor = 'rgba(255, 71, 87, 0.15)';
+            $speedrunWordBox.style.borderColor = 'var(--danger)';
             // Show correct answer too
             buttons.forEach(btn => {
                 if (btn.dataset.isCorrect === 'true') {
@@ -8362,17 +8369,18 @@
             }
         }
 
-        // Delays slightly to let player see feedback, then moves to next question
+        // Delays slightly (or longer penalty for incorrect) to let player see feedback, then moves to next question
+        const transitionDelay = isCorrect ? 350 : 1500;
         setTimeout(() => {
             speedrunState.currentIndex++;
             updateQuizUI();
-        }, 350);
+        }, transitionDelay);
     }
 
     // Host or Solo loads another 20 words from DB (read-only, does not touch write)
     async function loadNextWordsChunk() {
-        const currentOffset = speedrunState.loadedCount;
-        const newWords = await fetchWordsFromDB(speedrunState.vocabularyId, currentOffset, 20);
+        const excludeIds = speedrunState.words.map(w => w.id);
+        const newWords = await fetchWordsFromDB(speedrunState.vocabularyId, 20, excludeIds);
         
         if (newWords.length > 0) {
             // Append loaded words

@@ -32,8 +32,8 @@ export default {
       // GET /api/words/speedrun - Fetch words for speedrun game
       if (request.method === "GET" && path === "/api/words/speedrun") {
         const vocabularyId = parseInt(url.searchParams.get("vocabularyId"));
-        const offset = parseInt(url.searchParams.get("offset")) || 0;
         const limit = parseInt(url.searchParams.get("limit")) || 20;
+        const exclude = url.searchParams.get("exclude") || "";
 
         if (!vocabularyId) {
           return new Response(JSON.stringify({ error: "Missing vocabularyId" }), {
@@ -42,9 +42,19 @@ export default {
           });
         }
 
-        const result = await env.VOCAB_DB.prepare(
-          "SELECT id, english, korean FROM words WHERE vocabulary_id = ? ORDER BY order_index LIMIT ? OFFSET ?"
-        ).bind(vocabularyId, limit, offset).all();
+        const excludeIds = exclude.split(",")
+          .map(id => parseInt(id))
+          .filter(id => !isNaN(id));
+
+        let query = "SELECT id, english, korean FROM words WHERE vocabulary_id = ?";
+        if (excludeIds.length > 0) {
+          query += ` AND id NOT IN (${excludeIds.join(",")})`;
+        }
+        query += " ORDER BY RANDOM() LIMIT ?";
+
+        const result = await env.VOCAB_DB.prepare(query)
+          .bind(vocabularyId, limit)
+          .all();
 
         return new Response(JSON.stringify(result.results), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
