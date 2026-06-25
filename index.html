@@ -263,6 +263,9 @@
                         <button class="submenu-btn" id="btnMinesweeper" title="지뢰찾기 게임 (M)">
                             💣 지뢰찾기 (M)
                         </button>
+                        <button class="submenu-btn" id="btnSpeedrun" title="단어 스피드런 게임 (W)">
+                            🔤 단어 스피드런 (W)
+                        </button>
                     </div>
                 </div>
             </div>
@@ -987,6 +990,140 @@
                     </div>
 
                     <button id="btnMinesweeperResultClose" class="btn btn-primary">로비로 돌아가기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ENGLISH SPEED RUN GAME OVERLAY ===== -->
+    <div id="speedrunOverlay" class="sudoku-overlay" hidden>
+        <div class="sudoku-window" style="max-width: 800px;">
+            <header class="sudoku-header">
+                <div class="sudoku-title">
+                    <span class="sudoku-logo-icon">🔤</span>
+                    <h2>영어 단어 스피드런</h2>
+                </div>
+                <div class="sudoku-header-actions">
+                    <button id="btnSpeedrunClose" class="sudoku-close-btn" title="닫기">&times;</button>
+                </div>
+            </header>
+
+            <!-- Speedrun Lobby -->
+            <div id="speedrunLobby" class="sudoku-view">
+                <div class="sudoku-lobby-setup" id="speedrunLobbySetup">
+                    <h3>새 게임 제안</h3>
+                    <p>친구와 함께 실시간으로 영어 단어 뜻 맞추기 스피드 경쟁을 겨뤄보세요! 2분(120초) 동안 더 많은 영어 단어의 뜻을 맞추는 사람이 승리합니다. 틀리면 감점 없이 바로 다음 문제로 넘어갑니다.</p>
+                    
+                    <div style="display: flex; flex-direction: column; text-align: left; gap: 4px; max-width: 280px; margin: 15px auto;">
+                        <label for="speedrunVocabulary" style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">단어집</label>
+                        <select id="speedrunVocabulary" style="width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 14px; box-sizing: border-box; background: var(--bg-secondary); color: var(--text-primary);">
+                            <!-- Options will be loaded dynamically, Toeic selected by default -->
+                            <option value="1" selected>토익 단어</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: center; width: 100%; margin-top: 15px;">
+                        <button id="btnSpeedrunPropose" class="btn btn-primary">단어 스피드런 제안</button>
+                        <button id="btnSpeedrunSolo" class="btn btn-secondary">혼자하기</button>
+                    </div>
+                </div>
+
+                <div class="sudoku-lobby-waiting" id="speedrunLobbyWaiting" hidden>
+                    <h3 id="speedrunLobbyWaitingTitle">상대방 참가 대기 중</h3>
+                    <div class="sudoku-proposal-status">
+                        <p>참가 동의 현황:</p>
+                        <ul id="speedrunProposalList" class="sudoku-proposal-list">
+                        </ul>
+                    </div>
+                    <div class="sudoku-lobby-actions">
+                        <button id="btnSpeedrunCancel" class="btn btn-secondary">제안 취소</button>
+                        <button id="btnSpeedrunStart" class="btn btn-primary" disabled>게임 시작</button>
+                    </div>
+                </div>
+
+                <div class="sudoku-lobby-invite" id="speedrunLobbyInvite" hidden>
+                    <h3>스피드런 게임 초대</h3>
+                    <p><span id="speedrunProposerName" class="highlight-name"></span>님이 영어 단어 스피드런 대결을 제안했습니다!</p>
+                    <p>단어집: <span id="speedrunProposalVocabName" class="highlight-diff">토익 단어</span></p>
+                    <div class="sudoku-lobby-actions">
+                        <button id="btnSpeedrunDecline" class="btn btn-secondary">거절</button>
+                        <button id="btnSpeedrunAccept" class="btn btn-primary">참가</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Speedrun Game Playing -->
+            <div id="speedrunGame" class="sudoku-view" hidden>
+                <!-- Stats bar (Timer, My Score, Peer Score) -->
+                <div class="sudoku-stats-bar" style="max-width: 100%; margin-bottom: 20px; padding: 12px 24px; border-radius: 12px; background: var(--bg-secondary); box-shadow: var(--shadow-sm);">
+                    <div class="sudoku-stat-item">
+                        <span class="label">남은 시간</span>
+                        <span id="speedrunGameTimer" class="value" style="font-family: monospace; font-weight: bold; color: var(--accent-cyan);">02:00</span>
+                    </div>
+                    <div class="sudoku-stat-item">
+                        <span class="label">내 점수 (맞춘 수)</span>
+                        <span id="speedrunMyScore" class="value" style="font-weight: bold; color: var(--success);">0</span>
+                    </div>
+                    <div class="sudoku-stat-item">
+                        <span class="label">상대방 점수</span>
+                        <span id="speedrunPeerScore" class="value" style="font-weight: bold; color: var(--accent-pink);">0</span>
+                    </div>
+                    <div class="sudoku-stat-item">
+                        <span class="label">현재 문항</span>
+                        <span id="speedrunCurrentIndex" class="value" style="font-weight: bold; color: var(--text-primary);">1</span>
+                    </div>
+                </div>
+
+                <!-- Compare Progress Bar -->
+                <div style="width: 100%; height: 24px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-bottom: 24px; position: relative; overflow: hidden; border: 1px solid var(--border);">
+                    <div id="speedrunMyBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-purple), var(--success)); transition: width 0.3s; position: absolute; left: 0; top: 0;"></div>
+                    <div id="speedrunPeerBar" style="height: 6px; width: 0%; background: var(--accent-pink); transition: width 0.3s; position: absolute; left: 0; bottom: 0;"></div>
+                    <div style="position: absolute; width: 100%; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 12px; box-sizing: border-box; font-size: 11px; font-weight: bold; z-index: 2; pointer-events: none;">
+                        <span style="color: #ffffff;">나 (밑 바)</span>
+                        <span id="speedrunPeerLabel" style="color: var(--accent-pink);">상대방 (줄 바)</span>
+                    </div>
+                </div>
+
+                <!-- Quiz Area -->
+                <div class="speedrun-quiz-container" style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%;">
+                    <!-- English Word Display -->
+                    <div id="speedrunWordBox" style="font-size: 36px; font-weight: 800; color: var(--text-primary); text-shadow: 0 0 10px rgba(124, 92, 255, 0.3); padding: 20px 40px; background: var(--bg-surface); border-radius: var(--radius-md); border: 1.5px solid var(--border); width: 100%; text-align: center; min-height: 100px; display: flex; align-items: center; justify-content: center;">
+                        Word
+                    </div>
+
+                    <!-- Choices Grid -->
+                    <div class="speedrun-choices-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%;">
+                        <button class="choice-btn btn" data-index="0" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">① 뜻 1</button>
+                        <button class="choice-btn btn" data-index="1" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">② 뜻 2</button>
+                        <button class="choice-btn btn" data-index="2" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">③ 뜻 3</button>
+                        <button class="choice-btn btn" data-index="3" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">④ 뜻 4</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Speedrun Game Results -->
+            <div id="speedrunResults" class="sudoku-view" hidden>
+                <div style="text-align: center; padding: 20px 0;">
+                    <div id="speedrunResultTitle" style="font-size: 42px; font-weight: 800; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 15px;">무승부</div>
+                    
+                    <div style="font-size: 18px; color: var(--text-secondary); margin-bottom: 25px;">
+                        단어 매치 결과
+                    </div>
+
+                    <div style="display: flex; gap: 40px; justify-content: center; margin-bottom: 30px;">
+                        <div style="background: rgba(46, 213, 115, 0.1); border: 1px solid var(--success); padding: 20px; border-radius: 12px; min-width: 140px;">
+                            <div style="font-size: 12px; color: var(--success); font-weight: bold; margin-bottom: 4px;">나의 점수</div>
+                            <div id="speedrunResultMyScore" style="font-size: 28px; font-weight: bold; color: var(--success);">0</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">정답 수</div>
+                        </div>
+                        <div style="background: rgba(255, 107, 157, 0.1); border: 1px solid var(--accent-pink); padding: 20px; border-radius: 12px; min-width: 140px;">
+                            <div style="font-size: 12px; color: var(--accent-pink); font-weight: bold; margin-bottom: 4px;">상대방 점수</div>
+                            <div id="speedrunResultPeerScore" style="font-size: 28px; font-weight: bold; color: var(--accent-pink);">0</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">정답 수</div>
+                        </div>
+                    </div>
+
+                    <button id="btnSpeedrunReturn" class="btn btn-primary" style="max-width: 200px; margin: 0 auto;">로비로 돌아가기</button>
                 </div>
             </div>
         </div>

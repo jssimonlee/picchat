@@ -4,7 +4,9 @@
    Star topology: host relays all messages
    ======================================== */
 
-const CLOUDFLARE_WORKER_URL = 'https://picchat-turn.jssimonlee.workers.dev';
+const CLOUDFLARE_WORKER_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:8787'
+    : 'https://picchat-turn.jssimonlee.workers.dev';
 
 
 class NetworkManager {
@@ -28,6 +30,7 @@ class NetworkManager {
         this.onGomoku = callbacks.onGomoku || (() => {});
         this.onOthello = callbacks.onOthello || (() => {});
         this.onMinesweeper = callbacks.onMinesweeper || (() => {});
+        this.onSpeedrun = callbacks.onSpeedrun || (() => {});
         this.onChat = callbacks.onChat || (() => {});
         this.onFileReceived = callbacks.onFileReceived || (() => {});
         this.onEmoji = callbacks.onEmoji || (() => {});
@@ -527,6 +530,10 @@ class NetworkManager {
                 this.onMinesweeper(fromPeerId, data.payload);
                 break;
 
+            case 'speedrun':
+                this.onSpeedrun(fromPeerId, data.payload);
+                break;
+
             case 'chat': {
                 const recipientId = data.recipientId || 'all';
                 if (this.isHost) {
@@ -781,6 +788,19 @@ class NetworkManager {
             this._broadcast(data);
             // Local echo: host also processes its own messages
             this.onMinesweeper(this.myPeerId, payload);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendSpeedrun(payload) {
+        const data = { type: 'speedrun', payload };
+        if (this.isHost) {
+            this._broadcast(data);
+            // Local echo: host also processes its own messages
+            this.onSpeedrun(this.myPeerId, payload);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}

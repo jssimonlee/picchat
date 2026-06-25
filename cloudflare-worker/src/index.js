@@ -15,6 +15,38 @@ export default {
     const path = url.pathname;
 
     try {
+      // GET /api/vocabularies - Fetch word collections list
+      if (request.method === "GET" && path === "/api/vocabularies") {
+        const result = await env.VOCAB_DB.prepare(
+          "SELECT id, name FROM vocabularies"
+        ).all();
+        return new Response(JSON.stringify(result.results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // GET /api/words/speedrun - Fetch words for speedrun game
+      if (request.method === "GET" && path === "/api/words/speedrun") {
+        const vocabularyId = parseInt(url.searchParams.get("vocabularyId"));
+        const offset = parseInt(url.searchParams.get("offset")) || 0;
+        const limit = parseInt(url.searchParams.get("limit")) || 20;
+
+        if (!vocabularyId) {
+          return new Response(JSON.stringify({ error: "Missing vocabularyId" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const result = await env.VOCAB_DB.prepare(
+          "SELECT id, english, korean FROM words WHERE vocabulary_id = ? ORDER BY order_index LIMIT ? OFFSET ?"
+        ).bind(vocabularyId, limit, offset).all();
+
+        return new Response(JSON.stringify(result.results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       // 1. GET /api/rooms/:code - Fetch active peer list for a room
       if (request.method === "GET" && path.startsWith("/api/rooms/")) {
         // Strip trailing slash if present

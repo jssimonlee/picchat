@@ -3461,3 +3461,29 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
 .topbar-switch-container input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     transform: translateX(18px);
 }
+
+/* Speedrun Game Specific Styles */
+.choice-btn {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.choice-btn:hover {
+    border-color: var(--accent-purple) !important;
+    background: var(--bg-surface) !important;
+    transform: translateY(-2px);
+}
+.choice-btn:active {
+    transform: translateY(1px);
+}
+.choice-btn.correct {
+    background-color: rgba(46, 213, 115, 0.2) !important;
+    border-color: var(--success) !important;
+    color: var(--success) !important;
+    box-shadow: 0 0 12px rgba(46, 213, 115, 0.3);
+}
+.choice-btn.incorrect {
+    background-color: rgba(255, 71, 87, 0.2) !important;
+    border-color: var(--danger) !important;
+    color: var(--danger) !important;
+    box-shadow: 0 0 12px rgba(255, 71, 87, 0.3);
+}

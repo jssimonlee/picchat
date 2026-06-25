@@ -213,6 +213,40 @@
     const $minesweeperResultStats = document.getElementById('minesweeperResultStats');
     const $btnMinesweeperResultClose = document.getElementById('btnMinesweeperResultClose');
 
+    // Speedrun Elements
+    const $btnSpeedrun = document.getElementById('btnSpeedrun');
+    const $speedrunOverlay = document.getElementById('speedrunOverlay');
+    const $btnSpeedrunClose = document.getElementById('btnSpeedrunClose');
+    const $speedrunLobby = document.getElementById('speedrunLobby');
+    const $speedrunLobbySetup = document.getElementById('speedrunLobbySetup');
+    const $speedrunVocabulary = document.getElementById('speedrunVocabulary');
+    const $btnSpeedrunPropose = document.getElementById('btnSpeedrunPropose');
+    const $btnSpeedrunSolo = document.getElementById('btnSpeedrunSolo');
+    const $speedrunLobbyWaiting = document.getElementById('speedrunLobbyWaiting');
+    const $speedrunLobbyWaitingTitle = document.getElementById('speedrunLobbyWaitingTitle');
+    const $speedrunProposalList = document.getElementById('speedrunProposalList');
+    const $btnSpeedrunCancel = document.getElementById('btnSpeedrunCancel');
+    const $btnSpeedrunStart = document.getElementById('btnSpeedrunStart');
+    const $speedrunLobbyInvite = document.getElementById('speedrunLobbyInvite');
+    const $speedrunProposerName = document.getElementById('speedrunProposerName');
+    const $speedrunProposalVocabName = document.getElementById('speedrunProposalVocabName');
+    const $btnSpeedrunDecline = document.getElementById('btnSpeedrunDecline');
+    const $btnSpeedrunAccept = document.getElementById('btnSpeedrunAccept');
+    const $speedrunGame = document.getElementById('speedrunGame');
+    const $speedrunGameTimer = document.getElementById('speedrunGameTimer');
+    const $speedrunMyScore = document.getElementById('speedrunMyScore');
+    const $speedrunPeerScore = document.getElementById('speedrunPeerScore');
+    const $speedrunCurrentIndex = document.getElementById('speedrunCurrentIndex');
+    const $speedrunMyBar = document.getElementById('speedrunMyBar');
+    const $speedrunPeerBar = document.getElementById('speedrunPeerBar');
+    const $speedrunPeerLabel = document.getElementById('speedrunPeerLabel');
+    const $speedrunWordBox = document.getElementById('speedrunWordBox');
+    const $speedrunResults = document.getElementById('speedrunResults');
+    const $speedrunResultTitle = document.getElementById('speedrunResultTitle');
+    const $speedrunResultMyScore = document.getElementById('speedrunResultMyScore');
+    const $speedrunResultPeerScore = document.getElementById('speedrunResultPeerScore');
+    const $btnSpeedrunReturn = document.getElementById('btnSpeedrunReturn');
+
     // Chat Sidebar Elements
     const $chatSidebar = document.getElementById('chatSidebar');
     const $chatMessages = document.getElementById('chatMessages');
@@ -369,6 +403,26 @@
         gameStartTime: 0,
         gameSecondsElapsed: 0,
         gameTimerInterval: null
+    };
+
+    // Speedrun State
+    let speedrunState = {
+        status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
+        isSolo: false,
+        vocabularyId: 1,
+        vocabularyName: '토익 단어',
+        proposerId: null,
+        proposerNickname: null,
+        participants: [], // { peerId, nickname, color, accepted }
+        players: [], // { peerId, nickname, color }
+        words: [], // { id, english, korean }
+        loadedCount: 0,
+        myScore: 0,
+        peerScore: 0,
+        currentIndex: 0,
+        elapsedSeconds: 0,
+        gameTimerInterval: null,
+        timeLimit: 120 // 2 minutes (120s)
     };
 
     /* ---------- Initialize ---------- */
@@ -709,6 +763,10 @@
                 if (state.minesweeperState && state.minesweeperState.status === 'playing') {
                     syncMinesweeperStateFromHost(state.minesweeperState);
                 }
+                // Sync active Speedrun game if present
+                if (state.speedrunState && state.speedrunState.status === 'playing') {
+                    syncSpeedrunStateFromHost(state.speedrunState);
+                }
             },
             onPeerJoin: (peerId, peerNickname, color, isAway) => {
                 knownParticipants.set(peerId, { nickname: peerNickname, color, isAway: isAway || false });
@@ -736,6 +794,7 @@
                 handleGomokuPeerLeave(peerId);
                 handleOthelloPeerLeave(peerId);
                 handleMinesweeperPeerLeave(peerId);
+                handleSpeedrunPeerLeave(peerId);
             },
             onCursorMove: (peerId, x, y, peerNickname, color) => {
                 updateRemoteCursor(peerId, x, y, peerNickname, color);
@@ -759,6 +818,9 @@
             },
             onMinesweeper: (fromPeerId, payload) => {
                 handleMinesweeperNetworkMessage(fromPeerId, payload);
+            },
+            onSpeedrun: (fromPeerId, payload) => {
+                handleSpeedrunNetworkMessage(fromPeerId, payload);
             },
             onChat: (fromPeerId, message, nickname, color, recipientId) => {
                 addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId);
@@ -827,6 +889,19 @@
                     peerBoard: minesweeperState.peerBoard,
                     players: minesweeperState.players,
                     elapsedSeconds: minesweeperState.gameSecondsElapsed
+                };
+                state.speedrunState = {
+                    status: speedrunState.status,
+                    isSolo: speedrunState.isSolo,
+                    vocabularyId: speedrunState.vocabularyId,
+                    vocabularyName: speedrunState.vocabularyName,
+                    words: speedrunState.words,
+                    loadedCount: speedrunState.loadedCount,
+                    myScore: speedrunState.myScore,
+                    peerScore: speedrunState.peerScore,
+                    currentIndex: speedrunState.currentIndex,
+                    elapsedSeconds: speedrunState.elapsedSeconds,
+                    timeLimit: speedrunState.timeLimit
                 };
                 return state;
             }
@@ -913,6 +988,8 @@
         setupOthelloEvents();
         // Setup Minesweeper events
         setupMinesweeperEvents();
+        // Setup Speedrun events
+        setupSpeedrunEvents();
         // Setup Chat events
         setupChatEvents();
     }
@@ -7798,6 +7875,648 @@
     /* ==========================================================================
        💣 MINESWEEPER GAME RACE MANAGER & ENGINE
        ========================================================================== */
+
+    /* ==========================================================================
+       ENGLISH VOCABULARY SPEED RUN GAME
+       ========================================================================== */
+
+    async function loadVocabularies() {
+        try {
+            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/vocabularies`);
+            if (response.ok) {
+                const list = await response.json();
+                $speedrunVocabulary.innerHTML = '';
+                list.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.id;
+                    opt.textContent = `${v.name} (${v.word_count}단어)`;
+                    if (v.name === '토익') opt.selected = true;
+                    $speedrunVocabulary.appendChild(opt);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load vocabularies:', e);
+        }
+    }
+
+    async function fetchWordsFromDB(vocabId, offset, limit) {
+        try {
+            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/words/speedrun?vocabularyId=${vocabId}&offset=${offset}&limit=${limit}`);
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (e) {
+            console.error('Failed to fetch words chunk:', e);
+        }
+        return [];
+    }
+
+    function setupSpeedrunEvents() {
+        console.log('[Speedrun] Setting up event listeners');
+        
+        $btnSpeedrun.addEventListener('click', async () => {
+            console.log('[Speedrun] Toolbar icon clicked');
+            if (speedrunState.status === 'none') {
+                $speedrunOverlay.hidden = false;
+                showSpeedrunSubView('lobby');
+                $speedrunLobbySetup.hidden = false;
+                $speedrunLobbyWaiting.hidden = true;
+                $speedrunLobbyInvite.hidden = true;
+                await loadVocabularies();
+            } else {
+                $speedrunOverlay.hidden = false;
+            }
+        });
+
+        $btnSpeedrunClose.addEventListener('click', async () => {
+            if (speedrunState.status === 'playing') {
+                const msg = speedrunState.isSolo
+                    ? '영어 단어 스피드런 게임을 종료하시겠습니까?'
+                    : '영어 단어 스피드런 대결을 종료하시겠습니까? (상대방도 게임이 취소됩니다)';
+                if (await showCustomConfirm(msg)) {
+                    quitSpeedrunGame();
+                }
+            } else if (speedrunState.status === 'proposing') {
+                if (await showCustomConfirm('스피드런 제안을 취소하시겠습니까?')) {
+                    cancelSpeedrunProposal();
+                }
+            } else {
+                resetSpeedrun();
+                $speedrunOverlay.hidden = true;
+            }
+        });
+
+        $btnSpeedrunPropose.addEventListener('click', () => {
+            proposeSpeedrun();
+        });
+
+        $btnSpeedrunSolo.addEventListener('click', () => {
+            startSpeedrunSolo();
+        });
+
+        $btnSpeedrunCancel.addEventListener('click', () => {
+            cancelSpeedrunProposal();
+        });
+
+        $btnSpeedrunStart.addEventListener('click', () => {
+            startSpeedrunMulti();
+        });
+
+        $btnSpeedrunAccept.addEventListener('click', () => {
+            acceptSpeedrunProposal();
+        });
+
+        $btnSpeedrunDecline.addEventListener('click', () => {
+            declineSpeedrunProposal();
+        });
+
+        $btnSpeedrunReturn.addEventListener('click', () => {
+            resetSpeedrun();
+            showSpeedrunSubView('lobby');
+            $speedrunLobbySetup.hidden = false;
+            $speedrunLobbyWaiting.hidden = true;
+            $speedrunLobbyInvite.hidden = true;
+        });
+
+        // Bind choices click events
+        document.querySelectorAll('.speedrun-choices-grid .choice-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                handleChoiceClick(parseInt(e.currentTarget.dataset.index));
+            });
+        });
+    }
+
+    function showSpeedrunSubView(view) {
+        $speedrunLobby.hidden = (view !== 'lobby');
+        $speedrunGame.hidden = (view !== 'game');
+        $speedrunResults.hidden = (view !== 'results');
+    }
+
+    // Propose Multiplayer Speedrun Game
+    async function proposeSpeedrun() {
+        const vocabId = parseInt($speedrunVocabulary.value);
+        const vocabName = $speedrunVocabulary.options[$speedrunVocabulary.selectedIndex].textContent.split(' (')[0];
+        
+        speedrunState.status = 'proposing';
+        speedrunState.isSolo = false;
+        speedrunState.vocabularyId = vocabId;
+        speedrunState.vocabularyName = vocabName;
+        speedrunState.proposerId = network.myPeerId;
+        speedrunState.proposerNickname = network.nickname;
+        
+        speedrunState.participants = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                accepted: true
+            }
+        ];
+
+        // Proposal waiting UI
+        $speedrunLobbySetup.hidden = true;
+        $speedrunLobbyWaiting.hidden = false;
+        $speedrunLobbyInvite.hidden = true;
+        $speedrunLobbyWaitingTitle.textContent = '스피드런 참가 대기 중';
+        
+        updateSpeedrunProposalListUI();
+
+        // Send proposal to peer
+        network.sendSpeedrun({
+            action: 'propose',
+            proposerId: network.myPeerId,
+            proposerNickname: network.nickname,
+            proposerColor: network.myColor,
+            vocabularyId: vocabId,
+            vocabularyName: vocabName
+        });
+    }
+
+    function updateSpeedrunProposalListUI() {
+        $speedrunProposalList.innerHTML = '';
+        speedrunState.participants.forEach(p => {
+            const li = document.createElement('li');
+            li.style.display = 'flex';
+            li.style.justifyContent = 'space-between';
+            li.style.padding = '8px 12px';
+            li.style.borderRadius = '6px';
+            li.style.background = 'rgba(255,255,255,0.05)';
+            li.style.fontSize = '13px';
+            li.style.color = 'var(--text-primary)';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = p.nickname;
+            nameSpan.style.fontWeight = 'bold';
+            nameSpan.style.color = p.color;
+
+            const statusSpan = document.createElement('span');
+            statusSpan.textContent = p.accepted ? '수락함' : '대기 중';
+            statusSpan.style.color = p.accepted ? 'var(--success)' : 'var(--text-secondary)';
+
+            li.appendChild(nameSpan);
+            li.appendChild(statusSpan);
+            $speedrunProposalList.appendChild(li);
+        });
+
+        // Check if everyone accepted
+        const isProposer = (speedrunState.proposerId === network.myPeerId);
+        const acceptedCount = speedrunState.participants.filter(p => p.accepted).length;
+
+        // Active start button if at least one guest accepted
+        $btnSpeedrunStart.disabled = (acceptedCount < 2);
+    }
+
+    function cancelSpeedrunProposal() {
+        network.sendSpeedrun({
+            action: 'cancel',
+            peerId: network.myPeerId
+        });
+        resetSpeedrun();
+        showSpeedrunSubView('lobby');
+        $speedrunLobbySetup.hidden = false;
+    }
+
+    function declineSpeedrunProposal() {
+        network.sendSpeedrun({
+            action: 'decline',
+            peerId: network.myPeerId,
+            nickname: network.nickname
+        });
+        resetSpeedrun();
+        showSpeedrunSubView('lobby');
+        $speedrunLobbySetup.hidden = false;
+    }
+
+    function acceptSpeedrunProposal() {
+        // Find proposer and accept
+        network.sendSpeedrun({
+            action: 'accept',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor
+        });
+
+        $speedrunLobbyInvite.hidden = true;
+        $speedrunLobbyWaiting.hidden = false;
+        $speedrunLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+        $btnSpeedrunStart.hidden = true; // Guest does not start
+        $btnSpeedrunCancel.hidden = true; // Guest does not cancel
+    }
+
+    // Solo game
+    async function startSpeedrunSolo() {
+        const vocabId = parseInt($speedrunVocabulary.value);
+        const vocabName = $speedrunVocabulary.options[$speedrunVocabulary.selectedIndex].textContent.split(' (')[0];
+        
+        showToast('🔄 단어를 불러오는 중입니다...');
+        const initialWords = await fetchWordsFromDB(vocabId, 0, 50);
+        if (initialWords.length < 5) {
+            showToast('⚠️ 불러올 수 있는 단어가 부족합니다.');
+            return;
+        }
+
+        speedrunState.status = 'playing';
+        speedrunState.isSolo = true;
+        speedrunState.vocabularyId = vocabId;
+        speedrunState.vocabularyName = vocabName;
+        speedrunState.words = initialWords;
+        speedrunState.loadedCount = initialWords.length;
+        speedrunState.myScore = 0;
+        speedrunState.peerScore = 0;
+        speedrunState.currentIndex = 0;
+        speedrunState.elapsedSeconds = 0;
+        
+        $speedrunPeerLabel.style.display = 'none';
+
+        // Start Solo Game UI
+        showSpeedrunSubView('game');
+        updateQuizUI();
+        startSpeedrunTimer();
+    }
+
+    // Host triggers P2P multiplayer start after fetching 50 words
+    async function startSpeedrunMulti() {
+        const vocabId = speedrunState.vocabularyId;
+        
+        showToast('🔄 단어를 불러오는 중입니다...');
+        const initialWords = await fetchWordsFromDB(vocabId, 0, 50);
+        if (initialWords.length < 5) {
+            showToast('⚠️ 불러올 수 있는 단어가 부족합니다.');
+            return;
+        }
+
+        // Shuffle words dynamically so order is exact but random
+        const shuffledWords = shuffleArray(initialWords);
+
+        // Send start command with word list to guests
+        network.sendSpeedrun({
+            action: 'start',
+            words: shuffledWords,
+            vocabularyId: vocabId,
+            vocabularyName: speedrunState.vocabularyName
+        });
+    }
+
+    function initMultiplayerGame(words) {
+        speedrunState.status = 'playing';
+        speedrunState.isSolo = false;
+        speedrunState.words = words;
+        speedrunState.loadedCount = words.length;
+        speedrunState.myScore = 0;
+        speedrunState.peerScore = 0;
+        speedrunState.currentIndex = 0;
+        speedrunState.elapsedSeconds = 0;
+
+        $speedrunPeerLabel.style.display = 'inline';
+
+        showSpeedrunSubView('game');
+        updateQuizUI();
+        startSpeedrunTimer();
+    }
+
+    // Timer loop
+    function startSpeedrunTimer() {
+        if (speedrunState.gameTimerInterval) clearInterval(speedrunState.gameTimerInterval);
+        
+        $speedrunGameTimer.textContent = '02:00';
+        
+        speedrunState.gameTimerInterval = setInterval(() => {
+            speedrunState.elapsedSeconds++;
+            const remaining = speedrunState.timeLimit - speedrunState.elapsedSeconds;
+            
+            if (remaining <= 0) {
+                clearInterval(speedrunState.gameTimerInterval);
+                finishSpeedrunGame();
+            } else {
+                const minutes = Math.floor(remaining / 60);
+                const seconds = remaining % 60;
+                $speedrunGameTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+        }, 1000);
+    }
+
+    // Render Quiz Question and Choices
+    function updateQuizUI() {
+        if (speedrunState.currentIndex >= speedrunState.words.length) {
+            // Out of words
+            finishSpeedrunGame();
+            return;
+        }
+
+        const currentWord = speedrunState.words[speedrunState.currentIndex];
+        $speedrunWordBox.textContent = currentWord.english;
+        $speedrunCurrentIndex.textContent = String(speedrunState.currentIndex + 1);
+
+        // Generate Multiple Choices
+        const choices = [];
+        choices.push(currentWord.korean); // The correct answer
+
+        // Gather incorrect answers from loaded pool
+        const wordPool = speedrunState.words;
+        const otherMeanings = wordPool
+            .filter(w => w.id !== currentWord.id)
+            .map(w => w.korean);
+        
+        const shuffledOthers = shuffleArray(otherMeanings);
+        
+        // Add 3 incorrect options
+        for (let i = 0; i < 3 && i < shuffledOthers.length; i++) {
+            choices.push(shuffledOthers[i]);
+        }
+
+        // Pad if not enough unique words
+        while (choices.length < 4) {
+            choices.push('임시 의미');
+        }
+
+        // Shuffle choices (but remember where correct one went)
+        const shuffledChoices = shuffleArray(choices);
+
+        // Render buttons
+        const prefix = ['①', '②', '③', '④'];
+        document.querySelectorAll('.speedrun-choices-grid .choice-btn').forEach((btn, idx) => {
+            btn.className = 'choice-btn btn'; // Clear feedbacks
+            btn.disabled = false;
+            
+            const choiceText = shuffledChoices[idx];
+            btn.textContent = `${prefix[idx]} ${choiceText}`;
+            btn.dataset.isCorrect = (choiceText === currentWord.korean);
+        });
+
+        // Update progress bar
+        updateProgressBarUI();
+    }
+
+    function updateProgressBarUI() {
+        const totalScale = Math.max(50, speedrunState.loadedCount);
+        
+        // My Score percentage
+        const myPercent = Math.min(100, (speedrunState.myScore / totalScale) * 100);
+        $speedrunMyBar.style.width = `${myPercent}%`;
+        $speedrunMyScore.textContent = String(speedrunState.myScore);
+
+        if (!speedrunState.isSolo) {
+            // Peer Score percentage
+            const peerPercent = Math.min(100, (speedrunState.peerScore / totalScale) * 100);
+            $speedrunPeerBar.style.width = `${peerPercent}%`;
+            $speedrunPeerScore.textContent = String(speedrunState.peerScore);
+        } else {
+            $speedrunPeerBar.style.width = '0%';
+            $speedrunPeerScore.textContent = '0';
+        }
+    }
+
+    // Handles vocabulary choice click
+    async function handleChoiceClick(choiceIdx) {
+        const buttons = document.querySelectorAll('.speedrun-choices-grid .choice-btn');
+        const clickedBtn = buttons[choiceIdx];
+        
+        // Disable all buttons immediately to prevent double click
+        buttons.forEach(btn => btn.disabled = true);
+
+        const isCorrect = clickedBtn.dataset.isCorrect === 'true';
+
+        if (isCorrect) {
+            clickedBtn.classList.add('correct');
+            speedrunState.myScore++;
+        } else {
+            clickedBtn.classList.add('incorrect');
+            // Show correct answer too
+            buttons.forEach(btn => {
+                if (btn.dataset.isCorrect === 'true') {
+                    btn.classList.add('correct');
+                }
+            });
+        }
+
+        // Send progress message if in multiplayer mode
+        if (!speedrunState.isSolo) {
+            network.sendSpeedrun({
+                action: 'progress',
+                peerId: network.myPeerId,
+                score: speedrunState.myScore,
+                index: speedrunState.currentIndex + 1
+            });
+        }
+
+        // Page pre-fetching policy:
+        // "한쪽이라도 40개가 넘어가기 시작하면 (즉 loadedCount - currentIndex <= 10) 20개씩 더 로드해서 채우기"
+        const remainingCount = speedrunState.loadedCount - (speedrunState.currentIndex + 1);
+        if (remainingCount <= 10) {
+            if (network.isHost || speedrunState.isSolo) {
+                // Host or Solo loads the next chunk
+                loadNextWordsChunk();
+            } else {
+                // Guest requests Host to load more words
+                network.sendSpeedrun({
+                    action: 'request-more',
+                    currentOffset: speedrunState.loadedCount
+                });
+            }
+        }
+
+        // Delays slightly to let player see feedback, then moves to next question
+        setTimeout(() => {
+            speedrunState.currentIndex++;
+            updateQuizUI();
+        }, 350);
+    }
+
+    // Host or Solo loads another 20 words from DB (read-only, does not touch write)
+    async function loadNextWordsChunk() {
+        const currentOffset = speedrunState.loadedCount;
+        const newWords = await fetchWordsFromDB(speedrunState.vocabularyId, currentOffset, 20);
+        
+        if (newWords.length > 0) {
+            // Append loaded words
+            speedrunState.words.push(...newWords);
+            speedrunState.loadedCount = speedrunState.words.length;
+            
+            // If Host, broadcast to Guest
+            if (!speedrunState.isSolo && network.isHost) {
+                network.sendSpeedrun({
+                    action: 'append-words',
+                    words: newWords
+                });
+            }
+        }
+    }
+
+    // Ends the game and displays final results
+    function finishSpeedrunGame() {
+        if (speedrunState.gameTimerInterval) {
+            clearInterval(speedrunState.gameTimerInterval);
+            speedrunState.gameTimerInterval = null;
+        }
+
+        speedrunState.status = 'finished';
+        showSpeedrunSubView('results');
+
+        // Render results
+        $speedrunResultMyScore.textContent = String(speedrunState.myScore);
+        
+        if (speedrunState.isSolo) {
+            $speedrunResultTitle.textContent = '완료!';
+            $speedrunResultPeerScore.parentElement.style.display = 'none';
+        } else {
+            $speedrunResultPeerScore.parentElement.style.display = 'block';
+            $speedrunResultPeerScore.textContent = String(speedrunState.peerScore);
+            
+            if (speedrunState.myScore > speedrunState.peerScore) {
+                $speedrunResultTitle.textContent = '🏆 승리!';
+            } else if (speedrunState.myScore < speedrunState.peerScore) {
+                $speedrunResultTitle.textContent = '🥈 패배...';
+            } else {
+                $speedrunResultTitle.textContent = '🤝 무승부!';
+            }
+        }
+    }
+
+    function quitSpeedrunGame() {
+        if (!speedrunState.isSolo) {
+            network.sendSpeedrun({
+                action: 'quit',
+                peerId: network.myPeerId
+            });
+        }
+        resetSpeedrun();
+        $speedrunOverlay.hidden = true;
+    }
+
+    function resetSpeedrun() {
+        if (speedrunState.gameTimerInterval) {
+            clearInterval(speedrunState.gameTimerInterval);
+            speedrunState.gameTimerInterval = null;
+        }
+        speedrunState.status = 'none';
+        speedrunState.isSolo = false;
+        speedrunState.words = [];
+        speedrunState.loadedCount = 0;
+        speedrunState.myScore = 0;
+        speedrunState.peerScore = 0;
+        speedrunState.currentIndex = 0;
+        speedrunState.elapsedSeconds = 0;
+    }
+
+    // Handles incoming speedrun WebRTC/Peer P2P packets
+    function handleSpeedrunNetworkMessage(fromPeerId, payload) {
+        console.log('[Speedrun Network]', fromPeerId, payload);
+        const action = payload.action;
+
+        if (action === 'propose') {
+            speedrunState.status = 'proposing';
+            speedrunState.proposerId = payload.proposerId;
+            speedrunState.proposerNickname = payload.proposerNickname;
+            speedrunState.vocabularyId = payload.vocabularyId;
+            speedrunState.vocabularyName = payload.vocabularyName;
+            
+            speedrunState.participants = [
+                {
+                    peerId: payload.proposerId,
+                    nickname: payload.proposerNickname,
+                    color: payload.proposerColor || getPeerColor(payload.proposerId),
+                    accepted: true
+                }
+            ];
+
+            // Show Invite UI
+            $speedrunProposerName.textContent = payload.proposerNickname;
+            $speedrunProposalVocabName.textContent = payload.vocabularyName;
+            
+            $speedrunOverlay.hidden = false;
+            showSpeedrunSubView('lobby');
+            $speedrunLobbySetup.hidden = true;
+            $speedrunLobbyWaiting.hidden = true;
+            $speedrunLobbyInvite.hidden = false;
+        } 
+        else if (action === 'accept') {
+            const exists = speedrunState.participants.some(p => p.peerId === payload.peerId);
+            if (!exists) {
+                speedrunState.participants.push({
+                    peerId: payload.peerId,
+                    nickname: payload.nickname,
+                    color: payload.color || getPeerColor(payload.peerId),
+                    accepted: true
+                });
+            } else {
+                speedrunState.participants.forEach(p => {
+                    if (p.peerId === payload.peerId) p.accepted = true;
+                });
+            }
+            updateSpeedrunProposalListUI();
+        } 
+        else if (action === 'decline') {
+            showToast(`❌ ${payload.nickname}님이 대결 제안을 거절했습니다.`);
+            resetSpeedrun();
+            showSpeedrunSubView('lobby');
+            $speedrunLobbySetup.hidden = false;
+            $speedrunLobbyWaiting.hidden = true;
+            $speedrunLobbyInvite.hidden = true;
+        } 
+        else if (action === 'cancel') {
+            showToast('⚠️ 스피드런 대결 제안이 취소되었습니다.');
+            resetSpeedrun();
+            showSpeedrunSubView('lobby');
+            $speedrunLobbySetup.hidden = false;
+            $speedrunLobbyWaiting.hidden = true;
+            $speedrunLobbyInvite.hidden = true;
+        } 
+        else if (action === 'start') {
+            // Guests receive the identical (and shuffled) word list from Host
+            initMultiplayerGame(payload.words);
+        } 
+        else if (action === 'progress') {
+            if (payload.peerId !== network.myPeerId) {
+                speedrunState.peerScore = payload.score;
+                updateProgressBarUI();
+            }
+        } 
+        else if (action === 'request-more') {
+            // Only Host queries SQLite/D1 and shares the next words
+            if (network.isHost) {
+                loadNextWordsChunk();
+            }
+        } 
+        else if (action === 'append-words') {
+            // Guest appends the chunk of words sent by Host
+            speedrunState.words.push(...payload.words);
+            speedrunState.loadedCount = speedrunState.words.length;
+        } 
+        else if (action === 'quit') {
+            showToast('⚠️ 상대방이 게임을 나갔습니다.');
+            finishSpeedrunGame();
+        }
+    }
+
+    function handleSpeedrunPeerLeave(peerId) {
+        if (speedrunState.status === 'playing' && !speedrunState.isSolo) {
+            showToast('🔴 대결 상대방이 퇴장하여 대결을 종료합니다.');
+            finishSpeedrunGame();
+        } 
+        else if (speedrunState.status === 'proposing') {
+            speedrunState.participants = speedrunState.participants.filter(p => p.peerId !== peerId);
+            updateSpeedrunProposalListUI();
+        }
+    }
+
+    function syncSpeedrunStateFromHost(hostSpeedrunState) {
+        speedrunState.status = hostSpeedrunState.status;
+        speedrunState.isSolo = hostSpeedrunState.isSolo;
+        speedrunState.vocabularyId = hostSpeedrunState.vocabularyId;
+        speedrunState.vocabularyName = hostSpeedrunState.vocabularyName;
+        speedrunState.words = hostSpeedrunState.words;
+        speedrunState.loadedCount = hostSpeedrunState.loadedCount;
+        speedrunState.myScore = hostSpeedrunState.myScore;
+        speedrunState.peerScore = hostSpeedrunState.peerScore;
+        speedrunState.currentIndex = hostSpeedrunState.currentIndex;
+        speedrunState.elapsedSeconds = hostSpeedrunState.elapsedSeconds;
+        speedrunState.timeLimit = hostSpeedrunState.timeLimit;
+        
+        $speedrunPeerLabel.style.display = 'inline';
+        showSpeedrunSubView('game');
+        updateQuizUI();
+        startSpeedrunTimer();
+    }
 
     const MINESWEEPER_PRESETS = {
         basic: { label: "기본", rows: 9, cols: 9, mines: 10 },

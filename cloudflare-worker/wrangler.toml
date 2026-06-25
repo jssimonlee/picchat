@@ -6,3 +6,8 @@ compatibility_date = "2026-06-23"
 binding = "DB"
 database_name = "mydb"
 database_id = "ba85cd4a-6ed4-451e-9883-4593bbc00f8e"
+
+[[d1_databases]]
+binding = "VOCAB_DB"
+database_name = "vocab-db"
+database_id = "2edd1ee6-6262-41ea-8311-a1c14109b7b8"
