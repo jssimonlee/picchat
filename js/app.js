@@ -7880,6 +7880,17 @@
        ENGLISH VOCABULARY SPEED RUN GAME
        ========================================================================== */
 
+    function shuffleArray(arr) {
+        const newArr = [...arr];
+        for (let i = newArr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const temp = newArr[i];
+            newArr[i] = newArr[j];
+            newArr[j] = temp;
+        }
+        return newArr;
+    }
+
     async function loadVocabularies() {
         try {
             const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/vocabularies`);
@@ -7899,8 +7910,14 @@
 
                 list.forEach(v => {
                     const id = v.id || v.ID || v.v_id || 1;
-                    const name = v.name || v.NAME || v.v_name || '영어 단어';
+                    let name = v.name || v.NAME || v.v_name || '영어 단어';
+                    if (name.toLowerCase() === 'test') {
+                        name = '토익 단어';
+                    }
                     const wordCount = v.word_count !== undefined ? v.word_count : (v.WORD_COUNT !== undefined ? v.WORD_COUNT : (v.count !== undefined ? v.count : 0));
+
+                    // Skip empty vocabularies to avoid rendering non-playable options
+                    if (wordCount === 0) return;
 
                     const opt = document.createElement('option');
                     opt.value = id;
@@ -7911,17 +7928,17 @@
 
                 if ($speedrunVocabulary.children.length === 0) {
                     const opt = document.createElement('option');
-                    opt.value = "1";
-                    opt.textContent = "토익 단어 (기본)";
+                    opt.value = "3";
+                    opt.textContent = "토익 단어 (115단어)";
                     $speedrunVocabulary.appendChild(opt);
                 }
             } else {
                 console.error('[Speedrun] Vocabularies fetch status failed:', response.status);
-                $speedrunVocabulary.innerHTML = '<option value="1" selected>토익 단어 (기본)</option>';
+                $speedrunVocabulary.innerHTML = '<option value="3" selected>토익 단어 (115단어)</option>';
             }
         } catch (e) {
             console.error('Failed to load vocabularies:', e);
-            $speedrunVocabulary.innerHTML = '<option value="1" selected>토익 단어 (기본)</option>';
+            $speedrunVocabulary.innerHTML = '<option value="3" selected>토익 단어 (115단어)</option>';
         }
     }
 
