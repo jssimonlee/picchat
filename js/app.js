@@ -680,7 +680,15 @@
     }
 
     function showLobbyStatus(msg, type) {
-        $lobbyStatus.textContent = msg;
+        if (type === 'info') {
+            $lobbyStatus.innerHTML = '<div class="lobby-spinner"></div>';
+        } else if (type === 'success') {
+            $lobbyStatus.hidden = true;
+            $lobbyStatus.innerHTML = '';
+            return;
+        } else {
+            $lobbyStatus.textContent = msg;
+        }
         $lobbyStatus.className = 'status-message ' + type;
         $lobbyStatus.hidden = false;
     }
@@ -10544,39 +10552,6 @@
                     $btnPrev.addEventListener('click', () => renderPage(currentPage - 1));
                     $btnNext.addEventListener('click', () => renderPage(currentPage + 1));
                     
-                    // Add external new-tab view link
-                    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-                    const objectUrl = URL.createObjectURL(blob);
-                    
-                    const newTabButton = document.createElement('button');
-                    newTabButton.className = 'btn btn-secondary';
-                    newTabButton.style.marginTop = '10px';
-                    newTabButton.style.display = 'inline-block';
-                    newTabButton.textContent = '↗️ 새 창에서 원본 PDF 보기';
-                    newTabButton.addEventListener('click', () => {
-                        const newWindow = window.open();
-                        if (newWindow) {
-                            newWindow.document.write(`
-                                <html>
-                                <head>
-                                    <title>${fileName || 'PDF Viewer'}</title>
-                                    <style>
-                                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-                                        iframe { border: none; width: 100%; height: 100%; }
-                                    </style>
-                                </head>
-                                <body>
-                                    <iframe src="${objectUrl}"></iframe>
-                                </body>
-                                </html>
-                            `);
-                            newWindow.document.close();
-                        } else {
-                            showToast('⚠️ 새 창을 열 수 없습니다. 팝업 차단을 해제해주세요.');
-                        }
-                    });
-                    $pdfContainer.appendChild(newTabButton);
-
                     // Render the first page initially
                     await renderPage(1);
                 } catch (err) {
