@@ -10548,14 +10548,34 @@
                     const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
                     const objectUrl = URL.createObjectURL(blob);
                     
-                    const newTabLink = document.createElement('a');
-                    newTabLink.href = objectUrl;
-                    newTabLink.target = '_blank';
-                    newTabLink.className = 'btn btn-secondary';
-                    newTabLink.style.marginTop = '10px';
-                    newTabLink.style.display = 'inline-block';
-                    newTabLink.textContent = '↗️ 새 창에서 원본 PDF 보기';
-                    $pdfContainer.appendChild(newTabLink);
+                    const newTabButton = document.createElement('button');
+                    newTabButton.className = 'btn btn-secondary';
+                    newTabButton.style.marginTop = '10px';
+                    newTabButton.style.display = 'inline-block';
+                    newTabButton.textContent = '↗️ 새 창에서 원본 PDF 보기';
+                    newTabButton.addEventListener('click', () => {
+                        const newWindow = window.open();
+                        if (newWindow) {
+                            newWindow.document.write(`
+                                <html>
+                                <head>
+                                    <title>${fileName || 'PDF Viewer'}</title>
+                                    <style>
+                                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+                                        iframe { border: none; width: 100%; height: 100%; }
+                                    </style>
+                                </head>
+                                <body>
+                                    <iframe src="${objectUrl}"></iframe>
+                                </body>
+                                </html>
+                            `);
+                            newWindow.document.close();
+                        } else {
+                            showToast('⚠️ 새 창을 열 수 없습니다. 팝업 차단을 해제해주세요.');
+                        }
+                    });
+                    $pdfContainer.appendChild(newTabButton);
 
                     // Render the first page initially
                     await renderPage(1);
