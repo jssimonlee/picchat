@@ -10218,9 +10218,9 @@
             $mdDiv.style.background = '#fff';
             $mdDiv.style.color = '#24292f';
             $mdDiv.style.borderRadius = '8px';
-            $mdDiv.style.maxHeight = '65vh';
-            $mdDiv.style.overflowY = 'auto';
             $mdDiv.style.textAlign = 'left';
+            $mdDiv.style.width = '100%';
+            $mdDiv.style.boxSizing = 'border-box';
             
             const mdStyle = document.createElement('style');
             mdStyle.innerHTML = `
@@ -10277,9 +10277,10 @@
             });
 
             const $tableWrapper = document.createElement('div');
-            $tableWrapper.style.maxHeight = '65vh';
-            $tableWrapper.style.overflow = 'auto';
+            $tableWrapper.style.width = '100%';
+            $tableWrapper.style.overflowX = 'auto';
             $tableWrapper.style.borderRadius = '8px';
+            $tableWrapper.style.boxSizing = 'border-box';
             
             const $table = document.createElement('table');
             $table.style.width = '100%';
@@ -10345,10 +10346,11 @@
             $pre.style.background = '#272822';
             $pre.style.color = '#f8f8f2';
             $pre.style.borderRadius = '8px';
-            $pre.style.maxHeight = '65vh';
-            $pre.style.overflow = 'auto';
+            $pre.style.overflowX = 'auto';
             $pre.style.textAlign = 'left';
             $pre.style.fontFamily = 'monospace';
+            $pre.style.boxSizing = 'border-box';
+            $pre.style.width = '100%';
 
             const $code = document.createElement('code');
             $code.textContent = text;
