@@ -17,9 +17,13 @@ export default {
     try {
       // GET /api/vocabularies - Fetch word collections list
       if (request.method === "GET" && path === "/api/vocabularies") {
-        const result = await env.VOCAB_DB.prepare(
-          "SELECT id, name FROM vocabularies"
-        ).all();
+        const result = await env.VOCAB_DB.prepare(`
+          SELECT v.id AS id, v.name AS name, COUNT(w.id) AS word_count
+          FROM vocabularies v
+          LEFT JOIN words w ON v.id = w.vocabulary_id
+          GROUP BY v.id
+          ORDER BY v.id
+        `).all();
         return new Response(JSON.stringify(result.results), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
