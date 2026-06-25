@@ -5,17 +5,18 @@
 
 :root {
     /* Colors */
-    --bg-primary: #0a0a1a;
-    --bg-secondary: #12122a;
-    --bg-surface: rgba(255, 255, 255, 0.04);
-    --bg-surface-hover: rgba(255, 255, 255, 0.08);
-    --bg-glass: rgba(18, 18, 42, 0.75);
-    --border: rgba(255, 255, 255, 0.14);
-    --border-hover: rgba(255, 255, 255, 0.24);
+    --bg-primary: #0f0f26; /* 한층 더 밝은 딥 블루 */
+    --bg-secondary: #1b1b38; /* 톤업 */
+    --bg-surface: rgba(255, 255, 255, 0.08); /* 불투명도를 높여 더 밝게 */
+    --bg-surface-hover: rgba(255, 255, 255, 0.15); /* 마우스 호버 시 톤업 */
+    --bg-glass: rgba(30, 30, 58, 0.85); /* 확실한 유리 효과와 향상된 밝기 */
+    --border: rgba(255, 255, 255, 0.22); /* 경계선을 더 밝고 뚜렷하게 */
+    --border-hover: rgba(255, 255, 255, 0.35);
 
-    --text-primary: #f0f0f5;
-    --text-secondary: #8888a8;
-    --text-muted: #555570;
+    --text-primary: #ffffff; /* 텍스트 가독성 강화 */
+    --text-secondary: #a8a8c8; /* 어두운 보라색에서 밝은 연회색 톤으로 톤업 */
+    --text-muted: #78789c; /* 플레이스홀더 및 비활성 글씨 가독성 강화 */
+    --primary: #7c5cff; /* 기존 누락되었던 --primary 변수 선언 */
 
     --accent-purple: #7c5cff;
     --accent-cyan: #00d4ff;
@@ -688,10 +689,10 @@ input, button, textarea {
     left: 54px;
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(10, 10, 30, 0.96);
+    background: rgba(30, 30, 56, 0.96);
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 6px;
     display: none;
@@ -994,10 +995,10 @@ input, button, textarea {
     width: 340px;
     display: flex;
     flex-direction: column;
-    background: rgba(10, 10, 30, 0.92);
+    background: rgba(26, 26, 50, 0.95);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
-    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 1px solid var(--border);
     z-index: 40;
     animation: chatSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: -8px 0 30px rgba(0, 0, 0, 0.4);
@@ -2747,32 +2748,34 @@ input, button, textarea {
     cursor: pointer;
     font-size: 13px;
     font-weight: 600;
-    color: #475569;
+    color: var(--text-secondary);
 }
 
 .custom-switch {
     position: relative;
     width: 44px;
     height: 24px;
-    background-color: #cbd5e1;
+    background-color: #334155;
+    border: 2px solid #64748b;
     border-radius: 12px;
-    transition: background-color 0.25s;
+    transition: all 0.25s;
 }
 
 .custom-switch-handle {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 20px;
-    height: 20px;
+    top: 1px;
+    left: 1px;
+    width: 18px;
+    height: 18px;
     background-color: white;
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
     transition: transform 0.25s;
 }
 
 input[type="checkbox"]:checked + .custom-switch {
-    background-color: var(--primary);
+    background-color: #10b981;
+    border-color: #34d399;
 }
 
 input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
@@ -3433,27 +3436,27 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
 .topbar-switch-container .custom-switch {
     width: 38px;
     height: 20px;
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: #334155;
+    border: 1.5px solid #64748b;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
     position: relative;
-    transition: background-color 0.25s, border-color 0.25s;
+    transition: all 0.25s;
     cursor: pointer;
 }
 .topbar-switch-container .custom-switch-handle {
     position: absolute;
     top: 1px;
     left: 1px;
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
     background-color: #ffffff;
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
     transition: transform 0.25s;
 }
 .topbar-switch-container input[type="checkbox"]:checked + .custom-switch {
-    background-color: var(--primary);
-    border-color: transparent;
+    background-color: #10b981;
+    border-color: #34d399;
 }
 .topbar-switch-container input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     transform: translateX(18px);
