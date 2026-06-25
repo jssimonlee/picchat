@@ -650,6 +650,17 @@
             $roomCreated.hidden = false;
             $btnCopyCode.addEventListener('click', () => copyRoomCode(code));
             showLobbyStatus('방이 생성되었습니다!', 'success');
+
+            // Hide other elements to prevent clutter
+            const $nickGroup = document.getElementById('nickname').closest('.input-group');
+            if ($nickGroup) $nickGroup.style.display = 'none';
+            const $customOption = document.querySelector('.custom-code-option');
+            if ($customOption) $customOption.style.display = 'none';
+            $btnCreateRoom.style.display = 'none';
+            const $lobbyDivider = document.querySelector('.lobby-actions .divider');
+            if ($lobbyDivider) $lobbyDivider.style.display = 'none';
+            const $joinSec = document.querySelector('.join-section');
+            if ($joinSec) $joinSec.style.display = 'none';
         } catch (err) {
             $btnCreateRoom.disabled = false;
             if (err.message && err.message.includes('unavailable-id')) {
@@ -3083,8 +3094,19 @@
         $roomCreated.hidden = true;
         $lobbyStatus.hidden = true;
         $btnCreateRoom.disabled = false;
+        $btnCreateRoom.style.display = '';
         $btnJoinRoom.disabled = false;
         $joinCode.value = '';
+
+        // Restore hidden elements
+        const $nickGroup = document.getElementById('nickname').closest('.input-group');
+        if ($nickGroup) $nickGroup.style.display = '';
+        const $customOption = document.querySelector('.custom-code-option');
+        if ($customOption) $customOption.style.display = '';
+        const $lobbyDivider = document.querySelector('.lobby-actions .divider');
+        if ($lobbyDivider) $lobbyDivider.style.display = '';
+        const $joinSec = document.querySelector('.join-section');
+        if ($joinSec) $joinSec.style.display = '';
     }
 
     /* ---------- Toast ---------- */
