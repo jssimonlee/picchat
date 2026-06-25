@@ -8390,7 +8390,7 @@
     }
 
     // Ends the game and displays final results
-    function finishSpeedrunGame() {
+    function finishSpeedrunGame(quitReason = null) {
         if (speedrunState.gameTimerInterval) {
             clearInterval(speedrunState.gameTimerInterval);
             speedrunState.gameTimerInterval = null;
@@ -8409,12 +8409,16 @@
             $speedrunResultPeerScore.parentElement.style.display = 'block';
             $speedrunResultPeerScore.textContent = String(speedrunState.peerScore);
             
-            if (speedrunState.myScore > speedrunState.peerScore) {
-                $speedrunResultTitle.textContent = '🏆 승리!';
-            } else if (speedrunState.myScore < speedrunState.peerScore) {
-                $speedrunResultTitle.textContent = '🥈 패배...';
+            if (quitReason === 'opponent-quit' || quitReason === 'opponent-leave') {
+                $speedrunResultTitle.textContent = '🏆 기권승! (상대방 기권)';
             } else {
-                $speedrunResultTitle.textContent = '🤝 무승부!';
+                if (speedrunState.myScore > speedrunState.peerScore) {
+                    $speedrunResultTitle.textContent = '🏆 승리!';
+                } else if (speedrunState.myScore < speedrunState.peerScore) {
+                    $speedrunResultTitle.textContent = '🥈 패배...';
+                } else {
+                    $speedrunResultTitle.textContent = '🤝 무승부!';
+                }
             }
         }
     }
@@ -8531,14 +8535,14 @@
         } 
         else if (action === 'quit') {
             showToast('⚠️ 상대방이 게임을 나갔습니다.');
-            finishSpeedrunGame();
+            finishSpeedrunGame('opponent-quit');
         }
     }
 
     function handleSpeedrunPeerLeave(peerId) {
         if (speedrunState.status === 'playing' && !speedrunState.isSolo) {
             showToast('🔴 대결 상대방이 퇴장하여 대결을 종료합니다.');
-            finishSpeedrunGame();
+            finishSpeedrunGame('opponent-leave');
         } 
         else if (speedrunState.status === 'proposing') {
             speedrunState.participants = speedrunState.participants.filter(p => p.peerId !== peerId);

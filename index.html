@@ -1055,48 +1055,48 @@
             <!-- Speedrun Game Playing -->
             <div id="speedrunGame" class="sudoku-view" hidden>
                 <!-- Stats bar (Timer, My Score, Peer Score) -->
-                <div class="sudoku-stats-bar" style="max-width: 100%; margin-bottom: 20px; padding: 12px 24px; border-radius: 12px; background: var(--bg-secondary); box-shadow: var(--shadow-sm);">
+                <div class="sudoku-stats-bar" style="max-width: 100%; margin-bottom: 20px;">
                     <div class="sudoku-stat-item">
                         <span class="label">남은 시간</span>
-                        <span id="speedrunGameTimer" class="value" style="font-family: monospace; font-weight: bold; color: var(--accent-cyan);">02:00</span>
+                        <span id="speedrunGameTimer" class="value" style="font-family: monospace; font-weight: bold; color: #3b82f6;">02:00</span>
                     </div>
                     <div class="sudoku-stat-item">
                         <span class="label">내 점수 (맞춘 수)</span>
-                        <span id="speedrunMyScore" class="value" style="font-weight: bold; color: var(--success);">0</span>
+                        <span id="speedrunMyScore" class="value" style="font-weight: bold; color: #16a34a;">0</span>
                     </div>
                     <div class="sudoku-stat-item">
                         <span class="label">상대방 점수</span>
-                        <span id="speedrunPeerScore" class="value" style="font-weight: bold; color: var(--accent-pink);">0</span>
+                        <span id="speedrunPeerScore" class="value" style="font-weight: bold; color: #e11d48;">0</span>
                     </div>
                     <div class="sudoku-stat-item">
                         <span class="label">현재 문항</span>
-                        <span id="speedrunCurrentIndex" class="value" style="font-weight: bold; color: var(--text-primary);">1</span>
+                        <span id="speedrunCurrentIndex" class="value" style="font-weight: bold; color: #0f172a;">1</span>
                     </div>
                 </div>
 
                 <!-- Compare Progress Bar -->
-                <div style="width: 100%; height: 24px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-bottom: 24px; position: relative; overflow: hidden; border: 1px solid var(--border);">
+                <div style="width: 100%; height: 24px; background: rgba(241, 245, 249, 0.9); border-radius: 12px; margin-bottom: 24px; position: relative; overflow: hidden; border: 1.5px solid rgba(0, 0, 0, 0.08);">
                     <div id="speedrunMyBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-purple), var(--success)); transition: width 0.3s; position: absolute; left: 0; top: 0;"></div>
                     <div id="speedrunPeerBar" style="height: 6px; width: 0%; background: var(--accent-pink); transition: width 0.3s; position: absolute; left: 0; bottom: 0;"></div>
                     <div style="position: absolute; width: 100%; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 12px; box-sizing: border-box; font-size: 11px; font-weight: bold; z-index: 2; pointer-events: none;">
-                        <span style="color: #ffffff;">나 (밑 바)</span>
-                        <span id="speedrunPeerLabel" style="color: var(--accent-pink);">상대방 (줄 바)</span>
+                        <span style="color: #334155;">나 (밑 바)</span>
+                        <span id="speedrunPeerLabel" style="color: #e11d48;">상대방 (줄 바)</span>
                     </div>
                 </div>
 
                 <!-- Quiz Area -->
                 <div class="speedrun-quiz-container" style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%;">
                     <!-- English Word Display -->
-                    <div id="speedrunWordBox" style="font-size: 36px; font-weight: 800; color: var(--text-primary); text-shadow: 0 0 10px rgba(124, 92, 255, 0.3); padding: 20px 40px; background: var(--bg-surface); border-radius: var(--radius-md); border: 1.5px solid var(--border); width: 100%; text-align: center; min-height: 100px; display: flex; align-items: center; justify-content: center;">
+                    <div id="speedrunWordBox" style="font-size: 36px; font-weight: 800; color: #0f172a; padding: 24px 40px; background: rgba(241, 245, 249, 0.85); border-radius: var(--radius-md); border: 1.5px solid rgba(0, 0, 0, 0.08); width: 100%; text-align: center; min-height: 100px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
                         Word
                     </div>
 
                     <!-- Choices Grid -->
                     <div class="speedrun-choices-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%;">
-                        <button class="choice-btn btn" data-index="0" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">① 뜻 1</button>
-                        <button class="choice-btn btn" data-index="1" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">② 뜻 2</button>
-                        <button class="choice-btn btn" data-index="2" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">③ 뜻 3</button>
-                        <button class="choice-btn btn" data-index="3" style="padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 16px; font-weight: 600; text-align: left; transition: all 0.2s; color: var(--text-primary);">④ 뜻 4</button>
+                        <button class="choice-btn" data-index="0">① 뜻 1</button>
+                        <button class="choice-btn" data-index="1">② 뜻 2</button>
+                        <button class="choice-btn" data-index="2">③ 뜻 3</button>
+                        <button class="choice-btn" data-index="3">④ 뜻 4</button>
                     </div>
                 </div>
             </div>
