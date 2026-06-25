@@ -466,7 +466,7 @@
                     }
                 }
                 awayTimer = null;
-            }, 5000);
+            }, 2000);
         });
 
         window.addEventListener('focus', () => {
