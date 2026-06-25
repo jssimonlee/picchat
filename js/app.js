@@ -7964,15 +7964,11 @@
     function setupSpeedrunEvents() {
         console.log('[Speedrun] Setting up event listeners');
         
-        $btnSpeedrun.addEventListener('click', async () => {
+        $btnSpeedrun.addEventListener('click', () => {
             console.log('[Speedrun] Toolbar icon clicked');
             if (speedrunState.status === 'none') {
                 $speedrunOverlay.hidden = false;
-                showSpeedrunSubView('lobby');
-                $speedrunLobbySetup.hidden = false;
-                $speedrunLobbyWaiting.hidden = true;
-                $speedrunLobbyInvite.hidden = true;
-                await loadVocabularies();
+                showSpeedrunLobbySetup();
             } else {
                 $speedrunOverlay.hidden = false;
             }
@@ -8022,10 +8018,7 @@
 
         $btnSpeedrunReturn.addEventListener('click', () => {
             resetSpeedrun();
-            showSpeedrunSubView('lobby');
-            $speedrunLobbySetup.hidden = false;
-            $speedrunLobbyWaiting.hidden = true;
-            $speedrunLobbyInvite.hidden = true;
+            showSpeedrunLobbySetup();
         });
 
         // Bind choices click events
@@ -8040,6 +8033,14 @@
         $speedrunLobby.hidden = (view !== 'lobby');
         $speedrunGame.hidden = (view !== 'game');
         $speedrunResults.hidden = (view !== 'results');
+    }
+
+    function showSpeedrunLobbySetup() {
+        showSpeedrunSubView('lobby');
+        $speedrunLobbySetup.hidden = false;
+        $speedrunLobbyWaiting.hidden = true;
+        $speedrunLobbyInvite.hidden = true;
+        loadVocabularies();
     }
 
     // Propose Multiplayer Speedrun Game
@@ -8122,8 +8123,7 @@
             peerId: network.myPeerId
         });
         resetSpeedrun();
-        showSpeedrunSubView('lobby');
-        $speedrunLobbySetup.hidden = false;
+        showSpeedrunLobbySetup();
     }
 
     function declineSpeedrunProposal() {
@@ -8133,8 +8133,7 @@
             nickname: network.nickname
         });
         resetSpeedrun();
-        showSpeedrunSubView('lobby');
-        $speedrunLobbySetup.hidden = false;
+        showSpeedrunLobbySetup();
     }
 
     function acceptSpeedrunProposal() {
@@ -8575,18 +8574,12 @@
         else if (action === 'decline') {
             showToast(`❌ ${payload.nickname}님이 대결 제안을 거절했습니다.`);
             resetSpeedrun();
-            showSpeedrunSubView('lobby');
-            $speedrunLobbySetup.hidden = false;
-            $speedrunLobbyWaiting.hidden = true;
-            $speedrunLobbyInvite.hidden = true;
+            showSpeedrunLobbySetup();
         } 
         else if (action === 'cancel') {
             showToast('⚠️ 스피드런 대결 제안이 취소되었습니다.');
             resetSpeedrun();
-            showSpeedrunSubView('lobby');
-            $speedrunLobbySetup.hidden = false;
-            $speedrunLobbyWaiting.hidden = true;
-            $speedrunLobbyInvite.hidden = true;
+            showSpeedrunLobbySetup();
         } 
         else if (action === 'start') {
             // Guests receive the identical (and shuffled) word list from Host
