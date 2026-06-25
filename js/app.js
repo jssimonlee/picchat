@@ -260,6 +260,9 @@
     const $chatFileInput = document.getElementById('chatFileInput');
     const $chatRecipient = document.getElementById('chatRecipient');
     const $chatRecipientRow = document.getElementById('chatRecipientRow');
+    const $chkVolatileChat = document.getElementById('chkVolatileChat');
+    const $selVolatileDuration = document.getElementById('selVolatileDuration');
+    const $volatileDesc = document.getElementById('volatileDesc');
     const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
     const $btnGames = document.getElementById('btnGames');
@@ -843,11 +846,11 @@
             onSpeedrun: (fromPeerId, payload) => {
                 handleSpeedrunNetworkMessage(fromPeerId, payload);
             },
-            onChat: (fromPeerId, message, nickname, color, recipientId) => {
-                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId);
+            onChat: (fromPeerId, message, nickname, color, recipientId, isVolatile, volatileDuration) => {
+                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId, isVolatile, volatileDuration);
             },
             onFileReceived: (fromPeerId, data) => {
-                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId);
+                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId, data.isVolatile, data.volatileDuration);
             },
             onEmoji: (fromPeerId, emoji, nickname, color) => {
                 spawnFloatingEmoji(emoji);
@@ -1013,6 +1016,11 @@
         setupSpeedrunEvents();
         // Setup Chat events
         setupChatEvents();
+
+        // FHD (1920px) 이상 해상도에서는 기본적으로 채팅창을 엽니다.
+        if (window.innerWidth >= 1920) {
+            toggleChat(true);
+        }
     }
 
     /* ---------- Tool Events ---------- */
@@ -9943,6 +9951,15 @@
             }
         });
 
+        // Toggle volatile options visibility
+        if ($chkVolatileChat && $selVolatileDuration && $volatileDesc) {
+            $chkVolatileChat.addEventListener('change', () => {
+                const isChecked = $chkVolatileChat.checked;
+                $selVolatileDuration.style.display = isChecked ? 'block' : 'none';
+                $volatileDesc.style.display = isChecked ? 'block' : 'none';
+            });
+        }
+
         // File Attachment Click
         if ($btnAttachFile && $chatFileInput) {
             $btnAttachFile.addEventListener('click', () => {
@@ -9974,11 +9991,14 @@
                     return;
                 }
 
+                const isVolatile = $chkVolatileChat ? $chkVolatileChat.checked : false;
+                const volatileDuration = isVolatile && $selVolatileDuration ? parseInt($selVolatileDuration.value, 10) : 0;
+
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const fileData = event.target.result;
                     if (network) {
-                        network.sendFile(file.name, file.type, fileData, recipientId);
+                        network.sendFile(file.name, file.type, fileData, recipientId, isVolatile, volatileDuration);
                     }
                     $chatFileInput.value = '';
                 };
@@ -10040,16 +10060,28 @@
         if (!msg || !network) return;
 
         const recipientId = $chatRecipient ? $chatRecipient.value : 'all';
-        network.sendChat(msg, recipientId);
+        const isVolatile = $chkVolatileChat ? $chkVolatileChat.checked : false;
+        const volatileDuration = isVolatile && $selVolatileDuration ? parseInt($selVolatileDuration.value, 10) : 0;
+
+        network.sendChat(msg, recipientId, isVolatile, volatileDuration);
         // Local echo for non-host
         if (!network.isHost) {
-            addChatMessage(network.nickname, msg, network.myColor, true, recipientId);
+            addChatMessage(network.nickname, msg, network.myColor, true, recipientId, isVolatile, volatileDuration);
         }
         $chatInput.value = '';
         $chatInput.focus();
     }
 
-    function addChatMessage(nickname, message, color, isMine, recipientId = 'all') {
+    function formatDuration(seconds) {
+        if (seconds >= 60) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+        }
+        return `${seconds}초`;
+    }
+
+    function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0) {
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg' + (isMine ? ' mine' : '') + (recipientId !== 'all' ? ' dm' : '');
 
@@ -10077,6 +10109,46 @@
         }
         bubbleEl.textContent = message;
 
+        if (isVolatile && volatileDuration > 0) {
+            const badgeEl = document.createElement('div');
+            badgeEl.className = 'chat-msg-volatile-badge';
+            badgeEl.style.display = 'inline-flex';
+            badgeEl.style.alignItems = 'center';
+            badgeEl.style.gap = '3px';
+            badgeEl.style.fontSize = '9px';
+            badgeEl.style.opacity = '0.7';
+            badgeEl.style.marginTop = '4px';
+            badgeEl.style.float = 'right';
+            badgeEl.style.clear = 'both';
+            
+            const timerSpan = document.createElement('span');
+            timerSpan.textContent = '⏱️ ';
+            const countSpan = document.createElement('span');
+            countSpan.className = 'countdown-text';
+            countSpan.textContent = formatDuration(volatileDuration);
+            badgeEl.appendChild(timerSpan);
+            badgeEl.appendChild(countSpan);
+            bubbleEl.appendChild(badgeEl);
+            
+            bubbleEl.style.overflow = 'hidden';
+
+            let timeLeft = volatileDuration;
+            const timerId = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(timerId);
+                    msgEl.style.transition = 'all 0.5s ease';
+                    msgEl.style.opacity = '0';
+                    msgEl.style.transform = 'translateY(-10px)';
+                    setTimeout(() => {
+                        msgEl.remove();
+                    }, 500);
+                } else {
+                    countSpan.textContent = formatDuration(timeLeft);
+                }
+            }, 1000);
+        }
+
         msgEl.appendChild(nameEl);
         msgEl.appendChild(bubbleEl);
         $chatMessages.appendChild(msgEl);
@@ -10097,7 +10169,7 @@
         }
     }
 
-    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId) {
+    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId, isVolatile = false, volatileDuration = 0) {
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg' + (isMine ? ' mine' : '') + (recipientId !== 'all' ? ' dm' : '');
 
@@ -10369,6 +10441,43 @@
         btnRow.appendChild(downloadBtn);
         
         bubbleEl.appendChild(btnRow);
+
+        if (isVolatile && volatileDuration > 0) {
+            const badgeEl = document.createElement('div');
+            badgeEl.className = 'chat-msg-volatile-badge';
+            badgeEl.style.display = 'inline-flex';
+            badgeEl.style.alignItems = 'center';
+            badgeEl.style.gap = '3px';
+            badgeEl.style.fontSize = '9px';
+            badgeEl.style.opacity = '0.7';
+            badgeEl.style.marginTop = '4px';
+            badgeEl.style.alignSelf = 'flex-end';
+            
+            const timerSpan = document.createElement('span');
+            timerSpan.textContent = '⏱️ ';
+            const countSpan = document.createElement('span');
+            countSpan.className = 'countdown-text';
+            countSpan.textContent = formatDuration(volatileDuration);
+            badgeEl.appendChild(timerSpan);
+            badgeEl.appendChild(countSpan);
+            bubbleEl.appendChild(badgeEl);
+
+            let timeLeft = volatileDuration;
+            const timerId = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(timerId);
+                    msgEl.style.transition = 'all 0.5s ease';
+                    msgEl.style.opacity = '0';
+                    msgEl.style.transform = 'translateY(-10px)';
+                    setTimeout(() => {
+                        msgEl.remove();
+                    }, 500);
+                } else {
+                    countSpan.textContent = formatDuration(timeLeft);
+                }
+            }, 1000);
+        }
 
         msgEl.appendChild(nameEl);
         msgEl.appendChild(bubbleEl);

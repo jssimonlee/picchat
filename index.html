@@ -159,6 +159,25 @@
                         <option value="all">전체 (모두에게)</option>
                     </select>
                 </div>
+                <!-- Volatile Message Mode Controls -->
+                <div class="chat-volatile-row" id="chatVolatileRow" style="display: flex; flex-direction: column; gap: 6px; padding: 6px 0; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); margin: 4px 0 2px 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none; margin: 0;">
+                            <input type="checkbox" id="chkVolatileChat" style="cursor: pointer; width: 14px; height: 14px; margin: 0;">
+                            🫧 메시지 자동 휘발 모드
+                        </label>
+                        <select id="selVolatileDuration" class="chat-recipient-select" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); outline: none; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; display: none;">
+                            <option value="60">1분</option>
+                            <option value="180">3분</option>
+                            <option value="300">5분</option>
+                            <option value="600">10분</option>
+                            <option value="1800">30분</option>
+                        </select>
+                    </div>
+                    <span id="volatileDesc" style="font-size: 10px; color: var(--text-muted); line-height: 1.4; display: none;">
+                        이 모드를 켜고 전송한 메시지는 설정된 시간 이후 나와 상대방의 화면에서 모두 자동으로 사라집니다.
+                    </span>
+                </div>
                 <div style="display: flex; gap: 6px; width: 100%;">
                     <!-- File attach button -->
                     <button id="btnAttachFile" class="chat-attach-btn" title="파일 첨부" style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; padding: 8px;">

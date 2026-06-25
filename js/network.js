@@ -539,9 +539,9 @@ class NetworkManager {
                 if (this.isHost) {
                     if (recipientId === 'all') {
                         this._broadcast(data, fromPeerId);
-                        this.onChat(fromPeerId, data.message, data.nickname, data.color, 'all');
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, 'all', data.isVolatile, data.volatileDuration);
                     } else if (recipientId === this.myPeerId) {
-                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId);
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId, data.isVolatile, data.volatileDuration);
                     } else {
                         // Relay to the specific connection
                         const info = this.connections.get(recipientId);
@@ -551,7 +551,7 @@ class NetworkManager {
                     }
                 } else {
                     if (recipientId === 'all' || recipientId === this.myPeerId) {
-                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId);
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId, data.isVolatile, data.volatileDuration);
                     }
                 }
                 break;
@@ -808,26 +808,28 @@ class NetworkManager {
         }
     }
 
-    sendChat(message, recipientId = 'all') {
+    sendChat(message, recipientId = 'all', isVolatile = false, volatileDuration = 0) {
         const data = { 
             type: 'chat', 
             message, 
             nickname: this.nickname, 
             color: this.myColor,
-            recipientId
+            recipientId,
+            isVolatile,
+            volatileDuration
         };
         if (this.isHost) {
             if (recipientId === 'all') {
                 this._broadcast(data);
-                this.onChat(this.myPeerId, message, this.nickname, this.myColor, 'all');
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, 'all', isVolatile, volatileDuration);
             } else if (recipientId === this.myPeerId) {
-                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId);
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId, isVolatile, volatileDuration);
             } else {
                 const info = this.connections.get(recipientId);
                 if (info) {
                     try { info.conn.send(data); } catch(e) {}
                 }
-                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId);
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId, isVolatile, volatileDuration);
             }
         } else {
             this.connections.forEach(info => {
@@ -836,7 +838,7 @@ class NetworkManager {
         }
     }
 
-    sendFile(fileName, fileType, fileData, recipientId = 'all') {
+    sendFile(fileName, fileType, fileData, recipientId = 'all', isVolatile = false, volatileDuration = 0) {
         const data = {
             type: 'file',
             fileName,
@@ -844,7 +846,9 @@ class NetworkManager {
             fileData,
             recipientId,
             nickname: this.nickname,
-            color: this.myColor
+            color: this.myColor,
+            isVolatile,
+            volatileDuration
         };
 
         if (this.isHost) {
