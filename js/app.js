@@ -239,6 +239,7 @@
     const $speedrunCurrentIndex = document.getElementById('speedrunCurrentIndex');
     const $speedrunMyBar = document.getElementById('speedrunMyBar');
     const $speedrunPeerBar = document.getElementById('speedrunPeerBar');
+    const $speedrunPeerProgressRow = document.getElementById('speedrunPeerProgressRow');
     const $speedrunPeerLabel = document.getElementById('speedrunPeerLabel');
     const $speedrunWordBox = document.getElementById('speedrunWordBox');
     const $speedrunResults = document.getElementById('speedrunResults');
@@ -422,7 +423,8 @@
         currentIndex: 0,
         elapsedSeconds: 0,
         gameTimerInterval: null,
-        timeLimit: 120 // 2 minutes (120s)
+        timeLimit: 120, // 2 minutes (120s)
+        wrongAttempts: 0
     };
 
     /* ---------- Initialize ---------- */
@@ -8305,13 +8307,25 @@
         const myPercent = Math.min(100, (speedrunState.myScore / totalScale) * 100);
         $speedrunMyBar.style.width = `${myPercent}%`;
         $speedrunMyScore.textContent = String(speedrunState.myScore);
+        
+        const $myLabel = document.getElementById('speedrunMyProgressLabel');
+        if ($myLabel) {
+            $myLabel.textContent = `${speedrunState.myScore} / ${totalScale}`;
+        }
+
+        const $peerLabel = document.getElementById('speedrunPeerProgressLabel');
 
         if (!speedrunState.isSolo) {
+            if ($speedrunPeerProgressRow) $speedrunPeerProgressRow.style.display = 'flex';
             // Peer Score percentage
             const peerPercent = Math.min(100, (speedrunState.peerScore / totalScale) * 100);
             $speedrunPeerBar.style.width = `${peerPercent}%`;
             $speedrunPeerScore.textContent = String(speedrunState.peerScore);
+            if ($peerLabel) {
+                $peerLabel.textContent = `${speedrunState.peerScore} / ${totalScale}`;
+            }
         } else {
+            if ($speedrunPeerProgressRow) $speedrunPeerProgressRow.style.display = 'none';
             $speedrunPeerBar.style.width = '0%';
             $speedrunPeerScore.textContent = '0';
         }
@@ -8322,59 +8336,112 @@
         const buttons = document.querySelectorAll('.speedrun-choices-grid .choice-btn');
         const clickedBtn = buttons[choiceIdx];
         
-        // Disable all buttons immediately to prevent double click
-        buttons.forEach(btn => btn.disabled = true);
+        // Disable the clicked button to prevent duplicate clicks on this button
+        clickedBtn.disabled = true;
 
         const isCorrect = clickedBtn.dataset.isCorrect === 'true';
 
         if (isCorrect) {
             clickedBtn.classList.add('correct');
+            // Disable all buttons since they got it correct
+            buttons.forEach(btn => btn.disabled = true);
             speedrunState.myScore++;
-        } else {
-            clickedBtn.classList.add('incorrect');
-            // Flash the word box red as an incorrect feedback screen
-            $speedrunWordBox.style.backgroundColor = 'rgba(255, 71, 87, 0.15)';
-            $speedrunWordBox.style.borderColor = 'var(--danger)';
-            // Show correct answer too
-            buttons.forEach(btn => {
-                if (btn.dataset.isCorrect === 'true') {
-                    btn.classList.add('correct');
-                }
-            });
-        }
+            speedrunState.wrongAttempts = 0; // Reset for the next question
 
-        // Send progress message if in multiplayer mode
-        if (!speedrunState.isSolo) {
-            network.sendSpeedrun({
-                action: 'progress',
-                peerId: network.myPeerId,
-                score: speedrunState.myScore,
-                index: speedrunState.currentIndex + 1
-            });
-        }
-
-        // Page pre-fetching policy:
-        // "한쪽이라도 40개가 넘어가기 시작하면 (즉 loadedCount - currentIndex <= 10) 20개씩 더 로드해서 채우기"
-        const remainingCount = speedrunState.loadedCount - (speedrunState.currentIndex + 1);
-        if (remainingCount <= 10) {
-            if (network.isHost || speedrunState.isSolo) {
-                // Host or Solo loads the next chunk
-                loadNextWordsChunk();
-            } else {
-                // Guest requests Host to load more words
+            // Send progress message if in multiplayer mode
+            if (!speedrunState.isSolo) {
                 network.sendSpeedrun({
-                    action: 'request-more',
-                    currentOffset: speedrunState.loadedCount
+                    action: 'progress',
+                    peerId: network.myPeerId,
+                    score: speedrunState.myScore,
+                    index: speedrunState.currentIndex + 1
                 });
             }
-        }
 
-        // Delays slightly (or longer penalty for incorrect) to let player see feedback, then moves to next question
-        const transitionDelay = isCorrect ? 350 : 1500;
-        setTimeout(() => {
-            speedrunState.currentIndex++;
-            updateQuizUI();
-        }, transitionDelay);
+            // Page pre-fetching policy:
+            const remainingCount = speedrunState.loadedCount - (speedrunState.currentIndex + 1);
+            if (remainingCount <= 10) {
+                if (network.isHost || speedrunState.isSolo) {
+                    loadNextWordsChunk();
+                } else {
+                    network.sendSpeedrun({
+                        action: 'request-more',
+                        currentOffset: speedrunState.loadedCount
+                    });
+                }
+            }
+
+            // Move to next question after 350ms
+            setTimeout(() => {
+                speedrunState.currentIndex++;
+                updateQuizUI();
+            }, 350);
+
+        } else {
+            // First or second wrong attempt?
+            if (speedrunState.wrongAttempts === 0) {
+                // First wrong attempt! Give one more chance.
+                speedrunState.wrongAttempts = 1;
+                clickedBtn.classList.add('incorrect');
+                
+                // Visual feedback: Flash the word box red temporarily
+                $speedrunWordBox.style.backgroundColor = 'rgba(255, 71, 87, 0.12)';
+                $speedrunWordBox.style.borderColor = 'var(--danger)';
+
+                // Disable all choices during the penalty time (1000ms) to freeze them
+                buttons.forEach(btn => btn.disabled = true);
+
+                setTimeout(() => {
+                    // Restore word box style
+                    $speedrunWordBox.style.backgroundColor = '';
+                    $speedrunWordBox.style.borderColor = '';
+                    
+                    // Enable remaining unclicked choices
+                    buttons.forEach(btn => {
+                        if (!btn.classList.contains('incorrect')) {
+                            btn.disabled = false;
+                        }
+                    });
+                }, 1000); // 1.0 second penalty delay for first wrong try
+
+            } else {
+                // Second wrong attempt! Show correct answer, freeze, and move to next question.
+                clickedBtn.classList.add('incorrect');
+                
+                // Show the correct answer
+                buttons.forEach(btn => {
+                    if (btn.dataset.isCorrect === 'true') {
+                        btn.classList.add('correct');
+                    }
+                    btn.disabled = true; // Disable all choices
+                });
+
+                // Visual feedback: Flash the word box red
+                $speedrunWordBox.style.backgroundColor = 'rgba(255, 71, 87, 0.18)';
+                $speedrunWordBox.style.borderColor = 'var(--danger)';
+
+                speedrunState.wrongAttempts = 0; // Reset for the next question
+
+                // Page pre-fetching policy
+                const remainingCount = speedrunState.loadedCount - (speedrunState.currentIndex + 1);
+                if (remainingCount <= 10) {
+                    if (network.isHost || speedrunState.isSolo) {
+                        loadNextWordsChunk();
+                    } else {
+                        network.sendSpeedrun({
+                            action: 'request-more',
+                            currentOffset: speedrunState.loadedCount
+                        });
+                    }
+                }
+
+                // 1.5 second penalty delay before transitioning
+                setTimeout(() => {
+                    speedrunState.currentIndex++;
+                    updateQuizUI();
+                }, 1500);
+            }
+        }
     }
 
     // Host or Solo loads another 20 words from DB (read-only, does not touch write)
@@ -8455,6 +8522,7 @@
         speedrunState.peerScore = 0;
         speedrunState.currentIndex = 0;
         speedrunState.elapsedSeconds = 0;
+        speedrunState.wrongAttempts = 0;
     }
 
     // Handles incoming speedrun WebRTC/Peer P2P packets

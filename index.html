@@ -1074,13 +1074,27 @@
                     </div>
                 </div>
 
-                <!-- Compare Progress Bar -->
-                <div style="width: 100%; height: 24px; background: rgba(241, 245, 249, 0.9); border-radius: 12px; margin-bottom: 24px; position: relative; overflow: hidden; border: 1.5px solid rgba(0, 0, 0, 0.08);">
-                    <div id="speedrunMyBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-purple), var(--success)); transition: width 0.3s; position: absolute; left: 0; top: 0;"></div>
-                    <div id="speedrunPeerBar" style="height: 6px; width: 0%; background: var(--accent-pink); transition: width 0.3s; position: absolute; left: 0; bottom: 0;"></div>
-                    <div style="position: absolute; width: 100%; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 12px; box-sizing: border-box; font-size: 11px; font-weight: bold; z-index: 2; pointer-events: none;">
-                        <span style="color: #334155;">나 (밑 바)</span>
-                        <span id="speedrunPeerLabel" style="color: #e11d48;">상대방 (줄 바)</span>
+                <!-- Compare Progress Bar Stack -->
+                <div class="speedrun-progress-stack" style="display: flex; flex-direction: column; gap: 10px; width: 100%; margin-bottom: 24px; background: rgba(241, 245, 249, 0.6); padding: 14px; border-radius: 12px; border: 1.5px solid rgba(0, 0, 0, 0.08); box-sizing: border-box;">
+                    <!-- My Progress Row -->
+                    <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; color: #16a34a;">
+                            <span>나 (Green)</span>
+                            <span id="speedrunMyProgressLabel">0 / 50</span>
+                        </div>
+                        <div style="width: 100%; height: 12px; background: rgba(0, 0, 0, 0.05); border-radius: 6px; overflow: hidden; position: relative;">
+                            <div id="speedrunMyBar" style="height: 100%; width: 0%; background: #16a34a; transition: width 0.3s; border-radius: 6px;"></div>
+                        </div>
+                    </div>
+                    <!-- Peer Progress Row -->
+                    <div id="speedrunPeerProgressRow" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; color: #e11d48;">
+                            <span id="speedrunPeerLabel">상대방 (Red)</span>
+                            <span id="speedrunPeerProgressLabel">0 / 50</span>
+                        </div>
+                        <div style="width: 100%; height: 12px; background: rgba(0, 0, 0, 0.05); border-radius: 6px; overflow: hidden; position: relative;">
+                            <div id="speedrunPeerBar" style="height: 100%; width: 0%; background: #e11d48; transition: width 0.3s; border-radius: 6px;"></div>
+                        </div>
                     </div>
                 </div>
 
