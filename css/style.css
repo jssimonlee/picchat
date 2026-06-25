@@ -1460,7 +1460,7 @@ input, button, textarea {
     overflow-y: auto;
     display: flex;
     justify-content: center;
-    align-items: center; /* Prevent vertical stretching in flex containers */
+    align-items: flex-start; /* Aligns page to top, allowing natural scroll from start */
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 8px;
