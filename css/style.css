@@ -3417,3 +3417,44 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     border-radius: 4px;
     background: #fff;
 }
+
+/* Top Bar Away Toggle Switch */
+.topbar-switch-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    gap: 8px;
+    user-select: none;
+    margin-right: 4px;
+}
+.topbar-switch-container .custom-switch {
+    width: 38px;
+    height: 20px;
+    background-color: rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    transition: background-color 0.25s, border-color 0.25s;
+    cursor: pointer;
+}
+.topbar-switch-container .custom-switch-handle {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform 0.25s;
+}
+.topbar-switch-container input[type="checkbox"]:checked + .custom-switch {
+    background-color: var(--primary);
+    border-color: transparent;
+}
+.topbar-switch-container input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
+    transform: translateX(18px);
+}

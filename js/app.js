@@ -400,6 +400,42 @@
     function setupPresenceTracking() {
         const $awayOverlay = document.getElementById('awayOverlay');
         const $btnResume = document.getElementById('btnResume');
+        const $chkAwayOverlay = document.getElementById('chkAwayOverlay');
+
+        // Load away overlay preference from localStorage
+        if ($chkAwayOverlay) {
+            const savedPref = localStorage.getItem('picchat-away-overlay-enabled');
+            if (savedPref !== null) {
+                $chkAwayOverlay.checked = savedPref === 'true';
+            } else {
+                $chkAwayOverlay.checked = true; // Default behavior: enabled (show away overlay)
+            }
+
+            $chkAwayOverlay.addEventListener('change', () => {
+                const isEnabled = $chkAwayOverlay.checked;
+                localStorage.setItem('picchat-away-overlay-enabled', isEnabled);
+                
+                if (!isEnabled) {
+                    // If disabled, cancel any pending away timer
+                    if (awayTimer) {
+                        clearTimeout(awayTimer);
+                        awayTimer = null;
+                    }
+                    // Hide away overlay if it's currently active and revert away status
+                    if (!$awayOverlay.hidden) {
+                        $awayOverlay.hidden = true;
+                        if (network && network.myPeerId) {
+                            network.sendPresence(false);
+                            const me = knownParticipants.get(network.myPeerId);
+                            if (me) {
+                                me.isAway = false;
+                                updateParticipantsUI();
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         window.addEventListener('blur', () => {
             if (isSelectingFile) {
@@ -412,6 +448,11 @@
 
             if (awayTimer) {
                 clearTimeout(awayTimer);
+            }
+
+            // Do not trigger away overlay or send away status if the setting is disabled
+            if ($chkAwayOverlay && !$chkAwayOverlay.checked) {
+                return;
             }
 
             awayTimer = setTimeout(() => {

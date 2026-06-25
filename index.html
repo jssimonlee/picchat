@@ -110,6 +110,14 @@
                 <div id="participants" class="participants"></div>
             </div>
             <div class="top-bar-right">
+                <!-- 자리비움 화면 가림 설정 토글 -->
+                <label class="topbar-switch-container" title="화면 포커스를 잃었을 때 화면을 가리고 자리비움 상태로 변경하는 기능을 켜고 끕니다.">
+                    <span>자리비움 가림</span>
+                    <input type="checkbox" id="chkAwayOverlay" style="display: none;" checked>
+                    <span class="custom-switch">
+                        <span class="custom-switch-handle"></span>
+                    </span>
+                </label>
                 <button id="btnToggleChat" class="btn-chat-toggle" title="채팅 열기/닫기">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                     <span id="chatUnread" class="chat-unread" hidden>0</span>
