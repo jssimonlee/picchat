@@ -263,6 +263,8 @@
     const $chkVolatileChat = document.getElementById('chkVolatileChat');
     const $selVolatileDuration = document.getElementById('selVolatileDuration');
     const $volatileDesc = document.getElementById('volatileDesc');
+    const $btnChatSettings = document.getElementById('btnChatSettings');
+    const $chatSettingsPanel = document.getElementById('chatSettingsPanel');
     const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
     const $btnGames = document.getElementById('btnGames');
@@ -852,9 +854,9 @@
             onFileReceived: (fromPeerId, data) => {
                 addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId, data.isVolatile, data.volatileDuration);
             },
-            onEmoji: (fromPeerId, emoji, nickname, color) => {
+            onEmoji: (fromPeerId, emoji, nickname, color, isVolatile, volatileDuration) => {
                 spawnFloatingEmoji(emoji);
-                addChatEmojiReaction(nickname, emoji, fromPeerId === network.myPeerId);
+                addChatEmojiReaction(nickname, emoji, fromPeerId === network.myPeerId, isVolatile, volatileDuration);
             },
             onLaser: (fromPeerId, points, color) => {
                 showRemoteLaser(points, color);
@@ -9941,6 +9943,24 @@
             toggleChat(false);
         });
 
+        // Toggle chat settings panel
+        if ($btnChatSettings && $chatSettingsPanel) {
+            $btnChatSettings.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = $chatSettingsPanel.style.display === 'block';
+                $chatSettingsPanel.style.display = isOpen ? 'none' : 'block';
+                $btnChatSettings.style.color = isOpen ? 'var(--text-muted)' : 'var(--accent-purple)';
+            });
+
+            // Close settings panel when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!$chatSettingsPanel.contains(e.target) && e.target !== $btnChatSettings && !$btnChatSettings.contains(e.target)) {
+                    $chatSettingsPanel.style.display = 'none';
+                    $btnChatSettings.style.color = 'var(--text-muted)';
+                }
+            });
+        }
+
         // Send chat message
         $btnSendChat.addEventListener('click', sendChatMessage);
         $chatInput.addEventListener('keydown', (e) => {
@@ -9953,6 +9973,10 @@
 
         // Toggle volatile options visibility
         if ($chkVolatileChat && $selVolatileDuration && $volatileDesc) {
+            const initChecked = $chkVolatileChat.checked;
+            $selVolatileDuration.style.display = initChecked ? 'block' : 'none';
+            $volatileDesc.style.display = initChecked ? 'block' : 'none';
+
             $chkVolatileChat.addEventListener('change', () => {
                 const isChecked = $chkVolatileChat.checked;
                 $selVolatileDuration.style.display = isChecked ? 'block' : 'none';
@@ -10010,12 +10034,14 @@
         document.querySelectorAll('.emoji-quick-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const emoji = btn.dataset.emoji;
+                const isVolatile = $chkVolatileChat ? $chkVolatileChat.checked : false;
+                const volatileDuration = isVolatile && $selVolatileDuration ? parseInt($selVolatileDuration.value, 10) : 0;
                 if (network) {
-                    network.sendEmoji(emoji);
+                    network.sendEmoji(emoji, isVolatile, volatileDuration);
                     // Local echo for non-host
                     if (!network.isHost) {
                         spawnFloatingEmoji(emoji);
-                        addChatEmojiReaction(network.nickname, emoji, true);
+                        addChatEmojiReaction(network.nickname, emoji, true, isVolatile, volatileDuration);
                     }
                 }
             });
@@ -10052,6 +10078,13 @@
                 $chatMessages.scrollTop = $chatMessages.scrollHeight;
                 $chatInput.focus();
             }, 100);
+        } else {
+            if ($chatSettingsPanel) {
+                $chatSettingsPanel.style.display = 'none';
+            }
+            if ($btnChatSettings) {
+                $btnChatSettings.style.color = 'var(--text-muted)';
+            }
         }
     }
 
@@ -10953,13 +10986,24 @@
         }
     }
 
-    function addChatEmojiReaction(nickname, emoji, isMine) {
+    function addChatEmojiReaction(nickname, emoji, isMine, isVolatile = false, volatileDuration = 0) {
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg-emoji-reaction';
         msgEl.textContent = emoji;
         msgEl.title = nickname;
         $chatMessages.appendChild(msgEl);
         $chatMessages.scrollTop = $chatMessages.scrollHeight;
+
+        if (isVolatile && volatileDuration > 0) {
+            setTimeout(() => {
+                msgEl.style.transition = 'all 0.5s ease';
+                msgEl.style.opacity = '0';
+                msgEl.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    msgEl.remove();
+                }, 500);
+            }, volatileDuration * 1000);
+        }
     }
 
     function addChatSystemMessage(text) {

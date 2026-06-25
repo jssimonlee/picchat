@@ -581,7 +581,7 @@ class NetworkManager {
             }
 
             case 'emoji':
-                this.onEmoji(fromPeerId, data.emoji, data.nickname, data.color);
+                this.onEmoji(fromPeerId, data.emoji, data.nickname, data.color, data.isVolatile, data.volatileDuration);
                 if (this.isHost) this._broadcast(data, fromPeerId);
                 break;
 
@@ -872,11 +872,11 @@ class NetworkManager {
         }
     }
 
-    sendEmoji(emoji) {
-        const data = { type: 'emoji', emoji, nickname: this.nickname, color: this.myColor };
+    sendEmoji(emoji, isVolatile = false, volatileDuration = 0) {
+        const data = { type: 'emoji', emoji, nickname: this.nickname, color: this.myColor, isVolatile, volatileDuration };
         if (this.isHost) {
             this._broadcast(data);
-            this.onEmoji(this.myPeerId, emoji, this.nickname, this.myColor);
+            this.onEmoji(this.myPeerId, emoji, this.nickname, this.myColor, isVolatile, volatileDuration);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
