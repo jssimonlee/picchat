@@ -1309,6 +1309,20 @@
         });
     }
 
+    function loadSheetJs() {
+        return new Promise((resolve, reject) => {
+            if (window.XLSX) {
+                resolve(window.XLSX);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            script.onload = () => resolve(window.XLSX);
+            script.onerror = () => reject(new Error('SheetJS 로딩에 실패했습니다.'));
+            document.head.appendChild(script);
+        });
+    }
+
     async function loadPrismLanguage(lang) {
         const prism = await loadPrismJs();
         if (prism.languages[lang]) return prism;
@@ -1651,6 +1665,96 @@
         return htmlToImageSvg(exactHeight, 750, css, htmlContent);
     }
 
+    async function excelToDataUrl(arrayBuffer) {
+        const XLSX = await loadSheetJs();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (rows.length === 0) return textToDataUrl('빈 Excel 파일입니다.', '#1e293b');
+        
+        const tableHeader = rows[0].map(cell => `<th>${cell !== undefined && cell !== null ? cell : ''}</th>`).join('');
+        const tableBody = rows.slice(1).map(row => {
+            const columnsCount = rows[0].length;
+            const cells = [];
+            for (let i = 0; i < columnsCount; i++) {
+                const cell = row[i];
+                cells.push(`<td>${cell !== undefined && cell !== null ? cell : ''}</td>`);
+            }
+            return `<tr>${cells.join('')}</tr>`;
+        }).join('');
+
+        const css = `
+            .csv-card {
+                box-sizing: border-box;
+                width: 750px;
+                padding: 24px;
+                background: #ffffff;
+                border-radius: 12px;
+                border: 1px solid #e2e8f0;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+                font-family: 'Inter', sans-serif;
+            }
+            .csv-title {
+                font-size: 13px;
+                font-weight: bold;
+                color: #64748b;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 12px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+                text-align: left;
+            }
+            th {
+                background: #f1f5f9;
+                color: #334155;
+                font-weight: 600;
+                padding: 10px 12px;
+                border-bottom: 2px solid #cbd5e1;
+            }
+            td {
+                padding: 10px 12px;
+                border-bottom: 1px solid #e2e8f0;
+                color: #475569;
+            }
+            tr:nth-child(even) {
+                background: #f8fafc;
+            }
+            tr:hover {
+                background: #f1f5f9;
+            }
+        `;
+
+        const htmlContent = `
+            <div class="csv-card">
+                <div class="csv-title">
+                    📊 EXCEL SHEET (${firstSheetName}) - ${rows.length - 1} rows
+                </div>
+                <table>
+                    <thead>
+                        <tr>${tableHeader}</tr>
+                    </thead>
+                    <tbody>
+                        ${tableBody}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        const measuredHeight = measureHtmlHeight(htmlContent, css, 750);
+        const exactHeight = Math.max(120, measuredHeight + 20);
+
+        return htmlToImageSvg(exactHeight, 750, css, htmlContent);
+    }
+
     function textToDataUrl(text, color) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -1713,12 +1817,13 @@
         const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
         const isMd = file.name.endsWith('.md') || file.name.endsWith('.markdown');
         const isCsv = file.name.endsWith('.csv');
+        const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.type === 'application/vnd.ms-excel';
         const isCode = isCodeFile(file.name);
         const isTxt = file.type === 'text/plain' || file.name.endsWith('.txt');
 
-        const maxSize = isPdf ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+        const maxSize = (isPdf || isExcel) ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
         if (file.size > maxSize) {
-            showToast(`⚠️ 파일 크기는 ${isPdf ? '10MB' : '5MB'} 이하만 가능합니다`);
+            showToast(`⚠️ 파일 크기는 ${isPdf || isExcel ? '10MB' : '5MB'} 이하만 가능합니다`);
             resetInput();
             return;
         }
@@ -1781,6 +1886,21 @@
                 resetInput();
             };
             reader.readAsText(file, 'utf-8');
+        } else if (isExcel) {
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const arrayBuffer = evt.target.result;
+                    const pngDataUrl = await excelToDataUrl(arrayBuffer);
+                    startImagePlacer(pngDataUrl);
+                    showToast('📊 엑셀 문서를 테이블 카드로 변환하여 배치를 준비합니다.');
+                } catch (err) {
+                    console.error(err);
+                    showToast('⚠️ 엑셀 파일 로딩에 실패했습니다.');
+                }
+                resetInput();
+            };
+            reader.readAsArrayBuffer(file);
         } else if (isCode) {
             const reader = new FileReader();
             reader.onload = async (evt) => {
@@ -10027,6 +10147,8 @@
             fileIcon.textContent = '📝';
         } else if (fileExt === 'csv') {
             fileIcon.textContent = '📊';
+        } else if (fileExt === 'xlsx' || fileExt === 'xls') {
+            fileIcon.textContent = '📊';
         } else if (isCodeFile(fileName)) {
             fileIcon.textContent = '💻';
         } else if (fileExt === 'txt') {
@@ -10093,10 +10215,11 @@
         const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
         const isMd = fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileType === 'text/markdown';
         const isCsv = fileName.endsWith('.csv') || fileType === 'text/csv';
+        const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileType.includes('excel') || fileType.includes('spreadsheet') || fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || fileType === 'application/vnd.ms-excel';
         const isCode = isCodeFile(fileName);
         const isTxt = fileType.startsWith('text/') || fileName.endsWith('.txt');
 
-        const isPreviewable = isPdf || isTxt || isMd || isCsv || isCode;
+        const isPreviewable = isPdf || isTxt || isMd || isCsv || isCode || isExcel;
         if (isPreviewable) {
             previewBtn = document.createElement('button');
             previewBtn.className = 'btn btn-secondary';
@@ -10115,7 +10238,7 @@
 
         let placeOnCanvasBtn = null;
 
-        if (isImage || isPdf || isTxt || isMd || isCsv || isCode) {
+        if (isImage || isPdf || isTxt || isMd || isCsv || isCode || isExcel) {
             placeOnCanvasBtn = document.createElement('button');
             placeOnCanvasBtn.className = 'btn btn-secondary';
             placeOnCanvasBtn.style.padding = '6px 12px';
@@ -10185,6 +10308,15 @@
                         const pngDataUrl = csvToDataUrl(text);
                         startImagePlacer(pngDataUrl);
                         showToast('📊 CSV 데이터를 테이블 카드로 변환하여 배치를 준비합니다.');
+                    } else if (isExcel) {
+                        const arrayBuffer = base64ToArrayBuffer(fileData);
+                        if (arrayBuffer) {
+                            const pngDataUrl = await excelToDataUrl(arrayBuffer);
+                            startImagePlacer(pngDataUrl);
+                            showToast('📊 엑셀 데이터를 테이블 카드로 변환하여 배치를 준비합니다.');
+                        } else {
+                            showToast('⚠️ 엑셀 데이터를 읽는 데 실패했습니다.');
+                        }
                     } else if (isCode) {
                         let text = '';
                         if (fileData.startsWith('data:')) {
@@ -10276,8 +10408,9 @@
         const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
         const isMd = fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileType === 'text/markdown';
         const isCsv = fileName.endsWith('.csv') || fileType === 'text/csv';
+        const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileType.includes('excel') || fileType.includes('spreadsheet') || fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || fileType === 'application/vnd.ms-excel';
         const isCode = isCodeFile(fileName);
-        const isTxt = (fileType.startsWith('text/') && !isMd && !isCsv && !isCode) || fileName.endsWith('.txt');
+        const isTxt = (fileType.startsWith('text/') && !isMd && !isCsv && !isCode && !isExcel) || fileName.endsWith('.txt');
 
         if (isMd) {
             let text = '';
@@ -10407,6 +10540,133 @@
 
             $tableWrapper.appendChild($table);
             $body.appendChild($tableWrapper);
+        } else if (isExcel) {
+            let arrayBuffer = null;
+            try {
+                if (fileData.startsWith('data:')) {
+                    const base64Data = fileData.split(',')[1];
+                    const binString = atob(base64Data);
+                    const bytes = new Uint8Array(binString.length);
+                    for (let i = 0; i < binString.length; i++) {
+                        bytes[i] = binString.charCodeAt(i);
+                    }
+                    arrayBuffer = bytes.buffer;
+                } else {
+                    arrayBuffer = fileData;
+                }
+            } catch (e) {
+                $body.textContent = 'Excel 데이터를 처리하지 못했습니다.';
+                return;
+            }
+            
+            showToast('🔄 Excel 데이터를 로딩 중입니다...');
+            (async () => {
+                try {
+                    const XLSX = await loadSheetJs();
+                    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    const $tableWrapper = document.createElement('div');
+                    $tableWrapper.style.width = '100%';
+                    $tableWrapper.style.overflowX = 'auto';
+                    $tableWrapper.style.borderRadius = '8px';
+                    $tableWrapper.style.boxSizing = 'border-box';
+                    
+                    const $table = document.createElement('table');
+                    $table.style.width = '100%';
+                    $table.style.borderCollapse = 'collapse';
+                    $table.style.background = '#fff';
+                    $table.style.color = '#334155';
+                    $table.style.fontSize = '13px';
+                    $table.style.textAlign = 'left';
+                    
+                    const renderExcelRows = (sheetRows) => {
+                        $table.innerHTML = '';
+                        if (sheetRows.length === 0) return;
+                        
+                        const $thead = document.createElement('thead');
+                        const $trHead = document.createElement('tr');
+                        sheetRows[0].forEach(cell => {
+                            const $th = document.createElement('th');
+                            $th.textContent = cell !== undefined && cell !== null ? cell : '';
+                            $th.style.background = '#f1f5f9';
+                            $th.style.padding = '10px 12px';
+                            $th.style.borderBottom = '2px solid #cbd5e1';
+                            $trHead.appendChild($th);
+                        });
+                        $thead.appendChild($trHead);
+                        $table.appendChild($thead);
+
+                        const $tbody = document.createElement('tbody');
+                        sheetRows.slice(1).forEach((row, rIdx) => {
+                            const $tr = document.createElement('tr');
+                            $tr.style.background = rIdx % 2 === 0 ? '#fff' : '#f8fafc';
+                            const columnsCount = sheetRows[0].length;
+                            for (let i = 0; i < columnsCount; i++) {
+                                const cell = row[i];
+                                const $td = document.createElement('td');
+                                $td.textContent = cell !== undefined && cell !== null ? cell : '';
+                                $td.style.padding = '8px 12px';
+                                $td.style.borderBottom = '1px solid #e2e8f0';
+                                $tr.appendChild($td);
+                            }
+                            $tbody.appendChild($tr);
+                        });
+                        $table.appendChild($tbody);
+                    };
+                    
+                    if (rows.length > 0) {
+                        renderExcelRows(rows);
+                    }
+                    
+                    $tableWrapper.appendChild($table);
+                    
+                    if (workbook.SheetNames.length > 1) {
+                        const $selectorContainer = document.createElement('div');
+                        $selectorContainer.style.marginBottom = '12px';
+                        $selectorContainer.style.display = 'flex';
+                        $selectorContainer.style.gap = '8px';
+                        $selectorContainer.style.alignItems = 'center';
+                        
+                        const $label = document.createElement('span');
+                        $label.textContent = '시트 선택:';
+                        $label.style.fontSize = '12px';
+                        $label.style.fontWeight = 'bold';
+                        $selectorContainer.appendChild($label);
+                        
+                        const $select = document.createElement('select');
+                        $select.style.padding = '4px 8px';
+                        $select.style.borderRadius = '4px';
+                        $select.style.background = '#334155';
+                        $select.style.color = '#fff';
+                        $select.style.border = '1px solid #475569';
+                        $select.style.fontSize = '12px';
+                        
+                        workbook.SheetNames.forEach(sheetName => {
+                            const $opt = document.createElement('option');
+                            $opt.value = sheetName;
+                            $opt.textContent = sheetName;
+                            $select.appendChild($opt);
+                        });
+                        
+                        $select.addEventListener('change', () => {
+                            const selectedSheet = workbook.Sheets[$select.value];
+                            const newRows = XLSX.utils.sheet_to_json(selectedSheet, { header: 1 });
+                            renderExcelRows(newRows);
+                        });
+                        
+                        $selectorContainer.appendChild($select);
+                        $body.appendChild($selectorContainer);
+                    }
+                    
+                    $body.appendChild($tableWrapper);
+                } catch (e) {
+                    console.error(e);
+                    $body.textContent = 'Excel 파일을 읽어오는 중 오류가 발생했습니다.';
+                }
+            })();
         } else if (isCode) {
             let text = '';
             try {
