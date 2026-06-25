@@ -10107,9 +10107,12 @@
 
     function formatDuration(seconds) {
         if (seconds >= 60) {
-            const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+            const m = Math.ceil(seconds / 60);
+            return `${m}분`;
+        }
+        if (seconds >= 10) {
+            const tens = Math.floor(seconds / 10) * 10;
+            return `${tens}초`;
         }
         return `${seconds}초`;
     }
