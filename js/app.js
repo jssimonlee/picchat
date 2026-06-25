@@ -1344,6 +1344,30 @@
         return codeExtensions.has(getFileExtension(fileName));
     }
 
+    function measureHtmlHeight(html, css, width) {
+        const tempDiv = document.createElement('div');
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.visibility = 'hidden';
+        tempDiv.style.width = width + 'px';
+        tempDiv.style.top = '-9999px';
+        tempDiv.style.left = '-9999px';
+        tempDiv.style.boxSizing = 'border-box';
+        
+        const style = document.createElement('style');
+        style.innerHTML = css;
+        tempDiv.appendChild(style);
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.innerHTML = html;
+        tempDiv.appendChild(contentDiv);
+        
+        document.body.appendChild(tempDiv);
+        const height = tempDiv.offsetHeight;
+        document.body.removeChild(tempDiv);
+        
+        return height;
+    }
+
     function htmlToImageSvg(height, width, css, htmlContent) {
         const svgString = `
             <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
@@ -1447,10 +1471,7 @@
             .token.regex, .token.important, .token.variable { color: #fd971f; }
         `;
 
-        const linesCount = code.split('\n').length;
-        const estimatedHeight = Math.max(150, 70 + linesCount * 21);
-        
-        return htmlToImageSvg(estimatedHeight, 800, themeCss, `
+        const htmlContent = `
             <div class="code-card">
                 <div class="code-header">
                     <div class="dot red"></div>
@@ -1460,7 +1481,12 @@
                 </div>
                 <pre><code>${highlightedHtml}</code></pre>
             </div>
-        `);
+        `;
+        
+        const measuredHeight = measureHtmlHeight(htmlContent, themeCss, 800);
+        const exactHeight = Math.max(150, measuredHeight + 10);
+        
+        return htmlToImageSvg(exactHeight, 800, themeCss, htmlContent);
     }
 
     async function markdownToDataUrl(mdText) {
@@ -1495,14 +1521,16 @@
             .md-card hr { height: .25em; padding: 0; margin: 24px 0; background-color: #d8dee4; border: 0; }
         `;
         
-        const linesCount = mdText.split('\n').length;
-        const estimatedHeight = Math.max(200, 80 + Math.ceil(mdText.length / 3.5) * 20 + linesCount * 12);
-
-        return htmlToImageSvg(estimatedHeight, 700, css, `
+        const htmlContent = `
             <div class="md-card">
                 ${parsedHtml}
             </div>
-        `);
+        `;
+        
+        const measuredHeight = measureHtmlHeight(htmlContent, css, 700);
+        const exactHeight = Math.max(200, measuredHeight + 15);
+
+        return htmlToImageSvg(exactHeight, 700, css, htmlContent);
     }
 
     function csvToDataUrl(csvText) {
@@ -1582,9 +1610,7 @@
             }
         `;
 
-        const estimatedHeight = Math.max(120, 80 + rows.length * 39);
-
-        return htmlToImageSvg(estimatedHeight, 750, css, `
+        const htmlContent = `
             <div class="csv-card">
                 <div class="csv-title">
                     📊 DATA SHEET (${rows.length - 1} rows)
@@ -1598,7 +1624,12 @@
                     </tbody>
                 </table>
             </div>
-        `);
+        `;
+        
+        const measuredHeight = measureHtmlHeight(htmlContent, css, 750);
+        const exactHeight = Math.max(120, measuredHeight + 15);
+
+        return htmlToImageSvg(exactHeight, 750, css, htmlContent);
     }
 
     function textToDataUrl(text, color) {
