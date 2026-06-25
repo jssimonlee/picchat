@@ -7885,17 +7885,43 @@
             const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/vocabularies`);
             if (response.ok) {
                 const list = await response.json();
+                console.log('[Speedrun] Vocabularies List Response:', list);
                 $speedrunVocabulary.innerHTML = '';
-                list.forEach(v => {
+                
+                if (!Array.isArray(list)) {
+                    console.error('[Speedrun] Expected array from API but got:', list);
                     const opt = document.createElement('option');
-                    opt.value = v.id;
-                    opt.textContent = `${v.name} (${v.word_count}단어)`;
-                    if (v.name === '토익') opt.selected = true;
+                    opt.value = "1";
+                    opt.textContent = "토익 단어 (기본)";
+                    $speedrunVocabulary.appendChild(opt);
+                    return;
+                }
+
+                list.forEach(v => {
+                    const id = v.id || v.ID || v.v_id || 1;
+                    const name = v.name || v.NAME || v.v_name || '영어 단어';
+                    const wordCount = v.word_count !== undefined ? v.word_count : (v.WORD_COUNT !== undefined ? v.WORD_COUNT : (v.count !== undefined ? v.count : 0));
+
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = `${name} (${wordCount}단어)`;
+                    if (name.includes('토익')) opt.selected = true;
                     $speedrunVocabulary.appendChild(opt);
                 });
+
+                if ($speedrunVocabulary.children.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = "1";
+                    opt.textContent = "토익 단어 (기본)";
+                    $speedrunVocabulary.appendChild(opt);
+                }
+            } else {
+                console.error('[Speedrun] Vocabularies fetch status failed:', response.status);
+                $speedrunVocabulary.innerHTML = '<option value="1" selected>토익 단어 (기본)</option>';
             }
         } catch (e) {
             console.error('Failed to load vocabularies:', e);
+            $speedrunVocabulary.innerHTML = '<option value="1" selected>토익 단어 (기본)</option>';
         }
     }
 
@@ -7903,7 +7929,11 @@
         try {
             const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/words/speedrun?vocabularyId=${vocabId}&offset=${offset}&limit=${limit}`);
             if (response.ok) {
-                return await response.json();
+                const words = await response.json();
+                console.log('[Speedrun] Fetched Words:', words);
+                if (Array.isArray(words)) {
+                    return words;
+                }
             }
         } catch (e) {
             console.error('Failed to fetch words chunk:', e);
