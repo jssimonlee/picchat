@@ -1902,6 +1902,10 @@
         // Position it in the center of $canvasContainer
         const containerRect = $canvasContainer.getBoundingClientRect();
         
+        // Allow up to 80% of width and 70% of height so it fits well on screen
+        const maxW = containerRect.width * 0.8;
+        const maxH = containerRect.height * 0.7;
+        
         // Let's set a default size (say, 400px wide, height proportional)
         $placer.style.width = '400px';
         $placer.style.left = ((containerRect.width - 400) / 2) + 'px';
@@ -1910,12 +1914,32 @@
         // Once the image is loaded, adjust height to maintain aspect ratio
         $img.onload = () => {
             imgAspect = $img.naturalHeight / $img.naturalWidth;
-            const w = parseFloat(getComputedStyle($placer).width) || 400;
-            const h = w * imgAspect;
-            $placer.style.height = h + 'px';
+            
+            let w = parseFloat(getComputedStyle($placer).width) || 400;
+            let h = w * imgAspect;
+            
             if (!$placer.dataset.loaded) {
-                $placer.style.top = ((containerRect.height - h) / 2) + 'px';
+                w = 400;
+                h = w * imgAspect;
+                
+                // Scale down to fit within max bounds
+                if (h > maxH) {
+                    h = maxH;
+                    w = h / imgAspect;
+                }
+                if (w > maxW) {
+                    w = maxW;
+                    h = w * imgAspect;
+                }
+                
+                $placer.style.width = w + 'px';
+                $placer.style.height = h + 'px';
+                $placer.style.left = ((containerRect.width - w) / 2) + 'px';
+                // Keep at least 60px space from top so the toolbar (top: -45px) doesn't go off-screen
+                $placer.style.top = Math.max(60, (containerRect.height - h) / 2) + 'px';
                 $placer.dataset.loaded = 'true';
+            } else {
+                $placer.style.height = h + 'px';
             }
         };
 
