@@ -1036,6 +1036,22 @@ input, button, textarea {
     font-weight: 700;
     color: var(--text-primary);
 }
+.chat-settings-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.chat-settings-btn:hover {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+}
+
 .chat-close-btn {
     width: 30px;
     height: 30px;
