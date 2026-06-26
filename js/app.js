@@ -3229,6 +3229,16 @@
         }
         canvas = null;
 
+        // Clear chat history
+        if ($chatMessages) {
+            $chatMessages.innerHTML = '';
+        }
+        chatUnreadCount = 0;
+        if ($chatUnread) {
+            $chatUnread.hidden = true;
+            $chatUnread.textContent = '0';
+        }
+
         // Hide away overlay if active
         document.getElementById('awayOverlay').hidden = true;
 
