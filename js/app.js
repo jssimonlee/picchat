@@ -545,6 +545,16 @@
             setTimeout(() => {
                 isSelectingFile = false;
             }, 300);
+
+            if (isChatOpen) {
+                markAllUnreadMessagesAsRead();
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isChatOpen) {
+                markAllUnreadMessagesAsRead();
+            }
         });
 
         // Set the flag when clicking the file input
@@ -10268,7 +10278,8 @@
 
         let readers = [];
         if (!isMine) {
-            if (isChatOpen) {
+            const isWindowActive = document.hasFocus() && document.visibilityState === 'visible';
+            if (isChatOpen && isWindowActive) {
                 readers.push(network.myPeerId);
                 if (network) {
                     network.sendReadReceipts([msgId]);
@@ -10698,7 +10709,8 @@
 
         let readers = [];
         if (!isMine) {
-            if (isChatOpen) {
+            const isWindowActive = document.hasFocus() && document.visibilityState === 'visible';
+            if (isChatOpen && isWindowActive) {
                 readers.push(network.myPeerId);
                 if (network) {
                     network.sendReadReceipts([msgId]);
