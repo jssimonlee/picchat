@@ -145,8 +145,14 @@ class NetworkManager {
                     if (response.ok) {
                         const data = await response.json();
                         if (data.peerIds && data.peerIds.length > 0) {
-                            reject(new Error('unavailable-id'));
-                            return;
+                            // Check if the current coordinator/host is actually online
+                            const isHostActive = await this._checkIfPeerIsActive(data.peerIds[0]);
+                            if (isHostActive) {
+                                reject(new Error('unavailable-id'));
+                                return;
+                            } else {
+                                console.log('[Network] Coordinator peer is offline. Room is a ghost room; proceeding to reuse.');
+                            }
                         }
                     }
                 } catch (e) {
@@ -1140,7 +1146,50 @@ class NetworkManager {
         return this.connections.size + 1; // +1 for self
     }
 
-    /* ---------- Cleanup ---------- */
+    _checkIfPeerIsActive(targetPeerId) {
+        return new Promise(async (resolve) => {
+            try {
+                const peerConfig = await this._getPeerConfig();
+                const tempPeerId = 'temp-check-' + Math.random().toString(36).substr(2, 9);
+                const tempPeer = new Peer(tempPeerId, peerConfig);
+                
+                let resolved = false;
+                const cleanup = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    try { tempPeer.destroy(); } catch(e) {}
+                };
+
+                const timeoutId = setTimeout(() => {
+                    cleanup();
+                    resolve(false);
+                }, 1000); // 1.0s timeout max for signaling
+
+                tempPeer.on('open', () => {
+                    try {
+                        const conn = tempPeer.connect(targetPeerId, { reliable: false });
+                        conn.on('open', () => {
+                            clearTimeout(timeoutId);
+                            cleanup();
+                            resolve(true); // Host is online!
+                        });
+                    } catch (e) {
+                        clearTimeout(timeoutId);
+                        cleanup();
+                        resolve(false);
+                    }
+                });
+
+                tempPeer.on('error', (err) => {
+                    clearTimeout(timeoutId);
+                    cleanup();
+                    resolve(false); // offline or signaling error
+                });
+            } catch (e) {
+                resolve(false);
+            }
+        });
+    }
 
     disconnect() {
         if (this.roomCode && this.myPeerId) {
