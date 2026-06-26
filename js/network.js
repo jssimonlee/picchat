@@ -1143,6 +1143,15 @@ class NetworkManager {
     /* ---------- Cleanup ---------- */
 
     disconnect() {
+        if (this.roomCode && this.myPeerId) {
+            try {
+                const remaining = this.getActivePeerIds().filter(id => id !== this.myPeerId);
+                this._syncRoomWithDb(remaining);
+            } catch (e) {
+                console.warn('[Network] Failed to sync room exit to DB:', e);
+            }
+        }
+
         this.connections.forEach(info => {
             try { info.conn.close(); } catch(e) {}
         });
