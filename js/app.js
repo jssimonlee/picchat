@@ -3054,20 +3054,6 @@
                 return;
             }
 
-            // Game shortcuts (single key)
-            const gameMap = {
-                's': $btnSudoku,
-                'g': $btnGomoku,
-                'o': $btnOthello,
-                'm': $btnMinesweeper,
-                'w': $btnSpeedrun
-            };
-            const key = e.key.toLowerCase();
-            if (gameMap[key]) {
-                gameMap[key].click();
-                return;
-            }
-
             // Tool shortcuts (single key)
             const toolMap = {
                 'p': 'pen', 'b': 'brush', 'e': 'eraser',
@@ -3075,6 +3061,7 @@
                 'a': 'arrow', 't': 'text', 'i': 'upload',
                 'f': 'fill'
             };
+            const key = e.key.toLowerCase();
 
             // Laser mode toggle (V key)
             if (key === 'v') {
