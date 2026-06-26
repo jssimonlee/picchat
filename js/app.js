@@ -2988,6 +2988,13 @@
             // Don't trigger shortcuts when typing in text input
             if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
 
+            // If any game overlay is open, block canvas/game tool shortcuts
+            const isAnyGameOpen = !$sudokuOverlay.hidden || 
+                                  !$gomokuOverlay.hidden || 
+                                  !$othelloOverlay.hidden || 
+                                  !$minesweeperOverlay.hidden || 
+                                  !$speedrunOverlay.hidden;
+
             // Intercept inputs if active in Sudoku playing view
             if (sudokuState.status === 'playing' && !$sudokuOverlay.hidden) {
                 if (e.key >= '1' && e.key <= '9') {
@@ -3020,6 +3027,8 @@
                 return;
             }
 
+            if (isAnyGameOpen) return;
+
             if (e.ctrlKey || e.metaKey) {
                 switch (e.key.toLowerCase()) {
                     case 'z':
@@ -3045,6 +3054,20 @@
                 return;
             }
 
+            // Game shortcuts (single key)
+            const gameMap = {
+                's': $btnSudoku,
+                'g': $btnGomoku,
+                'o': $btnOthello,
+                'm': $btnMinesweeper,
+                'w': $btnSpeedrun
+            };
+            const key = e.key.toLowerCase();
+            if (gameMap[key]) {
+                gameMap[key].click();
+                return;
+            }
+
             // Tool shortcuts (single key)
             const toolMap = {
                 'p': 'pen', 'b': 'brush', 'e': 'eraser',
@@ -3052,7 +3075,6 @@
                 'a': 'arrow', 't': 'text', 'i': 'upload',
                 'f': 'fill'
             };
-            const key = e.key.toLowerCase();
 
             // Laser mode toggle (V key)
             if (key === 'v') {
