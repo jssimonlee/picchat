@@ -10213,21 +10213,10 @@
         if (isVolatile && volatileDuration > 0) {
             const badgeEl = document.createElement('div');
             badgeEl.className = 'chat-msg-volatile-badge';
-            badgeEl.style.display = 'inline-flex';
-            badgeEl.style.alignItems = 'center';
-            badgeEl.style.gap = '3px';
-            badgeEl.style.fontSize = '9px';
-            badgeEl.style.opacity = '0.7';
-            badgeEl.style.marginTop = '4px';
-            badgeEl.style.float = 'right';
-            badgeEl.style.clear = 'both';
             
-            const timerSpan = document.createElement('span');
-            timerSpan.textContent = '⏱️ ';
             const countSpan = document.createElement('span');
             countSpan.className = 'countdown-text';
             countSpan.textContent = formatDuration(volatileDuration);
-            badgeEl.appendChild(timerSpan);
             badgeEl.appendChild(countSpan);
             bubbleEl.appendChild(badgeEl);
             
@@ -10546,20 +10535,11 @@
         if (isVolatile && volatileDuration > 0) {
             const badgeEl = document.createElement('div');
             badgeEl.className = 'chat-msg-volatile-badge';
-            badgeEl.style.display = 'inline-flex';
-            badgeEl.style.alignItems = 'center';
-            badgeEl.style.gap = '3px';
-            badgeEl.style.fontSize = '9px';
-            badgeEl.style.opacity = '0.7';
-            badgeEl.style.marginTop = '4px';
             badgeEl.style.alignSelf = 'flex-end';
             
-            const timerSpan = document.createElement('span');
-            timerSpan.textContent = '⏱️ ';
             const countSpan = document.createElement('span');
             countSpan.className = 'countdown-text';
             countSpan.textContent = formatDuration(volatileDuration);
-            badgeEl.appendChild(timerSpan);
             badgeEl.appendChild(countSpan);
             bubbleEl.appendChild(badgeEl);
 
