@@ -1106,6 +1106,23 @@ input, button, textarea {
     font-weight: 600;
     padding-left: 2px;
 }
+.chat-msg-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    width: 100%;
+}
+.chat-msg.mine .chat-msg-row {
+    justify-content: flex-end;
+}
+.chat-msg-unread-indicator {
+    font-size: 10px;
+    font-weight: 700;
+    color: #ffca28; /* Cute warning yellow KakaoTalk style */
+    user-select: none;
+    margin-bottom: 2px;
+    flex-shrink: 0;
+}
 .chat-msg-bubble {
     padding: 8px 12px;
     border-radius: 12px;

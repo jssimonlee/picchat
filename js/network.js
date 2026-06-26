@@ -33,6 +33,7 @@ class NetworkManager {
         this.onSpeedrun = callbacks.onSpeedrun || (() => {});
         this.onChat = callbacks.onChat || (() => {});
         this.onFileReceived = callbacks.onFileReceived || (() => {});
+        this.onReadReceipt = callbacks.onReadReceipt || (() => {});
         this.onEmoji = callbacks.onEmoji || (() => {});
         this.onLaser = callbacks.onLaser || (() => {});
         this.onDrawStart = callbacks.onDrawStart || (() => {});
@@ -536,12 +537,13 @@ class NetworkManager {
 
             case 'chat': {
                 const recipientId = data.recipientId || 'all';
+                const msgId = data.msgId;
                 if (this.isHost) {
                     if (recipientId === 'all') {
                         this._broadcast(data, fromPeerId);
-                        this.onChat(fromPeerId, data.message, data.nickname, data.color, 'all', data.isVolatile, data.volatileDuration);
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, 'all', data.isVolatile, data.volatileDuration, msgId);
                     } else if (recipientId === this.myPeerId) {
-                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId, data.isVolatile, data.volatileDuration);
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId, data.isVolatile, data.volatileDuration, msgId);
                     } else {
                         // Relay to the specific connection
                         const info = this.connections.get(recipientId);
@@ -551,7 +553,7 @@ class NetworkManager {
                     }
                 } else {
                     if (recipientId === 'all' || recipientId === this.myPeerId) {
-                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId, data.isVolatile, data.volatileDuration);
+                        this.onChat(fromPeerId, data.message, data.nickname, data.color, recipientId, data.isVolatile, data.volatileDuration, msgId);
                     }
                 }
                 break;
@@ -577,6 +579,14 @@ class NetworkManager {
                         this.onFileReceived(fromPeerId, data);
                     }
                 }
+                break;
+            }
+
+            case 'read-receipt': {
+                if (this.isHost) {
+                    this._broadcast(data, fromPeerId);
+                }
+                this.onReadReceipt(fromPeerId, data.msgIds);
                 break;
             }
 
@@ -808,9 +818,13 @@ class NetworkManager {
         }
     }
 
-    sendChat(message, recipientId = 'all', isVolatile = false, volatileDuration = 0) {
+    sendChat(message, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
+        if (!msgId) {
+            msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
         const data = { 
             type: 'chat', 
+            msgId,
             message, 
             nickname: this.nickname, 
             color: this.myColor,
@@ -821,26 +835,31 @@ class NetworkManager {
         if (this.isHost) {
             if (recipientId === 'all') {
                 this._broadcast(data);
-                this.onChat(this.myPeerId, message, this.nickname, this.myColor, 'all', isVolatile, volatileDuration);
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, 'all', isVolatile, volatileDuration, msgId);
             } else if (recipientId === this.myPeerId) {
-                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId, isVolatile, volatileDuration);
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId, isVolatile, volatileDuration, msgId);
             } else {
                 const info = this.connections.get(recipientId);
                 if (info) {
                     try { info.conn.send(data); } catch(e) {}
                 }
-                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId, isVolatile, volatileDuration);
+                this.onChat(this.myPeerId, message, this.nickname, this.myColor, recipientId, isVolatile, volatileDuration, msgId);
             }
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
             });
         }
+        return msgId;
     }
 
-    sendFile(fileName, fileType, fileData, recipientId = 'all', isVolatile = false, volatileDuration = 0) {
+    sendFile(fileName, fileType, fileData, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
+        if (!msgId) {
+            msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
         const data = {
             type: 'file',
+            msgId,
             fileName,
             fileType,
             fileData,
@@ -869,6 +888,24 @@ class NetworkManager {
                 try { info.conn.send(data); } catch(e) {}
             });
             this.onFileReceived(this.myPeerId, data);
+        }
+        return msgId;
+    }
+
+    sendReadReceipts(msgIds) {
+        if (!Array.isArray(msgIds) || msgIds.length === 0) return;
+        const data = {
+            type: 'read-receipt',
+            msgIds,
+            readerPeerId: this.myPeerId
+        };
+        if (this.isHost) {
+            this._broadcast(data);
+            this.onReadReceipt(this.myPeerId, msgIds);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
         }
     }
 

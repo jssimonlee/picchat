@@ -853,11 +853,14 @@
             onSpeedrun: (fromPeerId, payload) => {
                 handleSpeedrunNetworkMessage(fromPeerId, payload);
             },
-            onChat: (fromPeerId, message, nickname, color, recipientId, isVolatile, volatileDuration) => {
-                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId, isVolatile, volatileDuration);
+            onChat: (fromPeerId, message, nickname, color, recipientId, isVolatile, volatileDuration, msgId) => {
+                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId, isVolatile, volatileDuration, msgId);
             },
             onFileReceived: (fromPeerId, data) => {
-                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId, data.isVolatile, data.volatileDuration);
+                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId, data.isVolatile, data.volatileDuration, data.msgId);
+            },
+            onReadReceipt: (fromPeerId, msgIds) => {
+                handleIncomingReadReceipts(fromPeerId, msgIds);
             },
             onEmoji: (fromPeerId, emoji, nickname, color, isVolatile, volatileDuration) => {
                 spawnFloatingEmoji(emoji);
@@ -10138,6 +10141,7 @@
             chatUnreadCount = 0;
             $chatUnread.hidden = true;
             $chatUnread.textContent = '0';
+            markAllUnreadMessagesAsRead();
             // Scroll to bottom
             setTimeout(() => {
                 $chatMessages.scrollTop = $chatMessages.scrollHeight;
@@ -10182,9 +10186,14 @@
         return `${seconds}초`;
     }
 
-    function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0) {
+    function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
+        if (!msgId) {
+            msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
+
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg' + (isMine ? ' mine' : '') + (recipientId !== 'all' ? ' dm' : '');
+        msgEl.dataset.msgId = msgId;
 
         const nameEl = document.createElement('div');
         nameEl.className = 'chat-msg-name';
@@ -10239,8 +10248,52 @@
             }, 1000);
         }
 
+        // Calculate unread count details
+        let initialUnreadCount = 0;
+        if (recipientId !== 'all') {
+            initialUnreadCount = 1;
+        } else {
+            initialUnreadCount = Math.max(0, knownParticipants.size - 1);
+        }
+
+        let readers = [];
+        if (!isMine) {
+            if (isChatOpen) {
+                readers.push(network.myPeerId);
+                if (network) {
+                    network.sendReadReceipts([msgId]);
+                }
+            } else {
+                msgEl.classList.add('unread-message');
+            }
+        }
+
+        msgEl.dataset.initialUnreadCount = initialUnreadCount;
+        msgEl.dataset.readers = JSON.stringify(readers);
+
+        const unreadCount = Math.max(0, initialUnreadCount - readers.length);
+
+        const msgRow = document.createElement('div');
+        msgRow.className = 'chat-msg-row';
+
+        if (unreadCount > 0) {
+            const unreadBadge = document.createElement('div');
+            unreadBadge.className = 'chat-msg-unread-indicator';
+            unreadBadge.textContent = unreadCount;
+            
+            if (isMine) {
+                msgRow.appendChild(unreadBadge);
+                msgRow.appendChild(bubbleEl);
+            } else {
+                msgRow.appendChild(bubbleEl);
+                msgRow.appendChild(unreadBadge);
+            }
+        } else {
+            msgRow.appendChild(bubbleEl);
+        }
+
         msgEl.appendChild(nameEl);
-        msgEl.appendChild(bubbleEl);
+        msgEl.appendChild(msgRow);
         $chatMessages.appendChild(msgEl);
 
         // Keep only last 200 messages
@@ -10259,9 +10312,74 @@
         }
     }
 
-    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId, isVolatile = false, volatileDuration = 0) {
+    function handleIncomingReadReceipts(fromPeerId, msgIds) {
+        if (!Array.isArray(msgIds)) return;
+        msgIds.forEach(msgId => {
+            const msgEl = document.querySelector(`[data-msg-id="${msgId}"]`);
+            if (!msgEl) return;
+
+            let readers = msgEl.dataset.readers ? JSON.parse(msgEl.dataset.readers) : [];
+            if (!readers.includes(fromPeerId)) {
+                readers.push(fromPeerId);
+                msgEl.dataset.readers = JSON.stringify(readers);
+
+                const initialCount = parseInt(msgEl.dataset.initialUnreadCount || '0', 10);
+                const unreadCount = Math.max(0, initialCount - readers.length);
+
+                const badge = msgEl.querySelector('.chat-msg-unread-indicator');
+                if (badge) {
+                    if (unreadCount > 0) {
+                        badge.textContent = unreadCount;
+                    } else {
+                        badge.remove();
+                    }
+                }
+            }
+        });
+    }
+
+    function markAllUnreadMessagesAsRead() {
+        const unreadEls = document.querySelectorAll('.unread-message');
+        if (unreadEls.length === 0) return;
+
+        const msgIds = [];
+        unreadEls.forEach(msgEl => {
+            const msgId = msgEl.dataset.msgId;
+            if (msgId) {
+                msgIds.push(msgId);
+                
+                let readers = msgEl.dataset.readers ? JSON.parse(msgEl.dataset.readers) : [];
+                if (!readers.includes(network.myPeerId)) {
+                    readers.push(network.myPeerId);
+                    msgEl.dataset.readers = JSON.stringify(readers);
+                }
+
+                const initialCount = parseInt(msgEl.dataset.initialUnreadCount || '0', 10);
+                const unreadCount = Math.max(0, initialCount - readers.length);
+                const badge = msgEl.querySelector('.chat-msg-unread-indicator');
+                if (badge) {
+                    if (unreadCount > 0) {
+                        badge.textContent = unreadCount;
+                    } else {
+                        badge.remove();
+                    }
+                }
+            }
+            msgEl.classList.remove('unread-message');
+        });
+
+        if (network && msgIds.length > 0) {
+            network.sendReadReceipts(msgIds);
+        }
+    }
+
+    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId, isVolatile = false, volatileDuration = 0, msgId = null) {
+        if (!msgId) {
+            msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg' + (isMine ? ' mine' : '') + (recipientId !== 'all' ? ' dm' : '');
+        msgEl.dataset.msgId = msgId;
 
         const nameEl = document.createElement('div');
         nameEl.className = 'chat-msg-name';
@@ -10560,8 +10678,52 @@
             }, 1000);
         }
 
+        // Calculate unread count details
+        let initialUnreadCount = 0;
+        if (recipientId !== 'all') {
+            initialUnreadCount = 1;
+        } else {
+            initialUnreadCount = Math.max(0, knownParticipants.size - 1);
+        }
+
+        let readers = [];
+        if (!isMine) {
+            if (isChatOpen) {
+                readers.push(network.myPeerId);
+                if (network) {
+                    network.sendReadReceipts([msgId]);
+                }
+            } else {
+                msgEl.classList.add('unread-message');
+            }
+        }
+
+        msgEl.dataset.initialUnreadCount = initialUnreadCount;
+        msgEl.dataset.readers = JSON.stringify(readers);
+
+        const unreadCount = Math.max(0, initialUnreadCount - readers.length);
+
+        const msgRow = document.createElement('div');
+        msgRow.className = 'chat-msg-row';
+
+        if (unreadCount > 0) {
+            const unreadBadge = document.createElement('div');
+            unreadBadge.className = 'chat-msg-unread-indicator';
+            unreadBadge.textContent = unreadCount;
+            
+            if (isMine) {
+                msgRow.appendChild(unreadBadge);
+                msgRow.appendChild(bubbleEl);
+            } else {
+                msgRow.appendChild(bubbleEl);
+                msgRow.appendChild(unreadBadge);
+            }
+        } else {
+            msgRow.appendChild(bubbleEl);
+        }
+
         msgEl.appendChild(nameEl);
-        msgEl.appendChild(bubbleEl);
+        msgEl.appendChild(msgRow);
         $chatMessages.appendChild(msgEl);
 
         while ($chatMessages.children.length > 200) {
