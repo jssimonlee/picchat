@@ -10211,7 +10211,7 @@
         bubbleEl.textContent = message;
 
         if (isVolatile && volatileDuration > 0) {
-            const badgeEl = document.createElement('div');
+            const badgeEl = document.createElement('span');
             badgeEl.className = 'chat-msg-volatile-badge';
             
             const countSpan = document.createElement('span');
@@ -10533,7 +10533,7 @@
         bubbleEl.appendChild(btnRow);
 
         if (isVolatile && volatileDuration > 0) {
-            const badgeEl = document.createElement('div');
+            const badgeEl = document.createElement('span');
             badgeEl.className = 'chat-msg-volatile-badge';
             badgeEl.style.alignSelf = 'flex-end';
             

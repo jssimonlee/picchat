@@ -1137,23 +1137,23 @@ input, button, textarea {
     justify-content: center;
     font-size: 9px;
     font-weight: 700;
-    color: var(--text-secondary);
-    background-color: var(--bg-surface-hover);
-    border: 1px solid var(--border);
+    color: #ff6b81; /* Cute coral pink for peer */
+    background-color: rgba(255, 107, 129, 0.15);
+    border: 1px solid rgba(255, 107, 129, 0.3);
     border-radius: 6px;
-    padding: 2px 6px;
-    margin-top: 6px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    vertical-align: middle;
     cursor: default;
     user-select: none;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     transition: all 0.2s ease;
-    float: right;
-    clear: both;
+    flex-shrink: 0;
 }
 .chat-msg.mine .chat-msg-volatile-badge {
-    color: #c084fc;
-    background-color: rgba(124, 92, 255, 0.12);
-    border-color: rgba(124, 92, 255, 0.25);
+    color: #ff9f43; /* Cute bright warm orange for mine */
+    background-color: rgba(255, 159, 67, 0.15);
+    border-color: rgba(255, 159, 67, 0.3);
 }
 
 .chat-msg-system {
