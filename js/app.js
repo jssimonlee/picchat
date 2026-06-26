@@ -99,6 +99,7 @@
     const $sudokuResultMsg = document.getElementById('sudokuResultMsg');
     const $sudokuFinalLeaderboardList = document.getElementById('sudokuFinalLeaderboardList');
     const $btnSudokuResultClose = document.getElementById('btnSudokuResultClose');
+    const $btnSudokuResultLobby = document.getElementById('btnSudokuResultLobby');
     const $btnSudoku = document.getElementById('btnSudoku');
     const $btnSudokuSolo = document.getElementById('btnSudokuSolo');
 
@@ -135,6 +136,7 @@
     const $gomokuResultMsg = document.getElementById('gomokuResultMsg');
     const $gomokuResultStats = document.getElementById('gomokuResultStats');
     const $btnGomokuResultClose = document.getElementById('btnGomokuResultClose');
+    const $btnGomokuResultLobby = document.getElementById('btnGomokuResultLobby');
     const $btnGomoku = document.getElementById('btnGomoku');
 
     // Othello Elements
@@ -172,6 +174,7 @@
     const $othelloResultMsg = document.getElementById('othelloResultMsg');
     const $othelloResultStats = document.getElementById('othelloResultStats');
     const $btnOthelloResultClose = document.getElementById('btnOthelloResultClose');
+    const $btnOthelloResultLobby = document.getElementById('btnOthelloResultLobby');
     const $btnOthello = document.getElementById('btnOthello');
 
     // Minesweeper Elements
@@ -212,6 +215,7 @@
     const $minesweeperResultMsg = document.getElementById('minesweeperResultMsg');
     const $minesweeperResultStats = document.getElementById('minesweeperResultStats');
     const $btnMinesweeperResultClose = document.getElementById('btnMinesweeperResultClose');
+    const $btnMinesweeperResultLobby = document.getElementById('btnMinesweeperResultLobby');
 
     // Speedrun Elements
     const $btnSpeedrun = document.getElementById('btnSpeedrun');
@@ -247,6 +251,7 @@
     const $speedrunResultMyScore = document.getElementById('speedrunResultMyScore');
     const $speedrunResultPeerScore = document.getElementById('speedrunResultPeerScore');
     const $btnSpeedrunReturn = document.getElementById('btnSpeedrunReturn');
+    const $btnSpeedrunResultClose = document.getElementById('btnSpeedrunResultClose');
 
     // Chat Sidebar Elements
     const $chatSidebar = document.getElementById('chatSidebar');
@@ -3609,6 +3614,14 @@
             $sudokuOverlay.hidden = true;
         });
 
+        // Propose new game
+        if ($btnSudokuResultLobby) {
+            $btnSudokuResultLobby.addEventListener('click', () => {
+                resetSudoku();
+                showSudokuSubView('lobby');
+            });
+        }
+
         // Setup numpad selectors
         document.querySelectorAll('.sudoku-num-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -5886,6 +5899,14 @@
             $gomokuOverlay.hidden = true;
         });
 
+        // Propose new game
+        if ($btnGomokuResultLobby) {
+            $btnGomokuResultLobby.addEventListener('click', () => {
+                resetGomoku();
+                showGomokuSubView('lobby');
+            });
+        }
+
         // Action panel triggers
         $btnGomokuUndo.addEventListener('click', () => {
             undoGomokuMove();
@@ -6946,6 +6967,14 @@
             resetOthello();
             $othelloOverlay.hidden = true;
         });
+
+        // Propose new game
+        if ($btnOthelloResultLobby) {
+            $btnOthelloResultLobby.addEventListener('click', () => {
+                resetOthello();
+                showOthelloSubView('lobby');
+            });
+        }
 
         // Action panel triggers
         $btnOthelloUndo.addEventListener('click', () => {
@@ -8236,6 +8265,13 @@
             showSpeedrunLobbySetup();
         });
 
+        if ($btnSpeedrunResultClose) {
+            $btnSpeedrunResultClose.addEventListener('click', () => {
+                resetSpeedrun();
+                $speedrunOverlay.hidden = true;
+            });
+        }
+
         // Bind choices click events
         document.querySelectorAll('.speedrun-choices-grid .choice-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -8950,6 +8986,14 @@
             resetMinesweeper();
             $minesweeperOverlay.hidden = true;
         });
+
+        // Propose new game
+        if ($btnMinesweeperResultLobby) {
+            $btnMinesweeperResultLobby.addEventListener('click', () => {
+                resetMinesweeper();
+                showMinesweeperSubView('lobby');
+            });
+        }
     }
 
     function proposeMinesweeper() {
