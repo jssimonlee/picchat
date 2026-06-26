@@ -10175,10 +10175,10 @@
         const isVolatile = $chkVolatileChat ? $chkVolatileChat.checked : false;
         const volatileDuration = isVolatile && $selVolatileDuration ? parseInt($selVolatileDuration.value, 10) : 0;
 
-        network.sendChat(msg, recipientId, isVolatile, volatileDuration);
+        const msgId = network.sendChat(msg, recipientId, isVolatile, volatileDuration);
         // Local echo for non-host
         if (!network.isHost) {
-            addChatMessage(network.nickname, msg, network.myColor, true, recipientId, isVolatile, volatileDuration);
+            addChatMessage(network.nickname, msg, network.myColor, true, recipientId, isVolatile, volatileDuration, msgId);
         }
         $chatInput.value = '';
         $chatInput.focus();
