@@ -3027,6 +3027,17 @@
                 return;
             }
 
+            // Intercept inputs if active in Speedrun playing view
+            if (speedrunState.status === 'playing' && !$speedrunOverlay.hidden) {
+                if (e.key >= '1' && e.key <= '4') {
+                    e.preventDefault();
+                    handleChoiceClick(parseInt(e.key) - 1);
+                    return;
+                }
+                // Do not allow canvas shortcuts while playing speedrun
+                return;
+            }
+
             if (isAnyGameOpen) return;
 
             if (e.ctrlKey || e.metaKey) {
@@ -8594,6 +8605,7 @@
     async function handleChoiceClick(choiceIdx) {
         const buttons = document.querySelectorAll('.speedrun-choices-grid .choice-btn');
         const clickedBtn = buttons[choiceIdx];
+        if (!clickedBtn || clickedBtn.disabled) return;
         
         // Disable the clicked button to prevent duplicate clicks on this button
         clickedBtn.disabled = true;
