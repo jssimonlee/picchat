@@ -10196,12 +10196,12 @@
 
     function formatDuration(seconds) {
         if (seconds >= 60) {
-            const m = Math.ceil(seconds / 60);
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            if (s > 0) {
+                return `${m}분 ${s}초`;
+            }
             return `${m}분`;
-        }
-        if (seconds >= 10) {
-            const tens = Math.floor(seconds / 10) * 10;
-            return `${tens}초`;
         }
         return `${seconds}초`;
     }
@@ -10245,16 +10245,16 @@
             
             const countSpan = document.createElement('span');
             countSpan.className = 'countdown-text';
-            countSpan.textContent = formatDuration(volatileDuration);
+            countSpan.textContent = '0초';
             badgeEl.appendChild(countSpan);
             bubbleEl.appendChild(badgeEl);
             
             bubbleEl.style.overflow = 'hidden';
 
-            let timeLeft = volatileDuration;
+            let elapsed = 0;
             const timerId = setInterval(() => {
-                timeLeft--;
-                if (timeLeft <= 0) {
+                elapsed++;
+                if (elapsed >= volatileDuration) {
                     clearInterval(timerId);
                     msgEl.style.transition = 'all 0.5s ease';
                     msgEl.style.opacity = '0';
@@ -10263,7 +10263,7 @@
                         msgEl.remove();
                     }, 500);
                 } else {
-                    countSpan.textContent = formatDuration(timeLeft);
+                    countSpan.textContent = formatDuration(elapsed);
                 }
             }, 1000);
         }
@@ -10678,14 +10678,14 @@
             
             const countSpan = document.createElement('span');
             countSpan.className = 'countdown-text';
-            countSpan.textContent = formatDuration(volatileDuration);
+            countSpan.textContent = '0초';
             badgeEl.appendChild(countSpan);
             bubbleEl.appendChild(badgeEl);
 
-            let timeLeft = volatileDuration;
+            let elapsed = 0;
             const timerId = setInterval(() => {
-                timeLeft--;
-                if (timeLeft <= 0) {
+                elapsed++;
+                if (elapsed >= volatileDuration) {
                     clearInterval(timerId);
                     msgEl.style.transition = 'all 0.5s ease';
                     msgEl.style.opacity = '0';
@@ -10694,7 +10694,7 @@
                         msgEl.remove();
                     }, 500);
                 } else {
-                    countSpan.textContent = formatDuration(timeLeft);
+                    countSpan.textContent = formatDuration(elapsed);
                 }
             }, 1000);
         }
