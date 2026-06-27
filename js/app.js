@@ -10197,13 +10197,10 @@
     function formatDuration(seconds) {
         if (seconds >= 60) {
             const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            if (s > 0) {
-                return `${m}분 ${s}초`;
-            }
             return `${m}분`;
         }
-        return `${seconds}초`;
+        const tens = Math.floor(seconds / 10) * 10;
+        return `${tens}초`;
     }
 
     function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
