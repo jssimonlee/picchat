@@ -695,15 +695,15 @@
             }
         });
 
-        // 방번호 직접 입력 필드: 한글/영문/숫자만 필터링 및 대문자 변환
+        // 방번호 직접 입력 필드: 한글/영문/숫자만 필터링 및 대문자 변환 (최대 3자 강제 제한)
         $customRoomInput.addEventListener('input', () => {
             let val = $customRoomInput.value.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣A-Za-z0-9]/g, '');
-            $customRoomInput.value = val.toUpperCase();
+            $customRoomInput.value = val.slice(0, 3).toUpperCase();
         });
 
         $joinRoomCodeInput.addEventListener('input', () => {
             let val = $joinRoomCodeInput.value.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣A-Za-z0-9]/g, '');
-            $joinRoomCodeInput.value = val.toUpperCase();
+            $joinRoomCodeInput.value = val.slice(0, 3).toUpperCase();
         });
     }
 
