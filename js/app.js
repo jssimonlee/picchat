@@ -279,7 +279,7 @@
     const $volatileDesc = document.getElementById('volatileDesc');
     const $btnChatSettings = document.getElementById('btnChatSettings');
     const $chatSettingsPanel = document.getElementById('chatSettingsPanel');
-    const $chatLimitRow = document.getElementById('chatLimitRow');
+    const $studioRoomLimitBadge = document.getElementById('studioRoomLimitBadge');
     const $chatRoomLimitSelect = document.getElementById('chatRoomLimitSelect');
     const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
@@ -679,10 +679,10 @@
         // 방번호 직접 지정 토글 처리
         $chkCustomCode.addEventListener('change', () => {
             if ($chkCustomCode.checked) {
-                $customCodeContainer.style.display = 'block';
+                $customCodeContainer.classList.add('open');
                 $customRoomInput.focus();
             } else {
-                $customCodeContainer.style.display = 'none';
+                $customCodeContainer.classList.remove('open');
                 $customRoomInput.value = '';
             }
         });
@@ -1028,12 +1028,15 @@
         $studio.classList.add('active');
 
         // Show/hide and sync participant limit controls
-        if ($chatLimitRow && $chatRoomLimitSelect && network) {
+        if ($studioRoomLimitBadge && $chatRoomLimitSelect && network) {
+            $studioRoomLimitBadge.style.display = 'flex';
+            $chatRoomLimitSelect.value = network.maxParticipants;
             if (network.isHost) {
-                $chatLimitRow.style.display = 'flex';
-                $chatRoomLimitSelect.value = network.maxParticipants;
+                $chatRoomLimitSelect.disabled = false;
+                $chatRoomLimitSelect.style.cursor = 'pointer';
             } else {
-                $chatLimitRow.style.display = 'none';
+                $chatRoomLimitSelect.disabled = true;
+                $chatRoomLimitSelect.style.cursor = 'default';
             }
         }
 
@@ -3354,7 +3357,8 @@
         $joinRoomCodeInput.value = '';
         $customRoomInput.value = '';
         $chkCustomCode.checked = false;
-        $customCodeContainer.style.display = 'none';
+        $customCodeContainer.classList.remove('open');
+        if ($studioRoomLimitBadge) $studioRoomLimitBadge.style.display = 'none';
 
         // Restore hidden elements
         const $nickGroup = document.getElementById('nickname').closest('.input-group');
