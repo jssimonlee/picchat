@@ -12,17 +12,26 @@
     const $lobby = document.getElementById('lobby');
     const $studio = document.getElementById('studio');
     const $nickname = document.getElementById('nickname');
-    const $chkCustomCode = document.getElementById('chkCustomCode');
-    const $customCodeContainer = document.getElementById('customCodeContainer');
-    const $customRoomInput = document.getElementById('customRoomInput');
-    const $btnCreateRoom = document.getElementById('btnCreateRoom');
-    const $btnJoinRoom = document.getElementById('btnJoinRoom');
-    const $joinCode = document.getElementById('joinCode');
     const $roomCreated = document.getElementById('roomCreated');
     const $roomCode = document.getElementById('roomCode');
     const $btnCopyCode = document.getElementById('btnCopyCode');
     const $lobbyStatus = document.getElementById('lobbyStatus');
     const $btnEnterSolo = document.getElementById('btnEnterSolo');
+
+    // Lobby Modals and simplification buttons
+    const $btnShowCreateModal = document.getElementById('btnShowCreateModal');
+    const $btnShowJoinModal = document.getElementById('btnShowJoinModal');
+    const $createRoomModal = document.getElementById('createRoomModal');
+    const $joinRoomModal = document.getElementById('joinRoomModal');
+    const $btnCancelCreateRoom = document.getElementById('btnCancelCreateRoom');
+    const $btnConfirmCreateRoom = document.getElementById('btnConfirmCreateRoom');
+    const $btnCancelJoinRoom = document.getElementById('btnCancelJoinRoom');
+    const $btnConfirmJoinRoom = document.getElementById('btnConfirmJoinRoom');
+    const $createRoomLimit = document.getElementById('createRoomLimit');
+    const $joinRoomCodeInput = document.getElementById('joinRoomCodeInput');
+    const $chkCustomCode = document.getElementById('chkCustomCode');
+    const $customCodeContainer = document.getElementById('customCodeContainer');
+    const $customRoomInput = document.getElementById('customRoomInput');
 
     // Studio
     const $mainCanvas = document.getElementById('mainCanvas');
@@ -270,6 +279,8 @@
     const $volatileDesc = document.getElementById('volatileDesc');
     const $btnChatSettings = document.getElementById('btnChatSettings');
     const $chatSettingsPanel = document.getElementById('chatSettingsPanel');
+    const $chatLimitRow = document.getElementById('chatLimitRow');
+    const $chatRoomLimitSelect = document.getElementById('chatRoomLimitSelect');
     const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
     const $btnGames = document.getElementById('btnGames');
@@ -604,15 +615,61 @@
 
     /* ---------- Lobby Events ---------- */
 
+    function closeModals() {
+        $createRoomModal.hidden = true;
+        $joinRoomModal.hidden = true;
+        $lobbyStatus.hidden = true;
+        $lobbyStatus.innerHTML = '';
+    }
+
+    function validateNickname() {
+        const nick = $nickname.value.trim();
+        if (!nick) {
+            $nickname.classList.add('shake');
+            setTimeout(() => $nickname.classList.remove('shake'), 500);
+            showLobbyStatus('닉네임을 입력해 주세요.', 'error');
+            $nickname.focus();
+            return false;
+        }
+        return true;
+    }
+
     function setupLobbyEvents() {
-        $btnCreateRoom.addEventListener('click', createRoom);
-        $btnJoinRoom.addEventListener('click', joinRoom);
+        $btnShowCreateModal.addEventListener('click', () => {
+            if (!validateNickname()) return;
+            closeModals();
+            $createRoomModal.hidden = false;
+        });
+
+        $btnShowJoinModal.addEventListener('click', () => {
+            if (!validateNickname()) return;
+            closeModals();
+            $joinRoomModal.hidden = false;
+            $joinRoomCodeInput.focus();
+        });
+
+        $btnCancelCreateRoom.addEventListener('click', closeModals);
+        $btnCancelJoinRoom.addEventListener('click', closeModals);
+
+        $btnConfirmCreateRoom.addEventListener('click', createRoom);
+        $btnConfirmJoinRoom.addEventListener('click', joinRoom);
+
         $nickname.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') $btnCreateRoom.click();
+            if (e.key === 'Enter') {
+                if (validateNickname()) {
+                    $btnShowCreateModal.click();
+                }
+            }
         });
-        $joinCode.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') $btnJoinRoom.click();
+
+        $joinRoomCodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $btnConfirmJoinRoom.click();
         });
+
+        $customRoomInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $btnConfirmCreateRoom.click();
+        });
+
         $btnEnterSolo.addEventListener('click', () => {
             if (network && network.roomCode) {
                 enterStudio(network.roomCode);
@@ -622,22 +679,23 @@
         // 방번호 직접 지정 토글 처리
         $chkCustomCode.addEventListener('change', () => {
             if ($chkCustomCode.checked) {
-                $customCodeContainer.classList.add('open');
+                $customCodeContainer.style.display = 'block';
                 $customRoomInput.focus();
             } else {
-                $customCodeContainer.classList.remove('open');
+                $customCodeContainer.style.display = 'none';
                 $customRoomInput.value = '';
             }
         });
 
-        // 방번호 직접 입력 필드: 영문/숫자만 필터링 및 대문자 변환
+        // 방번호 직접 입력 필드: 한글/영문/숫자만 필터링 및 대문자 변환
         $customRoomInput.addEventListener('input', () => {
-            let val = $customRoomInput.value.replace(/[^A-Za-z0-9]/g, '');
+            let val = $customRoomInput.value.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣A-Za-z0-9]/g, '');
             $customRoomInput.value = val.toUpperCase();
         });
 
-        $customRoomInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') $btnCreateRoom.click();
+        $joinRoomCodeInput.addEventListener('input', () => {
+            let val = $joinRoomCodeInput.value.replace(/[^ㄱ-ㅎㅏ-ㅣ가-힣A-Za-z0-9]/g, '');
+            $joinRoomCodeInput.value = val.toUpperCase();
         });
     }
 
@@ -650,22 +708,23 @@
     async function createRoom() {
         const nick = getNickname();
         let customCode = null;
+        const maxParticipants = parseInt($createRoomLimit.value, 10);
 
         if ($chkCustomCode.checked) {
             const rawInput = $customRoomInput.value.trim();
-            if (rawInput.length !== 6) {
-                showLobbyStatus('방번호를 정확히 6자리 입력해 주세요.', 'error');
+            if (rawInput.length !== 3) {
+                showLobbyStatus('방번호를 정확히 3자리 입력해 주세요.', 'error');
                 return;
             }
             customCode = rawInput.toUpperCase();
         }
 
-        $btnCreateRoom.disabled = true;
+        $btnConfirmCreateRoom.disabled = true;
         showLobbyStatus('방을 만드는 중...', 'info');
 
         try {
             setupNetwork(nick);
-            const code = await network.createRoom(nick, customCode);
+            const code = await network.createRoom(nick, customCode, maxParticipants);
             $roomCode.textContent = code;
             $roomCreated.hidden = false;
             $btnCopyCode.addEventListener('click', () => copyRoomCode(code));
@@ -674,15 +733,11 @@
             // Hide other elements to prevent clutter
             const $nickGroup = document.getElementById('nickname').closest('.input-group');
             if ($nickGroup) $nickGroup.style.display = 'none';
-            const $customOption = document.querySelector('.custom-code-option');
-            if ($customOption) $customOption.style.display = 'none';
-            $btnCreateRoom.style.display = 'none';
-            const $lobbyDivider = document.querySelector('.lobby-actions .divider');
-            if ($lobbyDivider) $lobbyDivider.style.display = 'none';
-            const $joinSec = document.querySelector('.join-section');
-            if ($joinSec) $joinSec.style.display = 'none';
+            $btnShowCreateModal.style.display = 'none';
+            $btnShowJoinModal.style.display = 'none';
+            closeModals();
         } catch (err) {
-            $btnCreateRoom.disabled = false;
+            $btnConfirmCreateRoom.disabled = false;
             if (err.message && err.message.includes('unavailable-id')) {
                 showLobbyStatus('이미 사용 중인 방번호입니다. 다른 번호를 입력해주세요.', 'error');
             } else {
@@ -693,20 +748,28 @@
 
     async function joinRoom() {
         const nick = getNickname();
-        const code = $joinCode.value.trim().toUpperCase();
-        if (!code || code.length < 6) {
-            showLobbyStatus('방 코드를 입력해주세요.', 'error');
+        const code = $joinRoomCodeInput.value.trim().toUpperCase();
+        if (!code || code.length !== 3) {
+            showLobbyStatus('방 코드를 정확히 3자리 입력해 주세요.', 'error');
             return;
         }
-        $btnJoinRoom.disabled = true;
+        $btnConfirmJoinRoom.disabled = true;
         showLobbyStatus('방에 참여하는 중...', 'info');
 
         try {
             setupNetwork(nick);
             await network.joinRoom(code, nick);
             enterStudio(code);
+            closeModals();
         } catch (err) {
-            $btnJoinRoom.disabled = false;
+            $btnConfirmJoinRoom.disabled = false;
+            if (err.message === 'room-full') {
+                showLobbyStatus('방의 정원이 찼습니다. (최대 인원 초과)', 'error');
+            } else if (err.message === 'peer-unavailable') {
+                showLobbyStatus('방을 찾을 수 없습니다. 코드를 확인해주세요.', 'error');
+            } else {
+                showLobbyStatus('참여 실패: ' + err.message, 'error');
+            }
         }
     }
 
@@ -842,8 +905,8 @@
             },
             onError: (msg) => {
                 showLobbyStatus(msg, 'error');
-                $btnCreateRoom.disabled = false;
-                $btnJoinRoom.disabled = false;
+                $btnConfirmCreateRoom.disabled = false;
+                $btnConfirmJoinRoom.disabled = false;
             },
             onReady: () => {
                 console.log('[App] Network ready');
@@ -878,6 +941,9 @@
             },
             onLaser: (fromPeerId, points, color) => {
                 showRemoteLaser(points, color);
+            },
+            onRoomLimitUpdate: (limit) => {
+                $chatRoomLimitSelect.value = limit;
             },
             onDrawStart: (fromPeerId, pathId, tool, color, size, opacity, point) => {
                 if (canvas) canvas.remoteDrawStart(pathId, tool, color, size, opacity, point);
@@ -960,6 +1026,16 @@
         $lobby.hidden = true;
         $studio.hidden = false;
         $studio.classList.add('active');
+
+        // Show/hide and sync participant limit controls
+        if ($chatLimitRow && $chatRoomLimitSelect && network) {
+            if (network.isHost) {
+                $chatLimitRow.style.display = 'flex';
+                $chatRoomLimitSelect.value = network.maxParticipants;
+            } else {
+                $chatLimitRow.style.display = 'none';
+            }
+        }
 
         // Setup studio UI
         $studioRoomCode.textContent = code;
@@ -3271,20 +3347,18 @@
         // Reset lobby
         $roomCreated.hidden = true;
         $lobbyStatus.hidden = true;
-        $btnCreateRoom.disabled = false;
-        $btnCreateRoom.style.display = '';
-        $btnJoinRoom.disabled = false;
-        $joinCode.value = '';
+        $btnShowCreateModal.disabled = false;
+        $btnShowCreateModal.style.display = '';
+        $btnShowJoinModal.disabled = false;
+        $btnShowJoinModal.style.display = '';
+        $joinRoomCodeInput.value = '';
+        $customRoomInput.value = '';
+        $chkCustomCode.checked = false;
+        $customCodeContainer.style.display = 'none';
 
         // Restore hidden elements
         const $nickGroup = document.getElementById('nickname').closest('.input-group');
         if ($nickGroup) $nickGroup.style.display = '';
-        const $customOption = document.querySelector('.custom-code-option');
-        if ($customOption) $customOption.style.display = '';
-        const $lobbyDivider = document.querySelector('.lobby-actions .divider');
-        if ($lobbyDivider) $lobbyDivider.style.display = '';
-        const $joinSec = document.querySelector('.join-section');
-        if ($joinSec) $joinSec.style.display = '';
     }
 
     /* ---------- Toast ---------- */
@@ -10069,6 +10143,17 @@
                 const isChecked = $chkVolatileChat.checked;
                 $selVolatileDuration.style.display = isChecked ? 'block' : 'none';
                 $volatileDesc.style.display = isChecked ? 'block' : 'none';
+            });
+        }
+
+        // Change room limit (Host only)
+        if ($chatRoomLimitSelect) {
+            $chatRoomLimitSelect.addEventListener('change', () => {
+                const limit = parseInt($chatRoomLimitSelect.value, 10);
+                if (network && network.isHost) {
+                    network.updateMaxParticipants(limit);
+                    showToast(`👥 최대 입장 인원을 ${limit}명으로 변경했습니다.`);
+                }
             });
         }
 

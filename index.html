@@ -45,23 +45,13 @@
                 <input type="text" id="nickname" placeholder="이름을 입력하세요" maxlength="12" autocomplete="off">
             </div>
 
-            <div class="custom-code-option">
-                <label class="switch-container">
-                    <span>방번호 직접 지정하기</span>
-                    <input type="checkbox" id="chkCustomCode" style="display: none;">
-                    <span class="custom-switch">
-                        <span class="custom-switch-handle"></span>
-                    </span>
-                </label>
-                <div id="customCodeContainer">
-                    <input type="text" id="customRoomInput" placeholder="방번호 6자리 입력 (예: MYROOM)" maxlength="6" autocomplete="off">
-                </div>
-            </div>
-
             <div class="lobby-actions">
-                <button id="btnCreateRoom" class="btn btn-primary">
+                <button id="btnShowCreateModal" class="btn btn-primary" style="width: 100%; margin-bottom: 12px;">
                     <span class="btn-icon">✦</span>
-                    새 방 만들기
+                    스튜디오 개설하기
+                </button>
+                <button id="btnShowJoinModal" class="btn btn-secondary" style="width: 100%;">
+                    스튜디오 입장하기
                 </button>
 
                 <div id="roomCreated" class="room-created" hidden>
@@ -76,16 +66,6 @@
                         친구를 기다리는 중<span class="dot-animation">...</span>
                     </p>
                     <button id="btnEnterSolo" class="btn btn-primary" style="margin-top: 12px; width: 100%;">혼자 미리 들어가기</button>
-                </div>
-
-                <div class="divider"><span>또는</span></div>
-
-                <div class="join-section">
-                    <div class="input-group">
-                        <label for="joinCode">방 코드</label>
-                        <input type="text" id="joinCode" placeholder="방 코드를 입력하세요" maxlength="7" autocomplete="off">
-                    </div>
-                    <button id="btnJoinRoom" class="btn btn-secondary">참여하기</button>
                 </div>
             </div>
 
@@ -166,6 +146,23 @@
                         <span id="volatileDesc" style="font-size: 10px; color: var(--text-muted); line-height: 1.4; display: none;">
                             이 모드를 켜고 전송한 메시지는 설정된 시간 이후 나와 상대방의 화면에서 모두 자동으로 사라집니다.
                         </span>
+                    </div>
+                    <!-- Participant Limit Control (only visible to Host) -->
+                    <div class="chat-limit-row" id="chatLimitRow" style="display: none; flex-direction: column; gap: 4px; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
+                            <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">최대 입장 인원 제한</span>
+                            <select id="chatRoomLimitSelect" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); outline: none; background: var(--bg-surface); color: var(--text-primary); cursor: pointer;">
+                                <option value="2">2명</option>
+                                <option value="3">3명</option>
+                                <option value="4">4명</option>
+                                <option value="5">5명</option>
+                                <option value="6">6명</option>
+                                <option value="7">7명</option>
+                                <option value="8">8명</option>
+                                <option value="9">9명</option>
+                                <option value="10">10명</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1182,6 +1179,63 @@
                         <button id="btnSpeedrunReturn" class="btn btn-primary" style="flex: 1; max-width: 200px;">새 게임 제안</button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Room Settings Pop-up Modal -->
+    <div id="createRoomModal" class="confirm-modal" hidden>
+        <div class="confirm-modal-content" style="max-width: 400px; text-align: left;">
+            <h3 style="text-align: center; margin-bottom: 18px; color: #fff;">새로운 스튜디오 개설</h3>
+            
+            <div class="input-group" style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 12px; color: var(--text-secondary); font-weight: 600; margin-bottom: 0; display: block;">입장 가능 인원</label>
+                <select id="createRoomLimit" class="select-limit" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; cursor: pointer; outline: none; box-sizing: border-box;">
+                    <option value="2" selected>2명 (기본)</option>
+                    <option value="3">3명</option>
+                    <option value="4">4명</option>
+                    <option value="5">5명</option>
+                    <option value="6">6명</option>
+                    <option value="7">7명</option>
+                    <option value="8">8명</option>
+                    <option value="9">9명</option>
+                    <option value="10">10명</option>
+                </select>
+            </div>
+
+            <div class="custom-code-option" style="margin-bottom: 16px;">
+                <label class="switch-container" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; margin-bottom: 8px;">
+                    <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">방번호 직접 지정하기</span>
+                    <input type="checkbox" id="chkCustomCode" style="display: none;">
+                    <span class="custom-switch">
+                        <span class="custom-switch-handle"></span>
+                    </span>
+                </label>
+                <div id="customCodeContainer" style="display: none;">
+                    <input type="text" id="customRoomInput" placeholder="방번호 3글자 입력 (예: 초코)" maxlength="3" autocomplete="off" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; outline: none; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div class="confirm-modal-actions" style="margin-top: 24px;">
+                <button id="btnCancelCreateRoom" class="btn btn-secondary" style="flex: 1;">취소</button>
+                <button id="btnConfirmCreateRoom" class="btn btn-primary" style="flex: 1;">개설하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Room Settings Pop-up Modal -->
+    <div id="joinRoomModal" class="confirm-modal" hidden>
+        <div class="confirm-modal-content" style="max-width: 400px; text-align: left;">
+            <h3 style="text-align: center; margin-bottom: 18px; color: #fff;">스튜디오 입장</h3>
+            
+            <div class="input-group" style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 12px; color: var(--text-secondary); font-weight: 600; margin-bottom: 0; display: block;">방 코드 입력</label>
+                <input type="text" id="joinRoomCodeInput" placeholder="방 코드 3글자 입력 (예: 초코)" maxlength="3" autocomplete="off" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; outline: none; box-sizing: border-box;">
+            </div>
+
+            <div class="confirm-modal-actions" style="margin-top: 24px;">
+                <button id="btnCancelJoinRoom" class="btn btn-secondary" style="flex: 1;">취소</button>
+                <button id="btnConfirmJoinRoom" class="btn btn-primary" style="flex: 1;">입장하기</button>
             </div>
         </div>
     </div>

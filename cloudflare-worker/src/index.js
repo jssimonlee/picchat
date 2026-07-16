@@ -78,12 +78,13 @@ export default {
 
         // Query SQLite D1 Database
         const result = await env.DB.prepare(
-          "SELECT peer_ids FROM picchat_rooms WHERE room_code = ?"
+          "SELECT peer_ids, max_participants FROM picchat_rooms WHERE room_code = ?"
         ).bind(roomCode).first();
 
         const peerIds = result ? JSON.parse(result.peer_ids) : [];
+        const maxParticipants = result && result.max_participants !== null ? result.max_participants : 2;
 
-        return new Response(JSON.stringify({ peerIds }), {
+        return new Response(JSON.stringify({ peerIds, maxParticipants }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
@@ -109,16 +110,26 @@ export default {
           });
         }
 
+        const maxParticipants = body.maxParticipants !== undefined ? parseInt(body.maxParticipants) : null;
         const now = Date.now();
         const peerIdsJson = JSON.stringify(peerIds);
 
         // Upsert database row
-        await env.DB.prepare(`
-          INSERT INTO picchat_rooms (room_code, peer_ids, updated_at) 
-          VALUES (?1, ?2, ?3) 
-          ON CONFLICT(room_code) 
-          DO UPDATE SET peer_ids=?2, updated_at=?3
-        `).bind(roomCode, peerIdsJson, now).run();
+        if (maxParticipants !== null) {
+          await env.DB.prepare(`
+            INSERT INTO picchat_rooms (room_code, peer_ids, max_participants, updated_at) 
+            VALUES (?1, ?2, ?3, ?4) 
+            ON CONFLICT(room_code) 
+            DO UPDATE SET peer_ids=?2, max_participants=?3, updated_at=?4
+          `).bind(roomCode, peerIdsJson, maxParticipants, now).run();
+        } else {
+          await env.DB.prepare(`
+            INSERT INTO picchat_rooms (room_code, peer_ids, max_participants, updated_at) 
+            VALUES (?1, ?2, 2, ?3) 
+            ON CONFLICT(room_code) 
+            DO UPDATE SET peer_ids=?2, updated_at=?3
+          `).bind(roomCode, peerIdsJson, now).run();
+        }
 
         // Background cleanup of rooms inactive for more than 24 hours
         ctx.waitUntil(cleanupOldRooms(env.DB));

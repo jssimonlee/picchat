@@ -25,6 +25,7 @@ class NetworkManager {
         this.onCursorMove = callbacks.onCursorMove || (() => {});
         this.onPresence = callbacks.onPresence || (() => {});
         this.onError = callbacks.onError || (() => {});
+        this.onRoomLimitUpdate = callbacks.onRoomLimitUpdate || (() => {});
         this.onReady = callbacks.onReady || (() => {});
         this.onSudoku = callbacks.onSudoku || (() => {});
         this.onGomoku = callbacks.onGomoku || (() => {});
@@ -76,15 +77,24 @@ class NetworkManager {
     _generateRoomCode() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous chars
         let code = '';
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 3; i++) {
             code += chars[Math.floor(Math.random() * chars.length)];
         }
-        // Format as XXX-XXX
-        return code.slice(0, 3) + '-' + code.slice(3);
+        return code;
     }
 
     _roomCodeToPeerId(code) {
-        return 'picchat-' + code.replace('-', '').toLowerCase();
+        const cleanCode = code.replace('-', '').trim().toUpperCase();
+        let encoded = '';
+        try {
+            encoded = btoa(unescape(encodeURIComponent(cleanCode)))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+        } catch (e) {
+            encoded = cleanCode;
+        }
+        return 'picchat-' + encoded.toLowerCase();
     }
 
     _nextColor() {
@@ -128,15 +138,15 @@ class NetworkManager {
 
     /* ---------- Create Room (Host) ---------- */
 
-    createRoom(nickname, customCode = null) {
+    createRoom(nickname, customCode = null, maxParticipants = 2) {
         return new Promise(async (resolve, reject) => {
             this.isHost = true;
             this.nickname = nickname;
             this.myColor = this._nextColor();
+            this.maxParticipants = maxParticipants;
             
             if (customCode) {
-                // Formatting as XXX-XXX
-                this.roomCode = customCode.slice(0, 3) + '-' + customCode.slice(3);
+                this.roomCode = customCode.trim().toUpperCase();
                 this.hasCustomCode = true;
 
                 // Query DB to see if the custom code is already active
@@ -196,7 +206,7 @@ class NetworkManager {
                         // Room code collision, try again
                         this.roomCode = this._generateRoomCode();
                         this.peer.destroy();
-                        this.createRoom(nickname).then(resolve).catch(reject);
+                        this.createRoom(nickname, null, this.maxParticipants).then(resolve).catch(reject);
                     }
                 } else {
                     this.onError(err.type === 'peer-unavailable'
@@ -231,9 +241,15 @@ class NetworkManager {
                 
                 const data = await response.json();
                 const peerIds = data.peerIds || [];
-                
+                const maxParticipants = data.maxParticipants !== undefined ? data.maxParticipants : 2;
+
                 if (peerIds.length === 0) {
                     reject(new Error('peer-unavailable'));
+                    return;
+                }
+
+                if (peerIds.length >= maxParticipants) {
+                    reject(new Error('room-full'));
                     return;
                 }
 
@@ -307,6 +323,18 @@ class NetworkManager {
     _handleIncomingConnection(conn) {
         const peerId = conn.peer;
         console.log('[Network] Incoming connection from:', peerId);
+
+        // Check if room is full
+        if (this.isHost && this.maxParticipants !== undefined && this.getPeerCount() >= this.maxParticipants) {
+            console.log('[Network] Room is full, rejecting connection from:', peerId);
+            setTimeout(() => {
+                try {
+                    conn.send({ type: 'reject-reason', reason: 'room-full', maxParticipants: this.maxParticipants });
+                } catch(e) {}
+                try { conn.close(); } catch(e) {}
+            }, 500);
+            return;
+        }
 
         conn.on('open', () => {
             const meta = conn.metadata || {};
@@ -391,6 +419,18 @@ class NetworkManager {
             case 'assign-color':
                 this.myColor = data.color;
                 this.onPeerJoin(this.myPeerId, this.nickname, this.myColor, false);
+                break;
+
+            case 'reject-reason':
+                if (data.reason === 'room-full') {
+                    this.onError('방의 정원이 찼습니다. (최대 ' + data.maxParticipants + '명)');
+                    try { this.disconnect(); } catch (e) {}
+                }
+                break;
+
+            case 'room-limit-update':
+                this.maxParticipants = data.maxParticipants;
+                this.onRoomLimitUpdate(data.maxParticipants);
                 break;
 
             case 'join': {
@@ -1020,10 +1060,14 @@ class NetworkManager {
 
     async _syncRoomWithDb(peerIds) {
         try {
+            const body = { peerIds };
+            if (this.isHost && this.maxParticipants !== undefined) {
+                body.maxParticipants = this.maxParticipants;
+            }
             const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/rooms/${this.roomCode}/sync`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ peerIds })
+                body: JSON.stringify(body)
             });
             if (!response.ok) {
                 console.warn('[Network] Failed to sync room peer IDs to D1 database');
@@ -1031,6 +1075,16 @@ class NetworkManager {
         } catch (e) {
             console.error('[Network] Database sync request failed:', e);
         }
+    }
+
+    updateMaxParticipants(limit) {
+        if (!this.isHost) return;
+        this.maxParticipants = limit;
+        this._syncRoomWithDb(this.getActivePeerIds());
+        this._broadcast({
+            type: 'room-limit-update',
+            maxParticipants: limit
+        });
     }
 
     getActivePeerIds() {
