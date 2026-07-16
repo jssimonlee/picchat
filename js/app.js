@@ -32,6 +32,10 @@
     const $chkCustomCode = document.getElementById('chkCustomCode');
     const $customCodeContainer = document.getElementById('customCodeContainer');
     const $customRoomInput = document.getElementById('customRoomInput');
+    const $createRoomForm = document.getElementById('createRoomForm');
+    const $createRoomLoading = document.getElementById('createRoomLoading');
+    const $joinRoomForm = document.getElementById('joinRoomForm');
+    const $joinRoomLoading = document.getElementById('joinRoomLoading');
 
     // Studio
     const $mainCanvas = document.getElementById('mainCanvas');
@@ -620,6 +624,10 @@
         $joinRoomModal.hidden = true;
         $lobbyStatus.hidden = true;
         $lobbyStatus.innerHTML = '';
+        if ($createRoomForm) $createRoomForm.style.display = 'block';
+        if ($createRoomLoading) $createRoomLoading.style.display = 'none';
+        if ($joinRoomForm) $joinRoomForm.style.display = 'block';
+        if ($joinRoomLoading) $joinRoomLoading.style.display = 'none';
     }
 
     function validateNickname() {
@@ -720,6 +728,8 @@
         }
 
         $btnConfirmCreateRoom.disabled = true;
+        if ($createRoomForm) $createRoomForm.style.display = 'none';
+        if ($createRoomLoading) $createRoomLoading.style.display = 'flex';
         showLobbyStatus('방을 만드는 중...', 'info');
 
         try {
@@ -738,6 +748,8 @@
             closeModals();
         } catch (err) {
             $btnConfirmCreateRoom.disabled = false;
+            if ($createRoomForm) $createRoomForm.style.display = 'block';
+            if ($createRoomLoading) $createRoomLoading.style.display = 'none';
             if (err.message && err.message.includes('unavailable-id')) {
                 showLobbyStatus('이미 사용 중인 방번호입니다. 다른 번호를 입력해주세요.', 'error');
             } else {
@@ -754,6 +766,8 @@
             return;
         }
         $btnConfirmJoinRoom.disabled = true;
+        if ($joinRoomForm) $joinRoomForm.style.display = 'none';
+        if ($joinRoomLoading) $joinRoomLoading.style.display = 'flex';
         showLobbyStatus('방에 참여하는 중...', 'info');
 
         try {
@@ -763,6 +777,8 @@
             closeModals();
         } catch (err) {
             $btnConfirmJoinRoom.disabled = false;
+            if ($joinRoomForm) $joinRoomForm.style.display = 'block';
+            if ($joinRoomLoading) $joinRoomLoading.style.display = 'none';
             if (err.message === 'room-full') {
                 showLobbyStatus('방의 정원이 찼습니다. (최대 인원 초과)', 'error');
             } else if (err.message === 'peer-unavailable') {
