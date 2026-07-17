@@ -11658,13 +11658,13 @@
                 $lblDotsBoxesModeClassic.style.background = 'rgba(124, 92, 255, 0.08)';
                 $lblDotsBoxesModeClassic.querySelector('span').style.color = 'var(--accent-purple)';
 
-                $lblDotsBoxesModeScore.style.borderColor = 'var(--border)';
-                $lblDotsBoxesModeScore.style.background = 'var(--bg-surface)';
-                $lblDotsBoxesModeScore.querySelector('span').style.color = 'var(--text-primary)';
+                $lblDotsBoxesModeScore.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                $lblDotsBoxesModeScore.style.background = '#ffffff';
+                $lblDotsBoxesModeScore.querySelector('span').style.color = '#334155';
             } else {
-                $lblDotsBoxesModeClassic.style.borderColor = 'var(--border)';
-                $lblDotsBoxesModeClassic.style.background = 'var(--bg-surface)';
-                $lblDotsBoxesModeClassic.querySelector('span').style.color = 'var(--text-primary)';
+                $lblDotsBoxesModeClassic.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+                $lblDotsBoxesModeClassic.style.background = '#ffffff';
+                $lblDotsBoxesModeClassic.querySelector('span').style.color = '#334155';
 
                 $lblDotsBoxesModeScore.style.borderColor = 'var(--accent-purple)';
                 $lblDotsBoxesModeScore.style.background = 'rgba(124, 92, 255, 0.08)';
