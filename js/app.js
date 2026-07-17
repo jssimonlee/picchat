@@ -12291,17 +12291,25 @@
         dotsboxesState.isRobotOpponent = isRobot;
         dotsboxesState.playerCount = 2;
 
+        let myColor = network.myColor || '#7c5cff';
+        let opponentColor = '#ff4a4a'; // default red
+        
+        const pColorLower = myColor.toLowerCase();
+        if (pColorLower.startsWith('#ff') || pColorLower.startsWith('#ef') || pColorLower.startsWith('#ee') || pColorLower.startsWith('#f4') || pColorLower === 'red') {
+            opponentColor = '#3b82f6'; // Deep Blue
+        }
+
         dotsboxesState.players = [
             {
                 peerId: 'player1',
                 nickname: network.nickname || '플레이어 1',
-                color: network.myColor || '#7c5cff',
+                color: myColor,
                 score: 0
             },
             {
                 peerId: 'player2',
                 nickname: isRobot ? '알파박스(AI)' : '플레이어 2',
-                color: '#ff4a4a',
+                color: opponentColor,
                 score: 0
             }
         ];
@@ -12358,16 +12366,22 @@
                 : (p.peerId === activeTurnPeerId);
 
             const card = document.createElement('div');
-            card.className = `sudoku-player-card ${isTurn ? 'active' : ''}`;
-            card.style.borderColor = isTurn ? p.color : 'transparent';
-            card.style.background = isTurn ? `${p.color}18` : 'rgba(255,255,255,0.02)';
+            card.style.display = 'flex';
+            card.style.justifyContent = 'space-between';
+            card.style.alignItems = 'center';
+            card.style.padding = '10px 14px';
+            card.style.borderRadius = '8px';
+            card.style.border = '1.5px solid';
+            card.style.borderColor = isTurn ? p.color : 'rgba(0,0,0,0.06)';
+            card.style.background = isTurn ? `${p.color}1a` : '#ffffff';
+            card.style.transition = 'all 0.2s ease';
 
             card.innerHTML = `
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <div style="width:12px; height:12px; border-radius:50%; background:${p.color};"></div>
-                    <span style="font-weight:700; color:#fff;">${p.nickname}</span>
+                    <div style="width:10px; height:10px; border-radius:50%; background:${p.color};"></div>
+                    <span style="font-weight:700; color:#1e293b;">${p.nickname}</span>
                 </div>
-                <div style="font-weight:700; color:${p.color}; font-size:16px;">${p.score} 점</div>
+                <div style="font-weight:700; color:${p.color}; font-size:15px;">${p.score} 점</div>
             `;
             $dotsboxesPlayersList.appendChild(card);
 
@@ -12430,9 +12444,9 @@
 
         let statsHtml = '';
         dotsboxesState.players.forEach(p => {
-            statsHtml += `<div style="display:flex; justify-content:space-between; width:100%; border-bottom:1px solid rgba(255,255,255,0.05); padding: 6px 0;">
+            statsHtml += `<div style="display:flex; justify-content:space-between; width:100%; border-bottom:1px solid rgba(0,0,0,0.08); padding: 6px 0;">
                 <span style="color:${p.color}; font-weight:700;">${p.nickname}</span>
-                <span style="font-weight:700; color:#fff;">${p.score} 점</span>
+                <span style="font-weight:700; color:#1e293b;">${p.score} 점</span>
             </div>`;
         });
         $dotsboxesResultStats.innerHTML = statsHtml;
