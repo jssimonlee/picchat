@@ -496,6 +496,7 @@
     let dotsboxesState = {
         status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
         isSolo: false,
+        isRobotOpponent: false,
         proposerId: null,
         proposerNickname: null,
         participants: [], // { peerId, nickname, color, accepted }
@@ -11613,12 +11614,17 @@
                 $dotsboxesLobbyWaiting.hidden = true;
                 $dotsboxesLobbyInvite.hidden = true;
 
-                // Sync participant selection limit with room count
-                const maxAvailable = network.getPeerCount() + 1; // self + connected peers
-                $dotsboxesPlayerCount.value = Math.min(2, maxAvailable).toString();
+                // Default to robot if alone, or 2-player if others are in the room
+                const maxAvailable = network.getPeerCount() + 1;
+                if (maxAvailable >= 2) {
+                    $dotsboxesPlayerCount.value = "2";
+                } else {
+                    $dotsboxesPlayerCount.value = "robot";
+                }
+                
+                // Allow all options to be selected for Solo/Local play
                 Array.from($dotsboxesPlayerCount.options).forEach(opt => {
-                    const val = parseInt(opt.value, 10);
-                    opt.disabled = (val > maxAvailable);
+                    opt.disabled = false;
                 });
             } else {
                 closeDotsBoxesWindow();
@@ -11988,6 +11994,11 @@
 
         if (isDotsBoxesGameFinished()) {
             endDotsBoxesGame();
+        } else {
+            // Trigger Robot AI Move if it's its turn
+            if (dotsboxesState.isRobotOpponent && dotsboxesState.currentTurnIndex === 1) {
+                setTimeout(makeDotsBoxesRobotMove, 600);
+            }
         }
     }
 
@@ -12029,8 +12040,126 @@
         }
     }
 
+    function isDotsBoxesAlmostCompleted(r, c) {
+        let connectedLines = 0;
+        if (dotsboxesState.hLines[r][c] !== null) connectedLines++;
+        if (dotsboxesState.hLines[r + 1][c] !== null) connectedLines++;
+        if (dotsboxesState.vLines[r][c] !== null) connectedLines++;
+        if (dotsboxesState.vLines[r][c + 1] !== null) connectedLines++;
+        return connectedLines === 3;
+    }
+
+    function makeDotsBoxesRobotMove() {
+        if (dotsboxesState.status !== 'playing' || !dotsboxesState.isRobotOpponent) return;
+        if (dotsboxesState.currentTurnIndex !== 1) return;
+
+        const gridSize = dotsboxesState.gridSize;
+        const N = gridSize + 1;
+
+        const candidates = [];
+        for (let r = 0; r < N; r++) {
+            for (let c = 0; c < gridSize; c++) {
+                if (dotsboxesState.hLines[r][c] === null) {
+                    candidates.push({ type: 'h', r, c });
+                }
+            }
+        }
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < N; c++) {
+                if (dotsboxesState.vLines[r][c] === null) {
+                    candidates.push({ type: 'v', r, c });
+                }
+            }
+        }
+
+        if (candidates.length === 0) return;
+
+        function testMove(line) {
+            if (line.type === 'h') {
+                dotsboxesState.hLines[line.r][line.c] = 1;
+            } else {
+                dotsboxesState.vLines[line.r][line.c] = 1;
+            }
+            
+            let completedBoxesCount = 0;
+            let createsThirdLine = false;
+            
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    let connectedLines = 0;
+                    if (dotsboxesState.hLines[r][c] !== null) connectedLines++;
+                    if (dotsboxesState.hLines[r + 1][c] !== null) connectedLines++;
+                    if (dotsboxesState.vLines[r][c] !== null) connectedLines++;
+                    if (dotsboxesState.vLines[r][c + 1] !== null) connectedLines++;
+                    
+                    if (connectedLines === 4) {
+                        completedBoxesCount++;
+                    } else if (connectedLines === 3) {
+                        createsThirdLine = true;
+                    }
+                }
+            }
+            
+            if (line.type === 'h') {
+                dotsboxesState.hLines[line.r][line.c] = null;
+            } else {
+                dotsboxesState.vLines[line.r][line.c] = null;
+            }
+            
+            return { completedBoxesCount, createsThirdLine };
+        }
+
+        const winningMoves = [];
+        const safeMoves = [];
+        const badMoves = [];
+
+        candidates.forEach(move => {
+            const result = testMove(move);
+            if (result.completedBoxesCount > 0) {
+                let totalBoxScore = 0;
+                if (move.type === 'h') {
+                    if (move.r < gridSize && isDotsBoxesAlmostCompleted(move.r, move.c)) totalBoxScore += dotsboxesState.boxes[move.r][move.c].score;
+                    if (move.r > 0 && isDotsBoxesAlmostCompleted(move.r - 1, move.c)) totalBoxScore += dotsboxesState.boxes[move.r - 1][move.c].score;
+                } else {
+                    if (move.c < gridSize && isDotsBoxesAlmostCompleted(move.r, move.c)) totalBoxScore += dotsboxesState.boxes[move.r][move.c].score;
+                    if (move.c > 0 && isDotsBoxesAlmostCompleted(move.r, move.c - 1)) totalBoxScore += dotsboxesState.boxes[move.r][move.c - 1].score;
+                }
+                winningMoves.push({ move, score: totalBoxScore });
+            } else if (!result.createsThirdLine) {
+                safeMoves.push(move);
+            } else {
+                badMoves.push(move);
+            }
+        });
+
+        let bestMove = null;
+        if (winningMoves.length > 0) {
+            winningMoves.sort((a, b) => b.score - a.score);
+            bestMove = winningMoves[0].move;
+        } else if (safeMoves.length > 0) {
+            bestMove = safeMoves[Math.floor(Math.random() * safeMoves.length)];
+        } else {
+            bestMove = badMoves[Math.floor(Math.random() * badMoves.length)];
+        }
+
+        if (bestMove) {
+            applyDotsBoxesMove(bestMove.type, bestMove.r, bestMove.c, 1);
+        }
+    }
+
     function proposeDotsBoxes() {
+        if ($dotsboxesPlayerCount.value === 'robot') {
+            showToast('⚠️ 로봇 대결은 제안할 수 없습니다. 대신 오른쪽의 "혼자하기" 버튼을 눌러 즉시 시작해 주세요.');
+            return;
+        }
+
         const playerCount = parseInt($dotsboxesPlayerCount.value, 10);
+        const maxAvailable = network.getPeerCount() + 1;
+        if (playerCount > maxAvailable) {
+            showToast(`⚠️ 대결을 제안하려면 자신을 포함해 최소 ${playerCount}명이 있어야 합니다. (현재: ${maxAvailable}명)`);
+            return;
+        }
+
         const gridSize = parseInt($dotsboxesGridSize.value, 10);
         const mode = document.querySelector('input[name="dotsboxesMode"]:checked').value;
 
@@ -12157,18 +12286,21 @@
         dotsboxesState.isSolo = true;
         dotsboxesState.gridSize = parseInt($dotsboxesGridSize.value, 10);
         dotsboxesState.mode = document.querySelector('input[name="dotsboxesMode"]:checked').value;
+        
+        const isRobot = $dotsboxesPlayerCount.value === 'robot';
+        dotsboxesState.isRobotOpponent = isRobot;
         dotsboxesState.playerCount = 2;
 
         dotsboxesState.players = [
             {
                 peerId: 'player1',
-                nickname: '플레이어 1',
-                color: '#7c5cff',
+                nickname: network.nickname || '플레이어 1',
+                color: network.myColor || '#7c5cff',
                 score: 0
             },
             {
                 peerId: 'player2',
-                nickname: '플레이어 2',
+                nickname: isRobot ? '알파박스(AI)' : '플레이어 2',
                 color: '#ff4a4a',
                 score: 0
             }
