@@ -266,6 +266,46 @@
     const $btnSpeedrunReturn = document.getElementById('btnSpeedrunReturn');
     const $btnSpeedrunResultClose = document.getElementById('btnSpeedrunResultClose');
 
+    // Dots and Boxes Elements
+    const $btnDotsBoxes = document.getElementById('btnDotsBoxes');
+    const $dotsboxesOverlay = document.getElementById('dotsboxesOverlay');
+    const $btnDotsBoxesClose = document.getElementById('btnDotsBoxesClose');
+    const $dotsboxesLobby = document.getElementById('dotsboxesLobby');
+    const $dotsboxesLobbySetup = document.getElementById('dotsboxesLobbySetup');
+    const $dotsboxesPlayerCount = document.getElementById('dotsboxesPlayerCount');
+    const $dotsboxesGridSize = document.getElementById('dotsboxesGridSize');
+    const $radDotsBoxesModeClassic = document.getElementById('radDotsBoxesModeClassic');
+    const $radDotsBoxesModeScore = document.getElementById('radDotsBoxesModeScore');
+    const $lblDotsBoxesModeClassic = document.getElementById('lblDotsBoxesModeClassic');
+    const $lblDotsBoxesModeScore = document.getElementById('lblDotsBoxesModeScore');
+    const $btnDotsBoxesPropose = document.getElementById('btnDotsBoxesPropose');
+    const $btnDotsBoxesSolo = document.getElementById('btnDotsBoxesSolo');
+    const $dotsboxesLobbyWaiting = document.getElementById('dotsboxesLobbyWaiting');
+    const $dotsboxesLobbyWaitingTitle = document.getElementById('dotsboxesLobbyWaitingTitle');
+    const $dotsboxesProposalList = document.getElementById('dotsboxesProposalList');
+    const $btnDotsBoxesCancel = document.getElementById('btnDotsBoxesCancel');
+    const $btnDotsBoxesStart = document.getElementById('btnDotsBoxesStart');
+    const $dotsboxesLobbyInvite = document.getElementById('dotsboxesLobbyInvite');
+    const $dotsboxesProposerName = document.getElementById('dotsboxesProposerName');
+    const $dotsboxesInviteRuleDesc = document.getElementById('dotsboxesInviteRuleDesc');
+    const $btnDotsBoxesDecline = document.getElementById('btnDotsBoxesDecline');
+    const $btnDotsBoxesAccept = document.getElementById('btnDotsBoxesAccept');
+    const $dotsboxesGame = document.getElementById('dotsboxesGame');
+    const $dotsboxesGameStatus = document.getElementById('dotsboxesGameStatus');
+    const $dotsboxesGameTimer = document.getElementById('dotsboxesGameTimer');
+    const $dotsboxesGameModeLabel = document.getElementById('dotsboxesGameModeLabel');
+    const $dotsboxesCanvas = document.getElementById('dotsboxesCanvas');
+    const $dotsboxesCurrentTurnText = document.getElementById('dotsboxesCurrentTurnText');
+    const $dotsboxesPlayersList = document.getElementById('dotsboxesPlayersList');
+    const $btnDotsBoxesQuit = document.getElementById('btnDotsBoxesQuit');
+    const $dotsboxesResult = document.getElementById('dotsboxesResult');
+    const $dotsboxesResultKicker = document.getElementById('dotsboxesResultKicker');
+    const $dotsboxesResultTitle = document.getElementById('dotsboxesResultTitle');
+    const $dotsboxesResultMsg = document.getElementById('dotsboxesResultMsg');
+    const $dotsboxesResultStats = document.getElementById('dotsboxesResultStats');
+    const $btnDotsBoxesResultClose = document.getElementById('btnDotsBoxesResultClose');
+    const $btnDotsBoxesResultLobby = document.getElementById('btnDotsBoxesResultLobby');
+
     // Chat Sidebar Elements
     const $chatSidebar = document.getElementById('chatSidebar');
     const $chatMessages = document.getElementById('chatMessages');
@@ -450,6 +490,34 @@
         gameTimerInterval: null,
         timeLimit: 120, // 2 minutes (120s)
         wrongAttempts: 0
+    };
+
+    // Dots and Boxes State
+    let dotsboxesState = {
+        status: 'none', // 'none' | 'proposing' | 'playing' | 'finished'
+        isSolo: false,
+        proposerId: null,
+        proposerNickname: null,
+        participants: [], // { peerId, nickname, color, accepted }
+        players: [], // { peerId, nickname, color, score }
+        turnOrder: [], // [peerId1, peerId2, ...]
+        currentTurnIndex: 0,
+        gameStartTime: 0,
+        gameSecondsElapsed: 0,
+        gameTimerInterval: null,
+        
+        // Settings
+        gridSize: 4, // 3 | 4 | 5
+        mode: 'classic', // 'classic' | 'score'
+        playerCount: 2, // 2 | 3 | 4
+        
+        // Board representation
+        hLines: [], // horizontal line states: 2D array of size gridSize x (gridSize + 1)
+        vLines: [], // vertical line states: 2D array of size (gridSize + 1) x gridSize
+        boxes: [], // 2D array of size gridSize x gridSize
+        
+        // History
+        history: []
     };
 
     /* ---------- Initialize ---------- */
@@ -887,6 +955,10 @@
                 if (state.speedrunState && state.speedrunState.status === 'playing') {
                     syncSpeedrunStateFromHost(state.speedrunState);
                 }
+                // Sync active Dots and Boxes game if present
+                if (state.dotsboxesState && state.dotsboxesState.status === 'playing') {
+                    syncDotsBoxesStateFromHost(state.dotsboxesState);
+                }
             },
             onPeerJoin: (peerId, peerNickname, color, isAway) => {
                 knownParticipants.set(peerId, { nickname: peerNickname, color, isAway: isAway || false });
@@ -915,6 +987,7 @@
                 handleOthelloPeerLeave(peerId);
                 handleMinesweeperPeerLeave(peerId);
                 handleSpeedrunPeerLeave(peerId);
+                handleDotsBoxesPeerLeave(peerId);
             },
             onCursorMove: (peerId, x, y, peerNickname, color) => {
                 updateRemoteCursor(peerId, x, y, peerNickname, color);
@@ -941,6 +1014,9 @@
             },
             onSpeedrun: (fromPeerId, payload) => {
                 handleSpeedrunNetworkMessage(fromPeerId, payload);
+            },
+            onDotsBoxes: (fromPeerId, payload) => {
+                handleDotsBoxesNetworkMessage(fromPeerId, payload);
             },
             onChat: (fromPeerId, message, nickname, color, recipientId, isVolatile, volatileDuration, msgId) => {
                 addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId, isVolatile, volatileDuration, msgId);
@@ -1028,6 +1104,23 @@
                     currentIndex: speedrunState.currentIndex,
                     elapsedSeconds: speedrunState.elapsedSeconds,
                     timeLimit: speedrunState.timeLimit
+                };
+                state.dotsboxesState = {
+                    status: dotsboxesState.status,
+                    isSolo: dotsboxesState.isSolo,
+                    proposerId: dotsboxesState.proposerId,
+                    proposerNickname: dotsboxesState.proposerNickname,
+                    participants: dotsboxesState.participants,
+                    players: dotsboxesState.players,
+                    turnOrder: dotsboxesState.turnOrder,
+                    currentTurnIndex: dotsboxesState.currentTurnIndex,
+                    gridSize: dotsboxesState.gridSize,
+                    mode: dotsboxesState.mode,
+                    playerCount: dotsboxesState.playerCount,
+                    hLines: dotsboxesState.hLines,
+                    vLines: dotsboxesState.vLines,
+                    boxes: dotsboxesState.boxes,
+                    elapsedSeconds: dotsboxesState.gameSecondsElapsed
                 };
                 return state;
             }
@@ -1129,6 +1222,8 @@
         setupMinesweeperEvents();
         // Setup Speedrun events
         setupSpeedrunEvents();
+        // Setup Dots and Boxes events
+        setupDotsBoxesEvents();
         // Setup Chat events
         setupChatEvents();
 
@@ -11500,6 +11595,918 @@
 
         drawLaser(1);
         requestAnimationFrame(fade);
+    }
+
+    }
+
+    /* ---------- Dots and Boxes Game Logic ---------- */
+
+    let dotsboxesHoveredLine = null;
+
+    function setupDotsBoxesEvents() {
+        $dotsboxesCanvas.width = 400;
+        $dotsboxesCanvas.height = 400;
+
+        $btnDotsBoxes.addEventListener('click', () => {
+            if ($dotsboxesOverlay.hidden) {
+                $dotsboxesOverlay.hidden = false;
+                showDotsBoxesSubView('lobby');
+                $dotsboxesLobbySetup.hidden = false;
+                $dotsboxesLobbyWaiting.hidden = true;
+                $dotsboxesLobbyInvite.hidden = true;
+
+                // Sync participant selection limit with room count
+                const maxAvailable = network.getPeerCount() + 1; // self + connected peers
+                $dotsboxesPlayerCount.value = Math.min(2, maxAvailable).toString();
+                Array.from($dotsboxesPlayerCount.options).forEach(opt => {
+                    const val = parseInt(opt.value, 10);
+                    opt.disabled = (val > maxAvailable);
+                });
+            } else {
+                closeDotsBoxesWindow();
+            }
+            $gamesSubmenu.classList.remove('active');
+        });
+
+        $btnDotsBoxesClose.addEventListener('click', closeDotsBoxesWindow);
+        $btnDotsBoxesPropose.addEventListener('click', proposeDotsBoxes);
+        $btnDotsBoxesSolo.addEventListener('click', startDotsBoxesSolo);
+        $btnDotsBoxesCancel.addEventListener('click', cancelDotsBoxesProposal);
+        $btnDotsBoxesStart.addEventListener('click', startDotsBoxesGameFromLobby);
+        $btnDotsBoxesAccept.addEventListener('click', acceptDotsBoxesProposal);
+        $btnDotsBoxesDecline.addEventListener('click', declineDotsBoxesProposal);
+        $btnDotsBoxesQuit.addEventListener('click', quitDotsBoxesGame);
+        $btnDotsBoxesResultClose.addEventListener('click', closeDotsBoxesWindow);
+        
+        $btnDotsBoxesResultLobby.addEventListener('click', () => {
+            $dotsboxesResult.hidden = true;
+            $dotsboxesLobby.hidden = false;
+            $dotsboxesLobbySetup.hidden = false;
+            $dotsboxesLobbyWaiting.hidden = true;
+            $dotsboxesLobbyInvite.hidden = true;
+        });
+
+        // Mode tab selectors
+        const updateModeRadiosUI = () => {
+            const isClassic = $radDotsBoxesModeClassic.checked;
+            if (isClassic) {
+                $lblDotsBoxesModeClassic.style.borderColor = 'var(--accent-purple)';
+                $lblDotsBoxesModeClassic.style.background = 'rgba(124, 92, 255, 0.08)';
+                $lblDotsBoxesModeClassic.querySelector('span').style.color = 'var(--accent-purple)';
+
+                $lblDotsBoxesModeScore.style.borderColor = 'var(--border)';
+                $lblDotsBoxesModeScore.style.background = 'var(--bg-surface)';
+                $lblDotsBoxesModeScore.querySelector('span').style.color = 'var(--text-primary)';
+            } else {
+                $lblDotsBoxesModeClassic.style.borderColor = 'var(--border)';
+                $lblDotsBoxesModeClassic.style.background = 'var(--bg-surface)';
+                $lblDotsBoxesModeClassic.querySelector('span').style.color = 'var(--text-primary)';
+
+                $lblDotsBoxesModeScore.style.borderColor = 'var(--accent-purple)';
+                $lblDotsBoxesModeScore.style.background = 'rgba(124, 92, 255, 0.08)';
+                $lblDotsBoxesModeScore.querySelector('span').style.color = 'var(--accent-purple)';
+            }
+        };
+
+        $lblDotsBoxesModeClassic.addEventListener('click', () => {
+            $radDotsBoxesModeClassic.checked = true;
+            updateModeRadiosUI();
+        });
+
+        $lblDotsBoxesModeScore.addEventListener('click', () => {
+            $radDotsBoxesModeScore.checked = true;
+            updateModeRadiosUI();
+        });
+
+        // Mouse hover interactions on board lines
+        $dotsboxesCanvas.addEventListener('mousemove', (e) => {
+            if (dotsboxesState.status !== 'playing') return;
+            if (!isMyDotsBoxesTurn()) return;
+
+            const rect = $dotsboxesCanvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const line = getNearestDotsBoxesLine(mx, my);
+            if (JSON.stringify(line) !== JSON.stringify(dotsboxesHoveredLine)) {
+                dotsboxesHoveredLine = line;
+                drawDotsBoxesBoard();
+            }
+        });
+
+        $dotsboxesCanvas.addEventListener('mouseleave', () => {
+            if (dotsboxesHoveredLine) {
+                dotsboxesHoveredLine = null;
+                drawDotsBoxesBoard();
+            }
+        });
+
+        $dotsboxesCanvas.addEventListener('click', (e) => {
+            const rect = $dotsboxesCanvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            handleDotsBoxesCanvasClick(mx, my);
+        });
+    }
+
+    function showDotsBoxesSubView(viewName) {
+        $dotsboxesLobby.hidden = (viewName !== 'lobby');
+        $dotsboxesGame.hidden = (viewName !== 'game');
+        $dotsboxesResult.hidden = (viewName !== 'result');
+    }
+
+    function closeDotsBoxesWindow() {
+        $dotsboxesOverlay.hidden = true;
+        clearInterval(dotsboxesState.gameTimerInterval);
+        dotsboxesState.status = 'none';
+    }
+
+    function isMyDotsBoxesTurn() {
+        if (dotsboxesState.isSolo) return true;
+        const currentTurnPlayerId = dotsboxesState.turnOrder[dotsboxesState.currentTurnIndex];
+        return currentTurnPlayerId === network.myPeerId;
+    }
+
+    function getNearestDotsBoxesLine(mx, my) {
+        const N = dotsboxesState.gridSize + 1;
+        const rect = $dotsboxesCanvas.getBoundingClientRect();
+        const scaleX = $dotsboxesCanvas.width / rect.width;
+        const scaleY = $dotsboxesCanvas.height / rect.height;
+        const cx = mx * scaleX;
+        const cy = my * scaleY;
+
+        const margin = 40;
+        const boardSize = $dotsboxesCanvas.width - 2 * margin;
+        const spacing = boardSize / dotsboxesState.gridSize;
+
+        let nearestLine = null;
+        let minDist = Infinity;
+
+        // Check horizontal lines
+        for (let r = 0; r < N; r++) {
+            for (let c = 0; c < dotsboxesState.gridSize; c++) {
+                if (dotsboxesState.hLines[r] && dotsboxesState.hLines[r][c] !== null) continue;
+                const lx = margin + c * spacing + spacing / 2;
+                const ly = margin + r * spacing;
+                const dist = Math.hypot(cx - lx, cy - ly);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestLine = { type: 'h', r, c };
+                }
+            }
+        }
+
+        // Check vertical lines
+        for (let r = 0; r < dotsboxesState.gridSize; r++) {
+            for (let c = 0; c < N; c++) {
+                if (dotsboxesState.vLines[r] && dotsboxesState.vLines[r][c] !== null) continue;
+                const lx = margin + c * spacing;
+                const ly = margin + r * spacing + spacing / 2;
+                const dist = Math.hypot(cx - lx, cy - ly);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestLine = { type: 'v', r, c };
+                }
+            }
+        }
+
+        if (minDist < spacing * 0.45) {
+            return nearestLine;
+        }
+        return null;
+    }
+
+    function initializeDotsBoxesBoard(gridSize, mode) {
+        dotsboxesState.gridSize = gridSize;
+        dotsboxesState.mode = mode;
+
+        const N = gridSize + 1;
+        dotsboxesState.hLines = [];
+        for (let r = 0; r < N; r++) {
+            dotsboxesState.hLines.push(new Array(gridSize).fill(null));
+        }
+
+        dotsboxesState.vLines = [];
+        for (let r = 0; r < gridSize; r++) {
+            dotsboxesState.vLines.push(new Array(N).fill(null));
+        }
+
+        dotsboxesState.boxes = [];
+        for (let r = 0; r < gridSize; r++) {
+            const row = [];
+            for (let c = 0; c < gridSize; c++) {
+                const score = mode === 'score' ? Math.floor(Math.random() * 5) + 1 : 1;
+                row.push({ owner: null, score });
+            }
+            dotsboxesState.boxes.push(row);
+        }
+
+        dotsboxesState.history = [];
+    }
+
+    function drawDotsBoxesBoard() {
+        const ctx = $dotsboxesCanvas.getContext('2d');
+        const width = $dotsboxesCanvas.width;
+        const height = $dotsboxesCanvas.height;
+
+        ctx.clearRect(0, 0, width, height);
+
+        const N = dotsboxesState.gridSize + 1;
+        const margin = 40;
+        const boardSize = width - 2 * margin;
+        const spacing = boardSize / dotsboxesState.gridSize;
+
+        // 1. Draw box backgrounds and scores
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let r = 0; r < dotsboxesState.gridSize; r++) {
+            for (let c = 0; c < dotsboxesState.gridSize; c++) {
+                const box = dotsboxesState.boxes[r][c];
+                const bx = margin + c * spacing;
+                const by = margin + r * spacing;
+
+                if (dotsboxesState.mode === 'score') {
+                    ctx.font = 'bold 16px "Inter", sans-serif';
+                    ctx.fillStyle = box.owner !== null ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.35)';
+                    ctx.fillText(box.score.toString(), bx + spacing / 2, by + spacing / 2);
+                }
+
+                if (box.owner !== null) {
+                    const owner = dotsboxesState.players[box.owner];
+                    if (owner) {
+                        ctx.save();
+                        ctx.fillStyle = owner.color + '26'; // 15% opacity hex
+                        ctx.fillRect(bx + 3, by + 3, spacing - 6, spacing - 6);
+
+                        ctx.font = 'bold 12px "Inter", sans-serif';
+                        ctx.fillStyle = owner.color;
+                        const label = owner.nickname.substring(0, 2);
+                        const offset = dotsboxesState.mode === 'score' ? 14 : 0;
+                        ctx.fillText(label, bx + spacing / 2, by + spacing / 2 + offset);
+                        ctx.restore();
+                    }
+                }
+            }
+        }
+
+        // 2. Draw hover preview
+        if (dotsboxesState.status === 'playing' && isMyDotsBoxesTurn() && dotsboxesHoveredLine) {
+            const hl = dotsboxesHoveredLine;
+            ctx.save();
+            const myColor = dotsboxesState.isSolo 
+                ? dotsboxesState.players[dotsboxesState.currentTurnIndex].color 
+                : network.myColor;
+            ctx.strokeStyle = myColor + '66';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            if (hl.type === 'h') {
+                ctx.moveTo(margin + hl.c * spacing, margin + hl.r * spacing);
+                ctx.lineTo(margin + (hl.c + 1) * spacing, margin + hl.r * spacing);
+            } else {
+                ctx.moveTo(margin + hl.c * spacing, margin + hl.r * spacing);
+                ctx.lineTo(margin + hl.c * spacing, margin + (hl.r + 1) * spacing);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 3. Draw connected lines
+        ctx.save();
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+
+        // Horizontal lines
+        for (let r = 0; r < N; r++) {
+            for (let c = 0; c < dotsboxesState.gridSize; c++) {
+                const ownerIdx = dotsboxesState.hLines[r][c];
+                if (ownerIdx !== null) {
+                    const owner = dotsboxesState.players[ownerIdx];
+                    if (owner) {
+                        ctx.strokeStyle = owner.color;
+                        ctx.beginPath();
+                        ctx.moveTo(margin + c * spacing, margin + r * spacing);
+                        ctx.lineTo(margin + (c + 1) * spacing, margin + r * spacing);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // Vertical lines
+        for (let r = 0; r < dotsboxesState.gridSize; r++) {
+            for (let c = 0; c < N; c++) {
+                const ownerIdx = dotsboxesState.vLines[r][c];
+                if (ownerIdx !== null) {
+                    const owner = dotsboxesState.players[ownerIdx];
+                    if (owner) {
+                        ctx.strokeStyle = owner.color;
+                        ctx.beginPath();
+                        ctx.moveTo(margin + c * spacing, margin + r * spacing);
+                        ctx.lineTo(margin + c * spacing, margin + (r + 1) * spacing);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+        ctx.restore();
+
+        // 4. Draw dots
+        for (let r = 0; r < N; r++) {
+            for (let c = 0; c < N; c++) {
+                ctx.beginPath();
+                ctx.arc(margin + c * spacing, margin + r * spacing, 5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowColor = 'rgba(255,255,255,0.7)';
+                ctx.shadowBlur = 4;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+    }
+
+    function isDotsBoxesSquareCompleted(r, c) {
+        return dotsboxesState.hLines[r][c] !== null &&
+               dotsboxesState.hLines[r + 1][c] !== null &&
+               dotsboxesState.vLines[r][c] !== null &&
+               dotsboxesState.vLines[r][c + 1] !== null;
+    }
+
+    function checkDotsBoxesCompletedSquares(lineType, r, c, playerIndex) {
+        const completed = [];
+        if (lineType === 'h') {
+            if (r < dotsboxesState.gridSize) {
+                if (isDotsBoxesSquareCompleted(r, c)) completed.push({ r, c });
+            }
+            if (r > 0) {
+                if (isDotsBoxesSquareCompleted(r - 1, c)) completed.push({ r: r - 1, c });
+            }
+        } else {
+            if (c < dotsboxesState.gridSize) {
+                if (isDotsBoxesSquareCompleted(r, c)) completed.push({ r, c });
+            }
+            if (c > 0) {
+                if (isDotsBoxesSquareCompleted(r, c - 1)) completed.push({ r, c: c - 1 });
+            }
+        }
+
+        completed.forEach(boxCoord => {
+            const box = dotsboxesState.boxes[boxCoord.r][boxCoord.c];
+            box.owner = playerIndex;
+            dotsboxesState.players[playerIndex].score += box.score;
+        });
+
+        return completed;
+    }
+
+    function applyDotsBoxesMove(lineType, r, c, playerIndex) {
+        if (lineType === 'h') {
+            dotsboxesState.hLines[r][c] = playerIndex;
+        } else {
+            dotsboxesState.vLines[r][c] = playerIndex;
+        }
+
+        const completedBoxes = checkDotsBoxesCompletedSquares(lineType, r, c, playerIndex);
+        const completedAny = completedBoxes.length > 0;
+        let nextTurnIndex = dotsboxesState.currentTurnIndex;
+
+        if (dotsboxesState.mode === 'classic') {
+            if (!completedAny) {
+                nextTurnIndex = (dotsboxesState.currentTurnIndex + 1) % dotsboxesState.turnOrder.length;
+            }
+        } else {
+            // Score battle: always rotate turns
+            nextTurnIndex = (dotsboxesState.currentTurnIndex + 1) % dotsboxesState.turnOrder.length;
+        }
+
+        dotsboxesState.currentTurnIndex = nextTurnIndex;
+
+        if (completedAny) {
+            showToast(`🎉 ${dotsboxesState.players[playerIndex].nickname}님이 상자를 획득했습니다! (+${completedBoxes.reduce((acc, b) => acc + dotsboxesState.boxes[b.r][b.c].score, 0)}점)`);
+        }
+
+        drawDotsBoxesBoard();
+        updateDotsBoxesPlayersListUI();
+
+        if (isDotsBoxesGameFinished()) {
+            endDotsBoxesGame();
+        }
+    }
+
+    function isDotsBoxesGameFinished() {
+        for (let r = 0; r < dotsboxesState.gridSize; r++) {
+            for (let c = 0; c < dotsboxesState.gridSize; c++) {
+                if (dotsboxesState.boxes[r][c].owner === null) return false;
+            }
+        }
+        return true;
+    }
+
+    function handleDotsBoxesCanvasClick(mx, my) {
+        if (dotsboxesState.status !== 'playing') return;
+        if (!isMyDotsBoxesTurn()) return;
+
+        const line = getNearestDotsBoxesLine(mx, my);
+        if (!line) return;
+
+        let myIdx = -1;
+        if (dotsboxesState.isSolo) {
+            myIdx = dotsboxesState.currentTurnIndex;
+        } else {
+            myIdx = dotsboxesState.players.findIndex(p => p.peerId === network.myPeerId);
+        }
+
+        if (myIdx === -1) return;
+
+        if (dotsboxesState.isSolo) {
+            applyDotsBoxesMove(line.type, line.r, line.c, myIdx);
+        } else {
+            network.sendDotsBoxes({
+                action: 'move',
+                lineType: line.type,
+                r: line.r,
+                c: line.c,
+                playerIndex: myIdx
+            });
+        }
+    }
+
+    function proposeDotsBoxes() {
+        const playerCount = parseInt($dotsboxesPlayerCount.value, 10);
+        const gridSize = parseInt($dotsboxesGridSize.value, 10);
+        const mode = document.querySelector('input[name="dotsboxesMode"]:checked').value;
+
+        dotsboxesState.status = 'proposing';
+        dotsboxesState.isSolo = false;
+        dotsboxesState.proposerId = network.myPeerId;
+        dotsboxesState.proposerNickname = network.nickname;
+        dotsboxesState.playerCount = playerCount;
+        dotsboxesState.gridSize = gridSize;
+        dotsboxesState.mode = mode;
+
+        dotsboxesState.participants = [
+            {
+                peerId: network.myPeerId,
+                nickname: network.nickname,
+                color: network.myColor,
+                accepted: true
+            }
+        ];
+
+        network.sendDotsBoxes({
+            action: 'propose',
+            proposerId: network.myPeerId,
+            proposerNickname: network.nickname,
+            proposerColor: network.myColor,
+            playerCount,
+            gridSize,
+            mode
+        });
+
+        showDotsBoxesSubView('lobby');
+        $dotsboxesLobbySetup.hidden = true;
+        $dotsboxesLobbyWaiting.hidden = false;
+        $dotsboxesLobbyInvite.hidden = true;
+        $dotsboxesLobbyWaitingTitle.textContent = '점과 상자 참가 대기 중';
+
+        $btnDotsBoxesStart.hidden = false;
+        $btnDotsBoxesStart.disabled = true;
+
+        updateDotsBoxesProposalListUI();
+    }
+
+    function cancelDotsBoxesProposal() {
+        dotsboxesState.status = 'none';
+        network.sendDotsBoxes({
+            action: 'proposal-sync',
+            proposerId: null,
+            proposerNickname: null,
+            playerCount: 2,
+            gridSize: 4,
+            mode: 'classic',
+            participants: []
+        });
+        closeDotsBoxesWindow();
+    }
+
+    function acceptDotsBoxesProposal() {
+        network.sendDotsBoxes({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: true
+        });
+
+        showDotsBoxesSubView('lobby');
+        $dotsboxesLobbySetup.hidden = true;
+        $dotsboxesLobbyWaiting.hidden = false;
+        $dotsboxesLobbyInvite.hidden = true;
+        $dotsboxesLobbyWaitingTitle.textContent = '참가 완료 (대기 중)';
+        $btnDotsBoxesStart.hidden = true;
+        $btnDotsBoxesCancel.hidden = true;
+    }
+
+    function declineDotsBoxesProposal() {
+        network.sendDotsBoxes({
+            action: 'join-response',
+            peerId: network.myPeerId,
+            nickname: network.nickname,
+            color: network.myColor,
+            accepted: false
+        });
+        closeDotsBoxesWindow();
+    }
+
+    function startDotsBoxesGameFromLobby() {
+        if (dotsboxesState.proposerId !== network.myPeerId) return;
+
+        const accepted = dotsboxesState.participants.filter(p => p.accepted);
+        const actualPlayers = accepted.slice(0, dotsboxesState.playerCount);
+
+        const playersList = actualPlayers.map(p => ({
+            peerId: p.peerId,
+            nickname: p.nickname,
+            color: p.color,
+            score: 0
+        }));
+
+        const turnOrder = playersList.map(p => p.peerId);
+
+        // Pre-generate board scores for synchronization
+        const boxScores = [];
+        for (let r = 0; r < dotsboxesState.gridSize; r++) {
+            const row = [];
+            for (let c = 0; c < dotsboxesState.gridSize; c++) {
+                row.push(dotsboxesState.mode === 'score' ? Math.floor(Math.random() * 5) + 1 : 1);
+            }
+            boxScores.push(row);
+        }
+
+        network.sendDotsBoxes({
+            action: 'start',
+            gridSize: dotsboxesState.gridSize,
+            mode: dotsboxesState.mode,
+            playerCount: dotsboxesState.playerCount,
+            players: playersList,
+            turnOrder,
+            boxScores
+        });
+    }
+
+    function startDotsBoxesSolo() {
+        dotsboxesState.status = 'playing';
+        dotsboxesState.isSolo = true;
+        dotsboxesState.gridSize = parseInt($dotsboxesGridSize.value, 10);
+        dotsboxesState.mode = document.querySelector('input[name="dotsboxesMode"]:checked').value;
+        dotsboxesState.playerCount = 2;
+
+        dotsboxesState.players = [
+            {
+                peerId: 'player1',
+                nickname: '플레이어 1',
+                color: '#7c5cff',
+                score: 0
+            },
+            {
+                peerId: 'player2',
+                nickname: '플레이어 2',
+                color: '#ff4a4a',
+                score: 0
+            }
+        ];
+
+        dotsboxesState.turnOrder = ['player1', 'player2'];
+        dotsboxesState.currentTurnIndex = 0;
+        dotsboxesState.gameStartTime = Date.now();
+        dotsboxesState.gameSecondsElapsed = 0;
+
+        initializeDotsBoxesBoard(dotsboxesState.gridSize, dotsboxesState.mode);
+
+        showDotsBoxesSubView('game');
+        updateDotsBoxesPlayersListUI();
+
+        $dotsboxesGameModeLabel.textContent = dotsboxesState.mode === 'classic' ? '클래식' : '스코어 배틀';
+
+        clearInterval(dotsboxesState.gameTimerInterval);
+        dotsboxesState.gameTimerInterval = setInterval(() => {
+            dotsboxesState.gameSecondsElapsed++;
+            const min = String(Math.floor(dotsboxesState.gameSecondsElapsed / 60)).padStart(2, '0');
+            const sec = String(dotsboxesState.gameSecondsElapsed % 60).padStart(2, '0');
+            $dotsboxesGameTimer.textContent = `${min}:${sec}`;
+        }, 1000);
+
+        drawDotsBoxesBoard();
+    }
+
+    function updateDotsBoxesProposalListUI() {
+        $dotsboxesProposalList.innerHTML = '';
+        dotsboxesState.participants.forEach(p => {
+            const li = document.createElement('li');
+            li.style.color = p.color;
+            li.style.fontWeight = 'bold';
+            li.textContent = `${p.nickname}: ${p.accepted ? '✅ 수락함' : '⏳ 수락 대기 중'}`;
+            $dotsboxesProposalList.appendChild(li);
+        });
+
+        const isProposer = dotsboxesState.proposerId === network.myPeerId;
+        const acceptedCount = dotsboxesState.participants.filter(p => p.accepted).length;
+
+        $btnDotsBoxesStart.hidden = !isProposer;
+        $btnDotsBoxesStart.disabled = (acceptedCount < dotsboxesState.playerCount);
+        $btnDotsBoxesCancel.hidden = !isProposer;
+    }
+
+    function updateDotsBoxesPlayersListUI() {
+        $dotsboxesPlayersList.innerHTML = '';
+
+        const activeTurnPeerId = dotsboxesState.turnOrder[dotsboxesState.currentTurnIndex];
+
+        dotsboxesState.players.forEach((p, idx) => {
+            const isTurn = dotsboxesState.isSolo 
+                ? (idx === dotsboxesState.currentTurnIndex)
+                : (p.peerId === activeTurnPeerId);
+
+            const card = document.createElement('div');
+            card.className = `sudoku-player-card ${isTurn ? 'active' : ''}`;
+            card.style.borderColor = isTurn ? p.color : 'transparent';
+            card.style.background = isTurn ? `${p.color}18` : 'rgba(255,255,255,0.02)';
+
+            card.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <div style="width:12px; height:12px; border-radius:50%; background:${p.color};"></div>
+                    <span style="font-weight:700; color:#fff;">${p.nickname}</span>
+                </div>
+                <div style="font-weight:700; color:${p.color}; font-size:16px;">${p.score} 점</div>
+            `;
+            $dotsboxesPlayersList.appendChild(card);
+
+            if (isTurn) {
+                $dotsboxesCurrentTurnText.textContent = p.nickname;
+                $dotsboxesCurrentTurnText.style.color = p.color;
+            }
+        });
+    }
+
+    function handleDotsBoxesForfeit(peerId) {
+        if (dotsboxesState.status !== 'playing') return;
+
+        dotsboxesState.status = 'finished';
+        clearInterval(dotsboxesState.gameTimerInterval);
+
+        const player = dotsboxesState.players.find(p => p.peerId === peerId);
+        const nick = player ? player.nickname : '상대방';
+
+        $dotsboxesResult.hidden = false;
+        $dotsboxesGame.hidden = true;
+
+        $dotsboxesResultTitle.textContent = '기권 승리!';
+        $dotsboxesResultMsg.textContent = `${nick}님이 기권하여 게임에서 승리하셨습니다!`;
+        $dotsboxesResultStats.innerHTML = '';
+
+        showDotsBoxesSubView('result');
+    }
+
+    function quitDotsBoxesGame() {
+        if (dotsboxesState.status === 'playing' && !dotsboxesState.isSolo) {
+            network.sendDotsBoxes({
+                action: 'quit'
+            });
+        }
+        closeDotsBoxesWindow();
+    }
+
+    function endDotsBoxesGame() {
+        dotsboxesState.status = 'finished';
+        clearInterval(dotsboxesState.gameTimerInterval);
+
+        let maxScore = -1;
+        let winners = [];
+        dotsboxesState.players.forEach(p => {
+            if (p.score > maxScore) {
+                maxScore = p.score;
+                winners = [p];
+            } else if (p.score === maxScore) {
+                winners.push(p);
+            }
+        });
+
+        $dotsboxesResult.hidden = false;
+        $dotsboxesGame.hidden = true;
+
+        const isTie = winners.length > 1;
+        const winTitle = isTie ? '무승부!' : `${winners[0].nickname} 승리!`;
+        $dotsboxesResultTitle.textContent = winTitle;
+
+        let statsHtml = '';
+        dotsboxesState.players.forEach(p => {
+            statsHtml += `<div style="display:flex; justify-content:space-between; width:100%; border-bottom:1px solid rgba(255,255,255,0.05); padding: 6px 0;">
+                <span style="color:${p.color}; font-weight:700;">${p.nickname}</span>
+                <span style="font-weight:700; color:#fff;">${p.score} 점</span>
+            </div>`;
+        });
+        $dotsboxesResultStats.innerHTML = statsHtml;
+
+        if (dotsboxesState.isSolo) {
+            $dotsboxesResultMsg.textContent = '로컬 2인 연습 게임이 종료되었습니다.';
+        } else {
+            const isMeWinner = winners.some(w => w.peerId === network.myPeerId);
+            if (isMeWinner) {
+                $dotsboxesResultMsg.textContent = isTie ? '팽팽한 접전 끝에 동점으로 종료되었습니다!' : '축하합니다! 상대방을 꺾고 승리하셨습니다!';
+            } else {
+                $dotsboxesResultMsg.textContent = '아쉽게도 패배하였습니다. 다시 승리에 도전해 보세요!';
+            }
+        }
+
+        showDotsBoxesSubView('result');
+    }
+
+    function handleDotsBoxesPeerLeave(peerId) {
+        if (dotsboxesState.status === 'playing') {
+            const isPlaying = dotsboxesState.players.some(p => p.peerId === peerId);
+            if (isPlaying) {
+                handleDotsBoxesForfeit(peerId);
+            }
+        } else if (dotsboxesState.status === 'proposing') {
+            dotsboxesState.participants = dotsboxesState.participants.filter(p => p.peerId !== peerId);
+            updateDotsBoxesProposalListUI();
+        }
+    }
+
+    function syncDotsBoxesStateFromHost(hostState) {
+        dotsboxesState = {
+            ...dotsboxesState,
+            status: hostState.status,
+            isSolo: hostState.isSolo,
+            proposerId: hostState.proposerId,
+            proposerNickname: hostState.proposerNickname,
+            participants: hostState.participants,
+            players: hostState.players,
+            turnOrder: hostState.turnOrder,
+            currentTurnIndex: hostState.currentTurnIndex,
+            gridSize: hostState.gridSize,
+            mode: hostState.mode,
+            playerCount: hostState.playerCount,
+            hLines: hostState.hLines,
+            vLines: hostState.vLines,
+            boxes: hostState.boxes,
+            gameSecondsElapsed: hostState.elapsedSeconds
+        };
+
+        $dotsboxesOverlay.hidden = false;
+        showDotsBoxesSubView('game');
+        updateDotsBoxesPlayersListUI();
+
+        $dotsboxesGameModeLabel.textContent = dotsboxesState.mode === 'classic' ? '클래식' : '스코어 배틀';
+
+        clearInterval(dotsboxesState.gameTimerInterval);
+        dotsboxesState.gameTimerInterval = setInterval(() => {
+            dotsboxesState.gameSecondsElapsed++;
+            const min = String(Math.floor(dotsboxesState.gameSecondsElapsed / 60)).padStart(2, '0');
+            const sec = String(dotsboxesState.gameSecondsElapsed % 60).padStart(2, '0');
+            $dotsboxesGameTimer.textContent = `${min}:${sec}`;
+        }, 1000);
+
+        drawDotsBoxesBoard();
+    }
+
+    function handleDotsBoxesNetworkMessage(fromPeerId, payload) {
+        console.log('[DotsBoxes Network]', fromPeerId, payload);
+        const action = payload.action;
+
+        if (action === 'propose') {
+            dotsboxesState.status = 'proposing';
+            dotsboxesState.isSolo = false;
+            dotsboxesState.proposerId = payload.proposerId;
+            dotsboxesState.proposerNickname = payload.proposerNickname;
+            dotsboxesState.playerCount = payload.playerCount;
+            dotsboxesState.gridSize = payload.gridSize;
+            dotsboxesState.mode = payload.mode;
+            dotsboxesState.participants = [
+                {
+                    peerId: payload.proposerId,
+                    nickname: payload.proposerNickname,
+                    color: payload.proposerColor || getPeerColor(payload.proposerId),
+                    accepted: true
+                }
+            ];
+
+            $dotsboxesOverlay.hidden = false;
+
+            if (payload.proposerId === network.myPeerId) {
+                showDotsBoxesSubView('lobby');
+                $dotsboxesLobbySetup.hidden = true;
+                $dotsboxesLobbyWaiting.hidden = false;
+                $dotsboxesLobbyInvite.hidden = true;
+                $dotsboxesLobbyWaitingTitle.textContent = '점과 상자 참가 대기 중';
+                $btnDotsBoxesStart.hidden = false;
+                $btnDotsBoxesStart.disabled = true;
+                updateDotsBoxesProposalListUI();
+            } else {
+                showDotsBoxesSubView('lobby');
+                $dotsboxesLobbySetup.hidden = true;
+                $dotsboxesLobbyWaiting.hidden = true;
+                $dotsboxesLobbyInvite.hidden = false;
+                $dotsboxesProposerName.textContent = payload.proposerNickname;
+
+                const modeStr = payload.mode === 'classic' ? '클래식 모드' : '스코어 배틀';
+                const sizeStr = `${payload.gridSize}x${payload.gridSize} 상자`;
+                $dotsboxesInviteRuleDesc.innerHTML = `인원: ${payload.playerCount}인용 대결<br>규칙: ${modeStr}<br>크기: ${sizeStr}`;
+            }
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'dots-boxes', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'join-response') {
+            if (network.isHost) {
+                let p = dotsboxesState.participants.find(x => x.peerId === payload.peerId);
+                if (p) {
+                    p.accepted = payload.accepted;
+                } else {
+                    dotsboxesState.participants.push({
+                        peerId: payload.peerId,
+                        nickname: payload.nickname,
+                        color: payload.color,
+                        accepted: payload.accepted
+                    });
+                }
+                network.sendDotsBoxes({
+                    action: 'proposal-sync',
+                    proposerId: dotsboxesState.proposerId,
+                    proposerNickname: dotsboxesState.proposerNickname,
+                    playerCount: dotsboxesState.playerCount,
+                    gridSize: dotsboxesState.gridSize,
+                    mode: dotsboxesState.mode,
+                    participants: dotsboxesState.participants
+                });
+            }
+        }
+        else if (action === 'proposal-sync') {
+            dotsboxesState.proposerId = payload.proposerId;
+            dotsboxesState.proposerNickname = payload.proposerNickname;
+            dotsboxesState.playerCount = payload.playerCount;
+            dotsboxesState.gridSize = payload.gridSize;
+            dotsboxesState.mode = payload.mode;
+            dotsboxesState.participants = payload.participants;
+
+            updateDotsBoxesProposalListUI();
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'dots-boxes', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start') {
+            dotsboxesState.status = 'playing';
+            dotsboxesState.gridSize = payload.gridSize;
+            dotsboxesState.mode = payload.mode;
+            dotsboxesState.playerCount = payload.playerCount;
+            dotsboxesState.players = payload.players;
+            dotsboxesState.turnOrder = payload.turnOrder;
+            dotsboxesState.currentTurnIndex = 0;
+            dotsboxesState.gameStartTime = Date.now();
+            dotsboxesState.gameSecondsElapsed = 0;
+
+            initializeDotsBoxesBoard(payload.gridSize, payload.mode);
+            for (let r = 0; r < payload.gridSize; r++) {
+                for (let c = 0; c < payload.gridSize; c++) {
+                    dotsboxesState.boxes[r][c].score = payload.boxScores[r][c];
+                }
+            }
+
+            showDotsBoxesSubView('game');
+            updateDotsBoxesPlayersListUI();
+
+            $dotsboxesGameModeLabel.textContent = payload.mode === 'classic' ? '클래식' : '스코어 배틀';
+
+            clearInterval(dotsboxesState.gameTimerInterval);
+            dotsboxesState.gameTimerInterval = setInterval(() => {
+                dotsboxesState.gameSecondsElapsed++;
+                const min = String(Math.floor(dotsboxesState.gameSecondsElapsed / 60)).padStart(2, '0');
+                const sec = String(dotsboxesState.gameSecondsElapsed % 60).padStart(2, '0');
+                $dotsboxesGameTimer.textContent = `${min}:${sec}`;
+            }, 1000);
+
+            drawDotsBoxesBoard();
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'dots-boxes', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'move') {
+            applyDotsBoxesMove(payload.lineType, payload.r, payload.c, payload.playerIndex);
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'dots-boxes', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'quit') {
+            handleDotsBoxesForfeit(fromPeerId);
+
+            if (network.isHost && fromPeerId !== network.myPeerId) {
+                network._broadcast({ type: 'dots-boxes', payload }, fromPeerId);
+            }
+        }
     }
 
     /* ---------- Start ---------- */

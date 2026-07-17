@@ -32,6 +32,7 @@ class NetworkManager {
         this.onOthello = callbacks.onOthello || (() => {});
         this.onMinesweeper = callbacks.onMinesweeper || (() => {});
         this.onSpeedrun = callbacks.onSpeedrun || (() => {});
+        this.onDotsBoxes = callbacks.onDotsBoxes || (() => {});
         this.onChat = callbacks.onChat || (() => {});
         this.onFileReceived = callbacks.onFileReceived || (() => {});
         this.onReadReceipt = callbacks.onReadReceipt || (() => {});
@@ -581,6 +582,10 @@ class NetworkManager {
                 this.onSpeedrun(fromPeerId, data.payload);
                 break;
 
+            case 'dots-boxes':
+                this.onDotsBoxes(fromPeerId, data.payload);
+                break;
+
             case 'chat': {
                 const recipientId = data.recipientId || 'all';
                 const msgId = data.msgId;
@@ -831,6 +836,19 @@ class NetworkManager {
             this._broadcast(data);
             // Local echo: host also processes its own messages
             this.onOthello(this.myPeerId, payload);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendDotsBoxes(payload) {
+        const data = { type: 'dots-boxes', payload };
+        if (this.isHost) {
+            this._broadcast(data);
+            // Local echo: host also processes its own messages
+            this.onDotsBoxes(this.myPeerId, payload);
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
