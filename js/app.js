@@ -11597,8 +11597,6 @@
         requestAnimationFrame(fade);
     }
 
-    }
-
     /* ---------- Dots and Boxes Game Logic ---------- */
 
     let dotsboxesHoveredLine = null;
