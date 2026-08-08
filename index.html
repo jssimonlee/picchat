@@ -137,7 +137,10 @@
                     <button id="btnChatSettings" class="chat-settings-btn" title="채팅 설정" style="background: none; border: none;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     </button>
-                    <button id="btnCloseChat" class="chat-close-btn">&times;</button>
+                    <button id="btnCloseChat" class="chat-close-btn" aria-label="캔버스로 돌아가기">
+                        <span class="mobile-chat-back-label">← 캔버스로</span>
+                        <span class="desktop-chat-close-label" aria-hidden="true">&times;</span>
+                    </button>
                 </div>
                 
                 <!-- Chat Settings Panel -->
@@ -294,10 +297,24 @@
                     </div>
                 </div>
             </div>
+            <div class="tool-section mobile-tool-section">
+                <button class="tool-btn mobile-only-tool-btn" id="btnMobileSettings" title="도구 설정" aria-label="도구 설정" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/>
+                        <line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/>
+                        <line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2"/>
+                    </svg>
+                </button>
+            </div>
         </aside>
 
         <!-- Settings Panel (Bottom) -->
+        <div class="mobile-settings-backdrop" id="mobileSettingsBackdrop" hidden></div>
         <div class="settings-panel" id="settingsPanel">
+            <div class="mobile-settings-header">
+                <strong>도구 설정</strong>
+                <button id="btnCloseMobileSettings" type="button" aria-label="도구 설정 닫기">&times;</button>
+            </div>
             <div class="setting-item">
                 <label>색상</label>
                 <div class="color-section">

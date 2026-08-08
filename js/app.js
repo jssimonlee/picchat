@@ -65,6 +65,10 @@
     const $btnUploadImage = document.getElementById('btnUploadImage');
     const $imageInput = document.getElementById('imageInput');
     const $toast = document.getElementById('toast');
+    const $settingsPanel = document.getElementById('settingsPanel');
+    const $btnMobileSettings = document.getElementById('btnMobileSettings');
+    const $btnCloseMobileSettings = document.getElementById('btnCloseMobileSettings');
+    const $mobileSettingsBackdrop = document.getElementById('mobileSettingsBackdrop');
 
     // Sudoku Elements
     const $sudokuOverlay = document.getElementById('sudokuOverlay');
@@ -343,6 +347,23 @@
     const knownParticipants = new Map(); // peerId -> { nickname, color }
     let chatUnreadCount = 0;
     let isChatOpen = false;
+
+    function isMobileLayout() {
+        return window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function toggleMobileSettings(forceState) {
+        if (!$settingsPanel || !$btnMobileSettings || !$mobileSettingsBackdrop) return;
+
+        const isOpen = typeof forceState === 'boolean'
+            ? forceState
+            : !$settingsPanel.classList.contains('mobile-open');
+
+        $settingsPanel.classList.toggle('mobile-open', isOpen);
+        $mobileSettingsBackdrop.hidden = !isOpen;
+        $btnMobileSettings.classList.toggle('active', isOpen);
+        $btnMobileSettings.setAttribute('aria-expanded', String(isOpen));
+    }
 
     function getSudokuTurnTimeLimit(difficulty) {
         switch (difficulty) {
@@ -1186,6 +1207,10 @@
         window.addEventListener('resize', () => {
             canvas.resize();
             updateModificationHandles();
+            document.body.classList.toggle('mobile-chat-open', isChatOpen && isMobileLayout());
+            if (!isMobileLayout()) {
+                toggleMobileSettings(false);
+            }
         });
 
         // Setup initial background color UI state
@@ -1230,6 +1255,16 @@
     /* ---------- Tool Events ---------- */
 
     function setupToolEvents() {
+        if ($btnMobileSettings) {
+            $btnMobileSettings.addEventListener('click', () => toggleMobileSettings());
+        }
+        if ($btnCloseMobileSettings) {
+            $btnCloseMobileSettings.addEventListener('click', () => toggleMobileSettings(false));
+        }
+        if ($mobileSettingsBackdrop) {
+            $mobileSettingsBackdrop.addEventListener('click', () => toggleMobileSettings(false));
+        }
+
         // Laser Mode toggle button
         const $btnLaserMode = document.getElementById('btnLaserMode');
         if ($btnLaserMode) {
@@ -10334,6 +10369,11 @@
         isChatOpen = typeof forceState === 'boolean' ? forceState : !isChatOpen;
         $chatSidebar.hidden = !isChatOpen;
         $btnToggleChat.classList.toggle('active', isChatOpen);
+        document.body.classList.toggle('mobile-chat-open', isChatOpen && isMobileLayout());
+
+        if (isChatOpen) {
+            toggleMobileSettings(false);
+        }
 
         // Add class to studio for margin transition
         if ($studio) {
@@ -10359,7 +10399,9 @@
             // Scroll to bottom
             setTimeout(() => {
                 $chatMessages.scrollTop = $chatMessages.scrollHeight;
-                $chatInput.focus();
+                if (!isMobileLayout()) {
+                    $chatInput.focus();
+                }
             }, 100);
         } else {
             if ($chatSettingsPanel) {
