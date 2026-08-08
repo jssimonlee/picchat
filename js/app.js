@@ -10490,26 +10490,26 @@
     function formatDuration(seconds) {
         if (seconds >= 60) {
             const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            return s === 0 ? `${m}분` : `${m}:${String(s).padStart(2, '0')}`;
+            return `${m}분`;
         }
-        return `${seconds}초`;
+        const tens = Math.floor(seconds / 10) * 10;
+        return `${tens}초`;
     }
 
-    function createVolatileCountdown(msgEl, volatileDuration) {
+    function createVolatileTimer(msgEl, volatileDuration) {
         const badgeEl = document.createElement('span');
         badgeEl.className = 'chat-msg-volatile-badge';
-        badgeEl.title = '메시지가 사라질 때까지 남은 시간';
+        badgeEl.title = '메시지가 전송된 뒤 지난 시간';
 
         const countSpan = document.createElement('span');
         countSpan.className = 'countdown-text';
-        let remaining = volatileDuration;
-        countSpan.textContent = formatDuration(remaining);
+        let elapsed = 0;
+        countSpan.textContent = formatDuration(elapsed);
         badgeEl.appendChild(countSpan);
 
         const timerId = setInterval(() => {
-            remaining--;
-            if (remaining <= 0) {
+            elapsed++;
+            if (elapsed >= volatileDuration) {
                 clearInterval(timerId);
                 msgEl.style.transition = 'all 0.5s ease';
                 msgEl.style.opacity = '0';
@@ -10518,7 +10518,10 @@
                     msgEl.remove();
                 }, 500);
             } else {
-                countSpan.textContent = formatDuration(remaining);
+                const displayTime = formatDuration(elapsed);
+                if (countSpan.textContent !== displayTime) {
+                    countSpan.textContent = displayTime;
+                }
             }
         }, 1000);
 
@@ -10583,7 +10586,7 @@
         bubbleEl.textContent = message;
 
         const volatileBadge = isVolatile && volatileDuration > 0
-            ? createVolatileCountdown(msgEl, volatileDuration)
+            ? createVolatileTimer(msgEl, volatileDuration)
             : null;
 
         // Calculate unread count details
@@ -10975,7 +10978,7 @@
         bubbleEl.appendChild(btnRow);
 
         const volatileBadge = isVolatile && volatileDuration > 0
-            ? createVolatileCountdown(msgEl, volatileDuration)
+            ? createVolatileTimer(msgEl, volatileDuration)
             : null;
 
         // Calculate unread count details
@@ -11496,7 +11499,7 @@
         bubbleEl.textContent = emoji;
 
         const volatileBadge = isVolatile && volatileDuration > 0
-            ? createVolatileCountdown(msgEl, volatileDuration)
+            ? createVolatileTimer(msgEl, volatileDuration)
             : null;
 
         const msgRow = document.createElement('div');

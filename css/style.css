@@ -1131,7 +1131,7 @@ input, button, textarea {
     justify-content: flex-end;
     gap: 2px;
     flex: 0 0 auto;
-    min-width: 28px;
+    min-width: 34px;
     padding-bottom: 1px;
 }
 .chat-msg-meta:empty {
@@ -1173,22 +1173,17 @@ input, button, textarea {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    line-height: 1.2;
-    font-weight: 600;
-    color: #ff8295;
+    font-size: 11px;
+    line-height: 1.25;
+    font-weight: 700;
+    color: #ff91a2;
     white-space: nowrap;
     cursor: default;
     user-select: none;
-    transition: all 0.2s ease;
-}
-.chat-msg-volatile-badge::before {
-    content: '◷';
-    margin-right: 2px;
-    font-size: 10px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 .chat-msg.mine .chat-msg-volatile-badge {
-    color: #ffb15c;
+    color: #ffc078;
 }
 
 .chat-msg-system {
