@@ -11629,7 +11629,13 @@
         $btnDotsBoxesPropose.addEventListener('click', proposeDotsBoxes);
         $btnDotsBoxesSolo.addEventListener('click', startDotsBoxesSolo);
         $btnDotsBoxesCancel.addEventListener('click', cancelDotsBoxesProposal);
-        $btnDotsBoxesStart.addEventListener('click', startDotsBoxesGameFromLobby);
+        $btnDotsBoxesStart.addEventListener('click', () => {
+            if (network.isHost) {
+                hostStartDotsBoxes();
+            } else {
+                network.sendDotsBoxes({ action: 'start-request' });
+            }
+        });
         $btnDotsBoxesAccept.addEventListener('click', acceptDotsBoxesProposal);
         $btnDotsBoxesDecline.addEventListener('click', declineDotsBoxesProposal);
         $btnDotsBoxesQuit.addEventListener('click', quitDotsBoxesGame);
@@ -12223,8 +12229,9 @@
         $dotsboxesLobbySetup.hidden = true;
         $dotsboxesLobbyWaiting.hidden = false;
         $dotsboxesLobbyInvite.hidden = true;
-        $dotsboxesLobbyWaitingTitle.textContent = '참가 완료 (대기 중)';
-        $btnDotsBoxesStart.hidden = true;
+        $dotsboxesLobbyWaitingTitle.textContent = '게임 시작 대기 중...';
+        $btnDotsBoxesStart.hidden = false;
+        $btnDotsBoxesStart.disabled = true;
         $btnDotsBoxesCancel.hidden = true;
     }
 
@@ -12239,10 +12246,15 @@
         closeDotsBoxesWindow();
     }
 
-    function startDotsBoxesGameFromLobby() {
-        if (dotsboxesState.proposerId !== network.myPeerId) return;
+    function hostStartDotsBoxes() {
+        if (!network.isHost || dotsboxesState.status !== 'proposing') return;
 
         const accepted = dotsboxesState.participants.filter(p => p.accepted);
+        if (accepted.length < dotsboxesState.playerCount) {
+            showToast(`⚠️ 게임을 시작하려면 ${dotsboxesState.playerCount}명의 참가 동의가 필요합니다.`);
+            return;
+        }
+
         const actualPlayers = accepted.slice(0, dotsboxesState.playerCount);
 
         const playersList = actualPlayers.map(p => ({
@@ -12343,10 +12355,19 @@
 
         const isProposer = dotsboxesState.proposerId === network.myPeerId;
         const acceptedCount = dotsboxesState.participants.filter(p => p.accepted).length;
+        const hasAccepted = dotsboxesState.participants.some(p => p.peerId === network.myPeerId && p.accepted);
 
-        $btnDotsBoxesStart.hidden = !isProposer;
-        $btnDotsBoxesStart.disabled = (acceptedCount < dotsboxesState.playerCount);
-        $btnDotsBoxesCancel.hidden = !isProposer;
+        if (isProposer || hasAccepted) {
+            $dotsboxesLobbySetup.hidden = true;
+            $dotsboxesLobbyInvite.hidden = true;
+            $dotsboxesLobbyWaiting.hidden = false;
+            $btnDotsBoxesStart.hidden = false;
+            $btnDotsBoxesStart.disabled = (acceptedCount < dotsboxesState.playerCount);
+            $btnDotsBoxesCancel.hidden = !isProposer;
+            $dotsboxesLobbyWaitingTitle.textContent = isProposer
+                ? '점과 상자 참가 대기 중'
+                : '게임 시작 대기 중...';
+        }
     }
 
     function updateDotsBoxesPlayersListUI() {
@@ -12554,6 +12575,11 @@
 
             if (network.isHost && fromPeerId !== network.myPeerId) {
                 network._broadcast({ type: 'dots-boxes', payload }, fromPeerId);
+            }
+        }
+        else if (action === 'start-request') {
+            if (network.isHost) {
+                hostStartDotsBoxes();
             }
         }
         else if (action === 'join-response') {
