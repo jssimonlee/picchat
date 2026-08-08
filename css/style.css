@@ -1124,6 +1124,19 @@ input, button, textarea {
 .chat-msg.mine .chat-msg-row {
     justify-content: flex-end;
 }
+.chat-msg-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 2px;
+    flex: 0 0 auto;
+    min-width: 28px;
+    padding-bottom: 1px;
+}
+.chat-msg-meta:empty {
+    display: none;
+}
 .chat-msg-unread-indicator {
     font-size: 10px;
     font-weight: 700;
@@ -1148,7 +1161,6 @@ input, button, textarea {
     border: 1px solid rgba(124, 92, 255, 0.25);
     border-top-left-radius: 12px;
     border-top-right-radius: 4px;
-    margin-left: auto;
 }
 .chat-msg.mine {
     align-items: flex-end;
@@ -1158,30 +1170,25 @@ input, button, textarea {
     padding-right: 2px;
 }
 .chat-msg-volatile-badge {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 9px;
-    font-weight: 700;
-    color: #ff6b81; /* Cute coral pink for peer */
-    background-color: rgba(255, 107, 129, 0.15);
-    border: 1px solid rgba(255, 107, 129, 0.3);
-    border-radius: 6px;
-    padding: 1px 5px;
-    margin-left: 6px;
-    vertical-align: middle;
-    position: relative;
-    top: -1.5px;
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #ff8295;
+    white-space: nowrap;
     cursor: default;
     user-select: none;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     transition: all 0.2s ease;
-    flex-shrink: 0;
+}
+.chat-msg-volatile-badge::before {
+    content: '◷';
+    margin-right: 2px;
+    font-size: 10px;
 }
 .chat-msg.mine .chat-msg-volatile-badge {
-    color: #ff9f43; /* Cute bright warm orange for mine */
-    background-color: rgba(255, 159, 67, 0.15);
-    border-color: rgba(255, 159, 67, 0.3);
+    color: #ffb15c;
 }
 
 .chat-msg-system {
@@ -1191,10 +1198,14 @@ input, button, textarea {
     padding: 4px 0;
 }
 .chat-msg-emoji-reaction {
-    text-align: center;
-    font-size: 28px;
-    padding: 4px 0;
     animation: emojiPop 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+.chat-msg-emoji-bubble {
+    min-width: 46px;
+    padding: 7px 11px;
+    font-size: 30px;
+    line-height: 1.1;
+    text-align: center;
 }
 @keyframes emojiPop {
     0% { transform: scale(0); }

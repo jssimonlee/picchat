@@ -329,7 +329,6 @@
     const $chatSettingsPanel = document.getElementById('chatSettingsPanel');
     const $studioRoomLimitBadge = document.getElementById('studioRoomLimitBadge');
     const $chatRoomLimitSelect = document.getElementById('chatRoomLimitSelect');
-    const $floatingEmojis = document.getElementById('floatingEmojis');
     const $gridTemplate = document.getElementById('gridTemplate');
     const $btnGames = document.getElementById('btnGames');
     const $gamesSubmenu = document.getElementById('gamesSubmenu');
@@ -1073,8 +1072,7 @@
                 handleIncomingReadReceipts(fromPeerId, msgIds);
             },
             onEmoji: (fromPeerId, emoji, nickname, color, isVolatile, volatileDuration) => {
-                spawnFloatingEmoji(emoji);
-                addChatEmojiReaction(nickname, emoji, fromPeerId === network.myPeerId, isVolatile, volatileDuration);
+                addChatEmojiReaction(nickname, emoji, color, fromPeerId === network.myPeerId, isVolatile, volatileDuration);
             },
             onLaser: (fromPeerId, points, color) => {
                 showRemoteLaser(points, color);
@@ -10311,12 +10309,26 @@
 
         // Send chat message
         $btnSendChat.addEventListener('click', sendChatMessage);
+        let sendAfterComposition = false;
         $chatInput.addEventListener('keydown', (e) => {
-            if (e.isComposing) return;
             if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.isComposing || e.keyCode === 229) {
+                    sendAfterComposition = true;
+                    return;
+                }
                 e.preventDefault();
+                sendAfterComposition = false;
                 sendChatMessage();
             }
+        });
+        $chatInput.addEventListener('compositionend', () => {
+            if (!sendAfterComposition) return;
+            sendAfterComposition = false;
+            requestAnimationFrame(() => {
+                if ($chatInput.value.trim()) {
+                    sendChatMessage();
+                }
+            });
         });
 
         // Toggle volatile options visibility
@@ -10399,8 +10411,7 @@
                     network.sendEmoji(emoji, isVolatile, volatileDuration);
                     // Local echo for non-host
                     if (!network.isHost) {
-                        spawnFloatingEmoji(emoji);
-                        addChatEmojiReaction(network.nickname, emoji, true, isVolatile, volatileDuration);
+                        addChatEmojiReaction(network.nickname, emoji, network.myColor, true, isVolatile, volatileDuration);
                     }
                 }
             });
@@ -10479,10 +10490,63 @@
     function formatDuration(seconds) {
         if (seconds >= 60) {
             const m = Math.floor(seconds / 60);
-            return `${m}분`;
+            const s = seconds % 60;
+            return s === 0 ? `${m}분` : `${m}:${String(s).padStart(2, '0')}`;
         }
-        const tens = Math.floor(seconds / 10) * 10;
-        return `${tens}초`;
+        return `${seconds}초`;
+    }
+
+    function createVolatileCountdown(msgEl, volatileDuration) {
+        const badgeEl = document.createElement('span');
+        badgeEl.className = 'chat-msg-volatile-badge';
+        badgeEl.title = '메시지가 사라질 때까지 남은 시간';
+
+        const countSpan = document.createElement('span');
+        countSpan.className = 'countdown-text';
+        let remaining = volatileDuration;
+        countSpan.textContent = formatDuration(remaining);
+        badgeEl.appendChild(countSpan);
+
+        const timerId = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearInterval(timerId);
+                msgEl.style.transition = 'all 0.5s ease';
+                msgEl.style.opacity = '0';
+                msgEl.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    msgEl.remove();
+                }, 500);
+            } else {
+                countSpan.textContent = formatDuration(remaining);
+            }
+        }, 1000);
+
+        return badgeEl;
+    }
+
+    function appendChatRowContent(msgRow, bubbleEl, isMine, unreadCount, volatileBadge) {
+        const metaEl = document.createElement('div');
+        metaEl.className = 'chat-msg-meta';
+
+        if (unreadCount > 0) {
+            const unreadBadge = document.createElement('div');
+            unreadBadge.className = 'chat-msg-unread-indicator';
+            unreadBadge.textContent = unreadCount;
+            metaEl.appendChild(unreadBadge);
+        }
+
+        if (volatileBadge) {
+            metaEl.appendChild(volatileBadge);
+        }
+
+        if (isMine) {
+            msgRow.appendChild(metaEl);
+            msgRow.appendChild(bubbleEl);
+        } else {
+            msgRow.appendChild(bubbleEl);
+            msgRow.appendChild(metaEl);
+        }
     }
 
     function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
@@ -10518,34 +10582,9 @@
         }
         bubbleEl.textContent = message;
 
-        if (isVolatile && volatileDuration > 0) {
-            const badgeEl = document.createElement('span');
-            badgeEl.className = 'chat-msg-volatile-badge';
-            
-            const countSpan = document.createElement('span');
-            countSpan.className = 'countdown-text';
-            countSpan.textContent = '0초';
-            badgeEl.appendChild(countSpan);
-            bubbleEl.appendChild(badgeEl);
-            
-            bubbleEl.style.overflow = 'hidden';
-
-            let elapsed = 0;
-            const timerId = setInterval(() => {
-                elapsed++;
-                if (elapsed >= volatileDuration) {
-                    clearInterval(timerId);
-                    msgEl.style.transition = 'all 0.5s ease';
-                    msgEl.style.opacity = '0';
-                    msgEl.style.transform = 'translateY(-10px)';
-                    setTimeout(() => {
-                        msgEl.remove();
-                    }, 500);
-                } else {
-                    countSpan.textContent = formatDuration(elapsed);
-                }
-            }, 1000);
-        }
+        const volatileBadge = isVolatile && volatileDuration > 0
+            ? createVolatileCountdown(msgEl, volatileDuration)
+            : null;
 
         // Calculate unread count details
         let initialUnreadCount = 0;
@@ -10575,22 +10614,7 @@
 
         const msgRow = document.createElement('div');
         msgRow.className = 'chat-msg-row';
-
-        if (unreadCount > 0) {
-            const unreadBadge = document.createElement('div');
-            unreadBadge.className = 'chat-msg-unread-indicator';
-            unreadBadge.textContent = unreadCount;
-            
-            if (isMine) {
-                msgRow.appendChild(unreadBadge);
-                msgRow.appendChild(bubbleEl);
-            } else {
-                msgRow.appendChild(bubbleEl);
-                msgRow.appendChild(unreadBadge);
-            }
-        } else {
-            msgRow.appendChild(bubbleEl);
-        }
+        appendChatRowContent(msgRow, bubbleEl, isMine, unreadCount, volatileBadge);
 
         msgEl.appendChild(nameEl);
         msgEl.appendChild(msgRow);
@@ -10950,33 +10974,9 @@
         
         bubbleEl.appendChild(btnRow);
 
-        if (isVolatile && volatileDuration > 0) {
-            const badgeEl = document.createElement('span');
-            badgeEl.className = 'chat-msg-volatile-badge';
-            badgeEl.style.alignSelf = 'flex-end';
-            
-            const countSpan = document.createElement('span');
-            countSpan.className = 'countdown-text';
-            countSpan.textContent = '0초';
-            badgeEl.appendChild(countSpan);
-            bubbleEl.appendChild(badgeEl);
-
-            let elapsed = 0;
-            const timerId = setInterval(() => {
-                elapsed++;
-                if (elapsed >= volatileDuration) {
-                    clearInterval(timerId);
-                    msgEl.style.transition = 'all 0.5s ease';
-                    msgEl.style.opacity = '0';
-                    msgEl.style.transform = 'translateY(-10px)';
-                    setTimeout(() => {
-                        msgEl.remove();
-                    }, 500);
-                } else {
-                    countSpan.textContent = formatDuration(elapsed);
-                }
-            }, 1000);
-        }
+        const volatileBadge = isVolatile && volatileDuration > 0
+            ? createVolatileCountdown(msgEl, volatileDuration)
+            : null;
 
         // Calculate unread count details
         let initialUnreadCount = 0;
@@ -11006,22 +11006,7 @@
 
         const msgRow = document.createElement('div');
         msgRow.className = 'chat-msg-row';
-
-        if (unreadCount > 0) {
-            const unreadBadge = document.createElement('div');
-            unreadBadge.className = 'chat-msg-unread-indicator';
-            unreadBadge.textContent = unreadCount;
-            
-            if (isMine) {
-                msgRow.appendChild(unreadBadge);
-                msgRow.appendChild(bubbleEl);
-            } else {
-                msgRow.appendChild(bubbleEl);
-                msgRow.appendChild(unreadBadge);
-            }
-        } else {
-            msgRow.appendChild(bubbleEl);
-        }
+        appendChatRowContent(msgRow, bubbleEl, isMine, unreadCount, volatileBadge);
 
         msgEl.appendChild(nameEl);
         msgEl.appendChild(msgRow);
@@ -11497,24 +11482,31 @@
         }
     }
 
-    function addChatEmojiReaction(nickname, emoji, isMine, isVolatile = false, volatileDuration = 0) {
+    function addChatEmojiReaction(nickname, emoji, color, isMine, isVolatile = false, volatileDuration = 0) {
         const msgEl = document.createElement('div');
-        msgEl.className = 'chat-msg-emoji-reaction';
-        msgEl.textContent = emoji;
-        msgEl.title = nickname;
-        $chatMessages.appendChild(msgEl);
-        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+        msgEl.className = 'chat-msg chat-msg-emoji-reaction' + (isMine ? ' mine' : '');
 
-        if (isVolatile && volatileDuration > 0) {
-            setTimeout(() => {
-                msgEl.style.transition = 'all 0.5s ease';
-                msgEl.style.opacity = '0';
-                msgEl.style.transform = 'translateY(-10px)';
-                setTimeout(() => {
-                    msgEl.remove();
-                }, 500);
-            }, volatileDuration * 1000);
-        }
+        const nameEl = document.createElement('div');
+        nameEl.className = 'chat-msg-name';
+        nameEl.style.color = color || 'var(--text-secondary)';
+        nameEl.textContent = nickname;
+
+        const bubbleEl = document.createElement('div');
+        bubbleEl.className = 'chat-msg-bubble chat-msg-emoji-bubble';
+        bubbleEl.textContent = emoji;
+
+        const volatileBadge = isVolatile && volatileDuration > 0
+            ? createVolatileCountdown(msgEl, volatileDuration)
+            : null;
+
+        const msgRow = document.createElement('div');
+        msgRow.className = 'chat-msg-row';
+        appendChatRowContent(msgRow, bubbleEl, isMine, 0, volatileBadge);
+
+        msgEl.appendChild(nameEl);
+        msgEl.appendChild(msgRow);
+        $chatMessages.appendChild(msgEl);
+        scrollChatToLatest();
     }
 
     function addChatSystemMessage(text) {
@@ -11523,28 +11515,6 @@
         msgEl.textContent = text;
         $chatMessages.appendChild(msgEl);
         $chatMessages.scrollTop = $chatMessages.scrollHeight;
-    }
-
-    /* ==============================================
-       FLOATING EMOJI REACTIONS
-       ============================================== */
-
-    function spawnFloatingEmoji(emoji) {
-        const el = document.createElement('div');
-        el.className = 'floating-emoji';
-        el.textContent = emoji;
-        // Random horizontal position within the canvas area
-        const containerRect = $canvasContainer.getBoundingClientRect();
-        const x = Math.random() * (containerRect.width - 60) + 30;
-        const y = containerRect.height - 60;
-        el.style.left = x + 'px';
-        el.style.bottom = '20px';
-        $floatingEmojis.appendChild(el);
-
-        // Remove after animation
-        setTimeout(() => {
-            el.remove();
-        }, 2600);
     }
 
     /* ==============================================
