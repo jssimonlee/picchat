@@ -3874,11 +3874,11 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     }
 
     .chat-sidebar {
-        inset: 0;
+        inset: var(--mobile-chat-top, 0) 0 auto;
         width: 100vw;
         max-width: none;
         height: 100vh;
-        height: 100dvh;
+        height: var(--mobile-chat-height, 100dvh);
         box-sizing: border-box;
         padding-top: env(safe-area-inset-top);
         background: #1a1a32;

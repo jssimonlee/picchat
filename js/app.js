@@ -347,9 +347,39 @@
     const knownParticipants = new Map(); // peerId -> { nickname, color }
     let chatUnreadCount = 0;
     let isChatOpen = false;
+    let chatScrollFrame = null;
 
     function isMobileLayout() {
         return window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function scrollChatToLatest() {
+        if (!$chatMessages) return;
+        if (chatScrollFrame) cancelAnimationFrame(chatScrollFrame);
+        chatScrollFrame = requestAnimationFrame(() => {
+            $chatMessages.scrollTop = $chatMessages.scrollHeight;
+            chatScrollFrame = requestAnimationFrame(() => {
+                $chatMessages.scrollTop = $chatMessages.scrollHeight;
+                chatScrollFrame = null;
+            });
+        });
+    }
+
+    function syncMobileChatViewport() {
+        if (!$chatSidebar) return;
+
+        if (!isChatOpen || !isMobileLayout()) {
+            $chatSidebar.style.removeProperty('--mobile-chat-height');
+            $chatSidebar.style.removeProperty('--mobile-chat-top');
+            return;
+        }
+
+        const viewport = window.visualViewport;
+        const visibleHeight = Math.round(viewport ? viewport.height : window.innerHeight);
+        const visibleTop = Math.round(viewport ? viewport.offsetTop : 0);
+        $chatSidebar.style.setProperty('--mobile-chat-height', `${visibleHeight}px`);
+        $chatSidebar.style.setProperty('--mobile-chat-top', `${visibleTop}px`);
+        scrollChatToLatest();
     }
 
     function toggleMobileSettings(forceState) {
@@ -1208,6 +1238,7 @@
             canvas.resize();
             updateModificationHandles();
             document.body.classList.toggle('mobile-chat-open', isChatOpen && isMobileLayout());
+            syncMobileChatViewport();
             if (!isMobileLayout()) {
                 toggleMobileSettings(false);
             }
@@ -10249,6 +10280,17 @@
             toggleChat(false);
         });
 
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', syncMobileChatViewport);
+            window.visualViewport.addEventListener('scroll', syncMobileChatViewport);
+        }
+
+        $chatInput.addEventListener('focus', () => {
+            syncMobileChatViewport();
+            setTimeout(syncMobileChatViewport, 80);
+            setTimeout(syncMobileChatViewport, 300);
+        });
+
         // Toggle chat settings panel
         if ($btnChatSettings && $chatSettingsPanel) {
             $btnChatSettings.addEventListener('click', (e) => {
@@ -10370,6 +10412,7 @@
         $chatSidebar.hidden = !isChatOpen;
         $btnToggleChat.classList.toggle('active', isChatOpen);
         document.body.classList.toggle('mobile-chat-open', isChatOpen && isMobileLayout());
+        syncMobileChatViewport();
 
         if (isChatOpen) {
             toggleMobileSettings(false);
@@ -10398,7 +10441,8 @@
             markAllUnreadMessagesAsRead();
             // Scroll to bottom
             setTimeout(() => {
-                $chatMessages.scrollTop = $chatMessages.scrollHeight;
+                syncMobileChatViewport();
+                scrollChatToLatest();
                 if (!isMobileLayout()) {
                     $chatInput.focus();
                 }
@@ -10428,6 +10472,8 @@
         }
         $chatInput.value = '';
         $chatInput.focus();
+        scrollChatToLatest();
+        setTimeout(scrollChatToLatest, 80);
     }
 
     function formatDuration(seconds) {
@@ -10556,7 +10602,7 @@
         }
 
         // Auto-scroll
-        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+        scrollChatToLatest();
 
         // Update unread badge if chat is closed
         if (!isChatOpen) {
