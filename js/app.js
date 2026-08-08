@@ -530,13 +530,6 @@
         const savedNick = localStorage.getItem('picchat-nickname');
         if (savedNick) $nickname.value = savedNick;
 
-        // Auto-format join code
-        $joinCode.addEventListener('input', (e) => {
-            let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            if (v.length > 3) v = v.slice(0, 3) + '-' + v.slice(3, 6);
-            e.target.value = v;
-        });
-
         // Clean disconnect on tab close/reload
         window.addEventListener('beforeunload', () => {
             if (network) {
@@ -12035,7 +12028,8 @@
                 lineType: line.type,
                 r: line.r,
                 c: line.c,
-                playerIndex: myIdx
+                playerIndex: myIdx,
+                playerPeerId: network.myPeerId
             });
         }
     }
@@ -12602,6 +12596,8 @@
         }
         else if (action === 'start') {
             dotsboxesState.status = 'playing';
+            dotsboxesState.isSolo = false;
+            dotsboxesState.isRobotOpponent = false;
             dotsboxesState.gridSize = payload.gridSize;
             dotsboxesState.mode = payload.mode;
             dotsboxesState.playerCount = payload.playerCount;
@@ -12638,6 +12634,24 @@
             }
         }
         else if (action === 'move') {
+            const player = dotsboxesState.players[payload.playerIndex];
+            const expectedPeerId = dotsboxesState.turnOrder[dotsboxesState.currentTurnIndex];
+            const isValidLineType = payload.lineType === 'h' || payload.lineType === 'v';
+            const rowLimit = payload.lineType === 'h' ? dotsboxesState.gridSize + 1 : dotsboxesState.gridSize;
+            const columnLimit = payload.lineType === 'h' ? dotsboxesState.gridSize : dotsboxesState.gridSize + 1;
+            const isInBounds = Number.isInteger(payload.r) && Number.isInteger(payload.c) &&
+                payload.r >= 0 && payload.r < rowLimit && payload.c >= 0 && payload.c < columnLimit;
+            const lineOwner = isValidLineType && isInBounds
+                ? (payload.lineType === 'h' ? dotsboxesState.hLines[payload.r][payload.c] : dotsboxesState.vLines[payload.r][payload.c])
+                : undefined;
+            const isExpectedPlayer = player && player.peerId === expectedPeerId &&
+                (!payload.playerPeerId || payload.playerPeerId === player.peerId);
+
+            if (!isValidLineType || !isInBounds || lineOwner !== null || !isExpectedPlayer) {
+                console.warn('[DotsBoxes] Ignored invalid or duplicate move', payload);
+                return;
+            }
+
             applyDotsBoxesMove(payload.lineType, payload.r, payload.c, payload.playerIndex);
 
             if (network.isHost && fromPeerId !== network.myPeerId) {
@@ -12657,4 +12671,3 @@
 
     init();
 })();
-

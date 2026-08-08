@@ -700,7 +700,9 @@ input, button, textarea {
     position: absolute;
     left: 54px;
     top: 50%;
-    transform: translateY(-50%);
+    /* The games button sits near the bottom of the toolbar. Lift the menu so
+       the last entries stay visible on Windows viewports with a taskbar. */
+    transform: translateY(-65%);
     background: rgba(30, 30, 56, 0.96);
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
@@ -713,6 +715,10 @@ input, button, textarea {
     box-shadow: 0 10px 35px rgba(0, 0, 0, 0.5);
     z-index: 50;
     min-width: 145px;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 /* Pseudo-element to bridge mouse hover gap */
@@ -3124,6 +3130,7 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     }
     .games-submenu {
         left: 80px;
+        transform: translateY(-72%);
     }
     #btnGames {
         transform: scale(1.05);

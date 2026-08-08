@@ -853,6 +853,10 @@ class NetworkManager {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
             });
+            // The host relays guest messages to everyone except the sender.
+            // Process the guest's own game action locally as well so its board
+            // and turn state advance in lockstep with the host.
+            this.onDotsBoxes(this.myPeerId, payload);
         }
     }
 
