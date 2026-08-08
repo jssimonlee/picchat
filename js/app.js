@@ -347,6 +347,8 @@
     let chatUnreadCount = 0;
     let isChatOpen = false;
     let chatScrollFrame = null;
+    const CHAT_FILE_LIMIT_DESKTOP = 8 * 1024 * 1024;
+    const CHAT_FILE_LIMIT_MOBILE = 5 * 1024 * 1024;
 
     function isMobileLayout() {
         return window.matchMedia('(max-width: 768px)').matches;
@@ -1037,7 +1039,11 @@
                 updateRemoteCursor(peerId, x, y, peerNickname, color);
             },
             onError: (msg) => {
-                showLobbyStatus(msg, 'error');
+                if ($studio && !$studio.hidden) {
+                    showToast(`⚠️ ${msg}`);
+                } else {
+                    showLobbyStatus(msg, 'error');
+                }
                 $btnConfirmCreateRoom.disabled = false;
                 $btnConfirmJoinRoom.disabled = false;
             },
@@ -10366,38 +10372,63 @@
                 isSelectingFile = true;
             });
 
-            $chatFileInput.addEventListener('change', async (e) => {
+            $chatFileInput.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
+                const isMobile = isMobileLayout() || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                const maxBytes = isMobile ? CHAT_FILE_LIMIT_MOBILE : CHAT_FILE_LIMIT_DESKTOP;
+                if (file.size > maxBytes) {
+                    const maxMb = Math.round(maxBytes / (1024 * 1024));
+                    showToast(`⚠️ 안정적인 전송을 위해 ${isMobile ? '모바일에서는 ' : ''}${maxMb}MB 이하 파일만 보낼 수 있습니다.`);
+                    $chatFileInput.value = '';
+                    isSelectingFile = false;
+                    return;
+                }
+
                 const recipientId = $chatRecipient.value || 'all';
-                let isRelayed = false;
-                if (network) {
-                    isRelayed = await network.isConnectionRelayed(recipientId);
-                }
-
-                if (isRelayed && file.size > 20 * 1024 * 1024) {
-                    showToast('⚠️ 릴레이(TURN) 연결 상태에서는 20MB 이하의 파일만 전송할 수 있습니다.');
-                    $chatFileInput.value = '';
-                    return;
-                } else if (!isRelayed && file.size > 100 * 1024 * 1024) {
-                    showToast('⚠️ 직접 연결 상태에서는 100MB 이하의 파일만 전송할 수 있습니다.');
-                    $chatFileInput.value = '';
-                    return;
-                }
-
                 const isVolatile = $chkVolatileChat ? $chkVolatileChat.checked : false;
                 const volatileDuration = isVolatile && $selVolatileDuration ? parseInt($selVolatileDuration.value, 10) : 0;
 
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    const fileData = event.target.result;
-                    if (network) {
+                    try {
+                        const fileData = event.target.result;
+                        if (!network || !fileData) {
+                            throw new Error('network-or-file-unavailable');
+                        }
                         network.sendFile(file.name, file.type, fileData, recipientId, isVolatile, volatileDuration);
+                        showToast(`📎 ${file.name} 전송을 시작했습니다.`);
+                    } catch (error) {
+                        console.error('[Chat] File send failed:', error);
+                        showToast('⚠️ 파일 전송에 실패했습니다. 연결을 확인한 뒤 다시 시도해주세요.');
                     }
-                    $chatFileInput.value = '';
                 };
-                reader.readAsDataURL(file);
+                reader.onerror = () => {
+                    console.error('[Chat] File read failed:', reader.error);
+                    showToast('⚠️ 모바일에서 파일을 읽지 못했습니다. 다른 파일을 선택해주세요.');
+                };
+                reader.onabort = () => {
+                    showToast('파일 선택이 취소되었습니다.');
+                };
+                reader.onloadend = () => {
+                    $chatFileInput.value = '';
+                    isSelectingFile = false;
+                    $btnAttachFile.disabled = false;
+                };
+
+                isSelectingFile = true;
+                $btnAttachFile.disabled = true;
+                showToast(`📎 ${file.name} 파일을 준비 중입니다...`);
+                try {
+                    reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('[Chat] Could not start file read:', error);
+                    $chatFileInput.value = '';
+                    isSelectingFile = false;
+                    $btnAttachFile.disabled = false;
+                    showToast('⚠️ 파일을 열 수 없습니다.');
+                }
             });
         }
 

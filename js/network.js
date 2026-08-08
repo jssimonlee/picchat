@@ -241,12 +241,30 @@ class NetworkManager {
                 if (!response.ok) throw new Error('Failed to query room DB');
                 
                 const data = await response.json();
-                const peerIds = data.peerIds || [];
+                let peerIds = data.peerIds || [];
                 const maxParticipants = data.maxParticipants !== undefined ? data.maxParticipants : 2;
 
                 if (peerIds.length === 0) {
                     reject(new Error('peer-unavailable'));
                     return;
+                }
+
+                // A mobile browser can be terminated while selecting or receiving a file,
+                // leaving its peer ID in D1 until the host notices the dropped WebRTC link.
+                // Before rejecting a rejoin as full, remove offline non-host peers.
+                if (peerIds.length >= maxParticipants && peerIds.length > 1) {
+                    const coordinatorId = peerIds[0];
+                    const candidates = peerIds.slice(1);
+                    const activeChecks = await Promise.all(
+                        candidates.map(peerId => this._checkIfPeerIsActive(peerId))
+                    );
+                    const activeGuests = candidates.filter((peerId, index) => activeChecks[index]);
+                    const cleanedPeerIds = [coordinatorId, ...activeGuests];
+
+                    if (cleanedPeerIds.length !== peerIds.length) {
+                        peerIds = cleanedPeerIds;
+                        await this._syncRoomWithDb(peerIds);
+                    }
                 }
 
                 if (peerIds.length >= maxParticipants) {
@@ -266,6 +284,20 @@ class NetworkManager {
                 this.peer.on('open', (id) => {
                     this.myPeerId = id;
                     console.log('[Network] My PeerId:', id, '→ connecting to host:', hostPeerId);
+
+                    // Allow room-capacity recovery checks to verify that this
+                    // participant is still alive without joining it to the room.
+                    this.peer.on('connection', (incomingConn) => {
+                        if (incomingConn.metadata && incomingConn.metadata.healthCheck) {
+                            incomingConn.on('open', () => {
+                                setTimeout(() => {
+                                    try { incomingConn.close(); } catch (e) {}
+                                }, 80);
+                            });
+                        } else {
+                            try { incomingConn.close(); } catch (e) {}
+                        }
+                    });
 
                     const conn = this.peer.connect(hostPeerId, {
                         reliable: true,
@@ -324,6 +356,15 @@ class NetworkManager {
     _handleIncomingConnection(conn) {
         const peerId = conn.peer;
         console.log('[Network] Incoming connection from:', peerId);
+
+        if (conn.metadata && conn.metadata.healthCheck) {
+            conn.on('open', () => {
+                setTimeout(() => {
+                    try { conn.close(); } catch (e) {}
+                }, 80);
+            });
+            return;
+        }
 
         // Check if room is full
         if (this.isHost && this.maxParticipants !== undefined && this.getPeerCount() >= this.maxParticipants) {
@@ -611,6 +652,12 @@ class NetworkManager {
             }
 
             case 'file': {
+                const maxEncodedFileLength = 12 * 1024 * 1024;
+                if (typeof data.fileData !== 'string' || data.fileData.length > maxEncodedFileLength) {
+                    console.warn('[Network] Rejected oversized or invalid file payload');
+                    this.onError('안전한 수신 범위를 넘는 파일이라 받지 않았습니다. 8MB 이하 파일로 다시 시도해주세요.');
+                    break;
+                }
                 const recipientId = data.recipientId || 'all';
                 if (this.isHost) {
                     if (recipientId === 'all') {
@@ -1243,7 +1290,10 @@ class NetworkManager {
 
                 tempPeer.on('open', () => {
                     try {
-                        const conn = tempPeer.connect(targetPeerId, { reliable: false });
+                        const conn = tempPeer.connect(targetPeerId, {
+                            reliable: false,
+                            metadata: { healthCheck: true }
+                        });
                         conn.on('open', () => {
                             clearTimeout(timeoutId);
                             cleanup();
