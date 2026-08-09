@@ -934,7 +934,12 @@ input, button, textarea {
     box-shadow: var(--shadow-md);
     z-index: 100;
     animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    white-space: nowrap;
+    width: max-content;
+    max-width: min(680px, calc(100vw - 32px));
+    box-sizing: border-box;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.45;
 }
 .toast.toast-out {
     animation: toastOut 0.3s ease forwards;

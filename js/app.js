@@ -347,8 +347,11 @@
     let chatUnreadCount = 0;
     let isChatOpen = false;
     let chatScrollFrame = null;
-    const CHAT_FILE_LIMIT_DESKTOP = 8 * 1024 * 1024;
-    const CHAT_FILE_LIMIT_MOBILE = 5 * 1024 * 1024;
+    const volatileChatTimers = new Map(); // message element -> wall-clock timer state
+    const CHAT_FILE_LIMIT_RELAY_DESKTOP = 8 * 1024 * 1024;
+    const CHAT_FILE_LIMIT_RELAY_MOBILE = 5 * 1024 * 1024;
+    const CHAT_FILE_LIMIT_DIRECT_DESKTOP = 30 * 1024 * 1024;
+    const CHAT_FILE_LIMIT_DIRECT_MOBILE = 15 * 1024 * 1024;
 
     function isMobileLayout() {
         return window.matchMedia('(max-width: 768px)').matches;
@@ -675,6 +678,7 @@
             if (network && !isSelectingFile) {
                 network.resumeConnectivity();
             }
+            refreshVolatileChatTimers();
 
             // Reset the file selection flag with a short delay to allow blur events to resolve
             setTimeout(() => {
@@ -691,6 +695,7 @@
                 if (network) {
                     network.resumeConnectivity();
                 }
+                refreshVolatileChatTimers();
                 if (isChatOpen) {
                     markAllUnreadMessagesAsRead();
                 }
@@ -704,6 +709,7 @@
             if (network) {
                 network.resumeConnectivity();
             }
+            refreshVolatileChatTimers();
         });
 
         // Set the flag when clicking the file input
@@ -3516,6 +3522,7 @@
 
         // Clear chat history
         if ($chatMessages) {
+            clearVolatileChatTimers();
             $chatMessages.innerHTML = '';
         }
         chatUnreadCount = 0;
@@ -3564,7 +3571,7 @@
     /* ---------- Toast ---------- */
 
     let toastTimeout;
-    function showToast(msg) {
+    function showToast(msg, duration = 2500) {
         clearTimeout(toastTimeout);
         $toast.textContent = msg;
         $toast.hidden = false;
@@ -3575,7 +3582,7 @@
                 $toast.hidden = true;
                 $toast.classList.remove('toast-out');
             }, 300);
-        }, 2500);
+        }, duration);
     }
 
     /* ---------- Utility ---------- */
@@ -10393,21 +10400,37 @@
                 isSelectingFile = true;
             });
 
-            $chatFileInput.addEventListener('change', (e) => {
+            $chatFileInput.addEventListener('change', async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
                 const isMobile = isMobileLayout() || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                const maxBytes = isMobile ? CHAT_FILE_LIMIT_MOBILE : CHAT_FILE_LIMIT_DESKTOP;
-                if (file.size > maxBytes) {
-                    const maxMb = Math.round(maxBytes / (1024 * 1024));
-                    showToast(`⚠️ 안정적인 전송을 위해 ${isMobile ? '모바일에서는 ' : ''}${maxMb}MB 이하 파일만 보낼 수 있습니다.`);
+                if (!network) {
+                    showToast('⚠️ 연결된 방이 없어 파일을 보낼 수 없습니다. 방에 다시 연결한 뒤 시도해주세요.');
                     $chatFileInput.value = '';
                     isSelectingFile = false;
                     return;
                 }
 
                 const recipientId = $chatRecipient.value || 'all';
+                const connectionPath = await network.getConnectionPath(recipientId);
+                const isDirect = connectionPath === 'direct';
+                const maxBytes = isDirect
+                    ? (isMobile ? CHAT_FILE_LIMIT_DIRECT_MOBILE : CHAT_FILE_LIMIT_DIRECT_DESKTOP)
+                    : (isMobile ? CHAT_FILE_LIMIT_RELAY_MOBILE : CHAT_FILE_LIMIT_RELAY_DESKTOP);
+                if (file.size > maxBytes) {
+                    const maxMb = Math.round(maxBytes / (1024 * 1024));
+                    const pathReason = isDirect
+                        ? '현재 직접 P2P 연결'
+                        : connectionPath === 'relay'
+                            ? '현재 TURN 중계 연결'
+                            : '현재 연결 경로를 직접 연결로 확인할 수 없어 안전 제한이 적용된 상태';
+                    showToast(`⚠️ ${pathReason}에서는 ${isMobile ? '모바일 ' : 'PC '}${maxMb}MB 이하 파일만 보낼 수 있습니다. 큰 파일은 Base64 메모리 사용량과 WebRTC 전송 버퍼를 크게 늘려 연결이 끊길 수 있습니다.`, 6000);
+                    $chatFileInput.value = '';
+                    isSelectingFile = false;
+                    return;
+                }
+
                 const isVolatile = $chkVolatileChat ? $chkVolatileChat.checked : false;
                 const volatileDuration = isVolatile && $selVolatileDuration ? parseInt($selVolatileDuration.value, 10) : 0;
 
@@ -10418,7 +10441,7 @@
                         if (!network || !fileData) {
                             throw new Error('network-or-file-unavailable');
                         }
-                        network.sendFile(file.name, file.type, fileData, recipientId, isVolatile, volatileDuration);
+                        network.sendFile(file.name, file.type, fileData, file.size, recipientId, isVolatile, volatileDuration);
                         showToast(`📎 ${file.name} 전송을 시작했습니다.`);
                     } catch (error) {
                         console.error('[Chat] File send failed:', error);
@@ -10555,29 +10578,69 @@
 
         const countSpan = document.createElement('span');
         countSpan.className = 'countdown-text';
-        let elapsed = 0;
-        countSpan.textContent = formatDuration(elapsed);
         badgeEl.appendChild(countSpan);
 
-        const timerId = setInterval(() => {
-            elapsed++;
-            if (elapsed >= volatileDuration) {
-                clearInterval(timerId);
-                msgEl.style.transition = 'all 0.5s ease';
-                msgEl.style.opacity = '0';
-                msgEl.style.transform = 'translateY(-10px)';
-                setTimeout(() => {
-                    msgEl.remove();
-                }, 500);
-            } else {
-                const displayTime = formatDuration(elapsed);
-                if (countSpan.textContent !== displayTime) {
-                    countSpan.textContent = displayTime;
-                }
-            }
+        const timerState = {
+            startedAt: Date.now(),
+            durationSeconds: volatileDuration,
+            countSpan,
+            timerId: null,
+            removalTimerId: null,
+            expiring: false
+        };
+
+        volatileChatTimers.set(msgEl, timerState);
+        updateVolatileChatTimer(msgEl, timerState);
+        timerState.timerId = setInterval(() => {
+            updateVolatileChatTimer(msgEl, timerState);
         }, 1000);
 
         return badgeEl;
+    }
+
+    function updateVolatileChatTimer(msgEl, timerState) {
+        if (!timerState || timerState.expiring) return;
+
+        const elapsed = Math.max(0, Math.floor((Date.now() - timerState.startedAt) / 1000));
+        if (elapsed >= timerState.durationSeconds) {
+            timerState.expiring = true;
+            clearInterval(timerState.timerId);
+            volatileChatTimers.delete(msgEl);
+            msgEl.style.transition = 'all 0.5s ease';
+            msgEl.style.opacity = '0';
+            msgEl.style.transform = 'translateY(-10px)';
+            timerState.removalTimerId = setTimeout(() => {
+                msgEl.remove();
+            }, 500);
+            return;
+        }
+
+        const displayTime = formatDuration(elapsed);
+        if (timerState.countSpan.textContent !== displayTime) {
+            timerState.countSpan.textContent = displayTime;
+        }
+    }
+
+    function refreshVolatileChatTimers() {
+        volatileChatTimers.forEach((timerState, msgEl) => {
+            updateVolatileChatTimer(msgEl, timerState);
+        });
+    }
+
+    function stopVolatileChatTimer(msgEl) {
+        const timerState = volatileChatTimers.get(msgEl);
+        if (!timerState) return;
+        clearInterval(timerState.timerId);
+        clearTimeout(timerState.removalTimerId);
+        volatileChatTimers.delete(msgEl);
+    }
+
+    function clearVolatileChatTimers() {
+        volatileChatTimers.forEach(timerState => {
+            clearInterval(timerState.timerId);
+            clearTimeout(timerState.removalTimerId);
+        });
+        volatileChatTimers.clear();
     }
 
     function appendChatRowContent(msgRow, bubbleEl, isMine, unreadCount, volatileBadge) {
@@ -10677,7 +10740,9 @@
 
         // Keep only last 200 messages
         while ($chatMessages.children.length > 200) {
-            $chatMessages.removeChild($chatMessages.firstChild);
+            const oldestMessage = $chatMessages.firstChild;
+            stopVolatileChatTimer(oldestMessage);
+            $chatMessages.removeChild(oldestMessage);
         }
 
         // Auto-scroll
@@ -11068,7 +11133,9 @@
         $chatMessages.appendChild(msgEl);
 
         while ($chatMessages.children.length > 200) {
-            $chatMessages.removeChild($chatMessages.firstChild);
+            const oldestMessage = $chatMessages.firstChild;
+            stopVolatileChatTimer(oldestMessage);
+            $chatMessages.removeChild(oldestMessage);
         }
 
         $chatMessages.scrollTop = $chatMessages.scrollHeight;

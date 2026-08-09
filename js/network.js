@@ -8,6 +8,8 @@ const CLOUDFLARE_WORKER_URL = ((window.location.hostname === 'localhost' || wind
     ? 'http://localhost:8787'
     : 'https://picchat-turn.jssimonlee.workers.dev';
 
+const MAX_CHAT_FILE_BYTES = 30 * 1024 * 1024;
+const MAX_CHAT_FILE_DATA_URL_LENGTH = Math.ceil(MAX_CHAT_FILE_BYTES * 4 / 3) + 4096;
 
 class NetworkManager {
     constructor(callbacks = {}) {
@@ -53,6 +55,7 @@ class NetworkManager {
         this.myColor = '';
         this.myPeerId = '';
         this.coordinatorId = '';
+        this.roomParticipantCount = 1;
 
         // Mobile browsers temporarily suspend signaling and WebRTC when the
         // screen is locked. Keep transient connection state separate from an
@@ -246,6 +249,8 @@ class NetworkManager {
                 const data = await response.json();
                 let peerIds = data.peerIds || [];
                 const maxParticipants = data.maxParticipants !== undefined ? data.maxParticipants : 2;
+                this.maxParticipants = maxParticipants;
+                this.roomParticipantCount = peerIds.length + 1;
 
                 if (peerIds.length === 0) {
                     reject(new Error('peer-unavailable'));
@@ -612,15 +617,18 @@ class NetworkManager {
             }
 
             case 'user-joined':
+                this.roomParticipantCount++;
                 this.onPeerJoin(data.peerId, data.nickname, data.color, false);
                 break;
 
             case 'user-left':
+                this.roomParticipantCount = Math.max(1, this.roomParticipantCount - 1);
                 this.onPeerLeave(data.peerId, data.nickname);
                 break;
 
             case 'user-list':
                 if (data.users) {
+                    this.roomParticipantCount = data.users.length;
                     data.users.forEach(u => {
                         this.onPeerJoin(u.peerId, u.nickname, u.color, u.isAway || false);
                     });
@@ -749,10 +757,14 @@ class NetworkManager {
             }
 
             case 'file': {
-                const maxEncodedFileLength = 12 * 1024 * 1024;
-                if (typeof data.fileData !== 'string' || data.fileData.length > maxEncodedFileLength) {
+                const declaredFileSize = Number(data.fileSize);
+                const hasInvalidDeclaredSize = Number.isFinite(declaredFileSize)
+                    && (declaredFileSize < 0 || declaredFileSize > MAX_CHAT_FILE_BYTES);
+                if (typeof data.fileData !== 'string'
+                    || data.fileData.length > MAX_CHAT_FILE_DATA_URL_LENGTH
+                    || hasInvalidDeclaredSize) {
                     console.warn('[Network] Rejected oversized or invalid file payload');
-                    this.onError('안전한 수신 범위를 넘는 파일이라 받지 않았습니다. 8MB 이하 파일로 다시 시도해주세요.');
+                    this.onError('안전한 수신 범위를 넘는 파일이라 받지 않았습니다. 직접 연결에서도 최대 30MB 이하 파일만 받을 수 있습니다.');
                     break;
                 }
                 const recipientId = data.recipientId || 'all';
@@ -1065,7 +1077,7 @@ class NetworkManager {
         return msgId;
     }
 
-    sendFile(fileName, fileType, fileData, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
+    sendFile(fileName, fileType, fileData, fileSize, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
         if (!msgId) {
             msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
@@ -1075,6 +1087,7 @@ class NetworkManager {
             fileName,
             fileType,
             fileData,
+            fileSize,
             recipientId,
             nickname: this.nickname,
             color: this.myColor,
@@ -1133,39 +1146,68 @@ class NetworkManager {
         }
     }
 
-    async isConnectionRelayed(recipientId = 'all') {
-        const checkPC = async (pc) => {
-            if (!pc) return false;
-            try {
-                const stats = await pc.getStats();
-                let isRelay = false;
-                stats.forEach(report => {
-                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                        const local = stats.get(report.localCandidateId);
-                        const remote = stats.get(report.remoteCandidateId);
-                        if ((local && local.candidateType === 'relay') || 
-                            (remote && remote.candidateType === 'relay')) {
-                            isRelay = true;
-                        }
-                    }
-                });
-                return isRelay;
-            } catch (e) {
-                return false;
-            }
-        };
+    async _getPeerConnectionPath(info) {
+        const pc = info?.conn?.peerConnection;
+        if (!pc) return 'unknown';
+
+        try {
+            const stats = await pc.getStats();
+            const selectedPairIds = new Set();
+            stats.forEach(report => {
+                if (report.type === 'transport' && report.selectedCandidatePairId) {
+                    selectedPairIds.add(report.selectedCandidatePairId);
+                }
+            });
+
+            let fallbackPair = null;
+            let selectedPair = null;
+            stats.forEach(report => {
+                if (report.type !== 'candidate-pair' || report.state !== 'succeeded') return;
+                fallbackPair = fallbackPair || report;
+                if (selectedPairIds.has(report.id) || report.selected === true || report.nominated === true) {
+                    selectedPair = report;
+                }
+            });
+
+            const pair = selectedPair || fallbackPair;
+            if (!pair) return 'unknown';
+            const local = stats.get(pair.localCandidateId);
+            const remote = stats.get(pair.remoteCandidateId);
+            if (!local || !remote || !local.candidateType || !remote.candidateType) return 'unknown';
+            if (local.candidateType === 'relay' || remote.candidateType === 'relay') return 'relay';
+            return 'direct';
+        } catch (e) {
+            console.warn('[Network] Failed to inspect WebRTC connection path:', e);
+            return 'unknown';
+        }
+    }
+
+    async getConnectionPath(recipientId = 'all') {
+        if (recipientId === this.myPeerId) return 'direct';
 
         if (recipientId === 'all') {
-            for (const [pid, info] of this.connections) {
-                if (await checkPC(info.conn?.peerConnection)) {
-                    return true;
-                }
-            }
-            return false;
-        } else {
-            const info = this.connections.get(recipientId);
-            return await checkPC(info?.conn?.peerConnection);
+            // A guest sends through the host. In a room with more than two
+            // participants it cannot inspect the host's downstream paths, so
+            // keep the conservative limit.
+            if (!this.isHost && this.roomParticipantCount > 2) return 'unknown';
+
+            const paths = await Promise.all(
+                Array.from(this.connections.values()).map(info => this._getPeerConnectionPath(info))
+            );
+            if (paths.length === 0) return 'direct';
+            if (paths.includes('relay')) return 'relay';
+            if (paths.includes('unknown')) return 'unknown';
+            return 'direct';
         }
+
+        // Guests only connect directly to the coordinator. A private message
+        // to another guest is relayed by the host and is therefore unknown.
+        if (!this.isHost && recipientId !== this.coordinatorId) return 'unknown';
+        return this._getPeerConnectionPath(this.connections.get(recipientId));
+    }
+
+    async isConnectionRelayed(recipientId = 'all') {
+        return (await this.getConnectionPath(recipientId)) === 'relay';
     }
 
     sendLaser(pointsOrAction, color) {
