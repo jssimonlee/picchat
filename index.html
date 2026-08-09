@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260809-1">
+    <link rel="stylesheet" href="css/style.css?v=20260809-2">
 </head>
 <body>
     <!-- ===== LOBBY SCREEN ===== -->
@@ -449,7 +449,7 @@
             </div>
 
             <!-- Sudoku Game Playing -->
-            <div id="sudokuGame" class="sudoku-view" hidden>
+            <div id="sudokuGame" class="sudoku-view sudoku-playing-view" hidden>
                 <!-- Game result overlay (for dramatic transitions) -->
                 <div id="sudokuGameOverlay" class="sudoku-game-overlay">
                     <div class="sudoku-game-overlay-card">
@@ -681,7 +681,7 @@
             </div>
 
             <!-- Gomoku Game Playing -->
-            <div id="gomokuGame" class="sudoku-view" hidden>
+            <div id="gomokuGame" class="sudoku-view sudoku-playing-view" hidden>
                 <div class="sudoku-game-layout" style="grid-template-columns: 1.3fr 1fr; gap: 24px;">
                     <!-- Left column: Gomoku Board -->
                     <div class="sudoku-game-left">
@@ -816,7 +816,7 @@
             </div>
 
             <!-- Othello Game Playing -->
-            <div id="othelloGame" class="sudoku-view" hidden>
+            <div id="othelloGame" class="sudoku-view sudoku-playing-view" hidden>
                 <div class="sudoku-game-layout" style="grid-template-columns: 1.3fr 1fr; gap: 24px;">
                     <!-- Left column: Othello Board -->
                     <div class="sudoku-game-left">
@@ -968,7 +968,7 @@
             </div>
 
             <!-- Minesweeper Game Playing -->
-            <div id="minesweeperGame" class="sudoku-view" hidden>
+            <div id="minesweeperGame" class="sudoku-view sudoku-playing-view" hidden>
                 <!-- Top stats bar -->
                 <div class="sudoku-stats-bar" style="max-width: 100%; margin-bottom: 20px; padding: 12px 24px; border-radius: 12px; background: rgba(241, 245, 249, 0.7); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
                     <div class="sudoku-stat-item">
@@ -1107,7 +1107,7 @@
             </div>
 
             <!-- Speedrun Game Playing -->
-            <div id="speedrunGame" class="sudoku-view" hidden>
+            <div id="speedrunGame" class="sudoku-view sudoku-playing-view" hidden>
                 <!-- Stats bar (Timer, My Score, Peer Score) -->
                 <div class="sudoku-stats-bar" style="max-width: 100%; margin-bottom: 20px;">
                     <div class="sudoku-stat-item">
@@ -1293,7 +1293,7 @@
             </div>
 
             <!-- Dots and Boxes Game Playing -->
-            <div id="dotsboxesGame" class="sudoku-view" hidden>
+            <div id="dotsboxesGame" class="sudoku-view sudoku-playing-view" hidden>
                 <div class="sudoku-game-layout">
                     <!-- Left column: Dots Board -->
                     <div class="sudoku-game-main">

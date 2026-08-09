@@ -3983,6 +3983,8 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
         height: 100vh;
         height: 100dvh;
         max-height: none;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top);
         border-radius: 0;
     }
 
@@ -3990,6 +3992,10 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
         min-height: 0;
         overflow-y: auto;
         padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    }
+
+    .sudoku-playing-view {
+        justify-content: flex-start;
     }
 }
 
