@@ -54,6 +54,16 @@ class NetworkManager {
         this.myPeerId = '';
         this.coordinatorId = '';
 
+        // Mobile browsers temporarily suspend signaling and WebRTC when the
+        // screen is locked. Keep transient connection state separate from an
+        // intentional room exit so a foregrounded page can recover in-place.
+        this._isDisconnecting = false;
+        this._peerLeaveTimers = new Map();
+        this._incomingHandlerPeer = null;
+        this._coordinatorConnectTarget = null;
+        this._coordinatorConnectTimeout = null;
+        this._resumeTimer = null;
+
         this._peerColors = [
             '#ef4444', // Vibrant Red
             '#3b82f6', // Vibrant Blue
@@ -141,6 +151,7 @@ class NetworkManager {
 
     createRoom(nickname, customCode = null, maxParticipants = 2) {
         return new Promise(async (resolve, reject) => {
+            this._isDisconnecting = false;
             this.isHost = true;
             this.nickname = nickname;
             this.myColor = this._nextColor();
@@ -180,6 +191,8 @@ class NetworkManager {
 
             const peerConfig = await this._getPeerConfig();
             this.peer = new Peer(peerId, peerConfig);
+            this._bindPeerLifecycle();
+            this._bindIncomingConnectionHandler();
 
             this.peer.on('open', async (id) => {
                 this.myPeerId = id;
@@ -188,11 +201,6 @@ class NetworkManager {
 
                 // Save initial peer ID to database
                 await this._syncRoomWithDb([this.myPeerId]);
-
-                // Host listens for incoming connections
-                this.peer.on('connection', (conn) => {
-                    this._handleIncomingConnection(conn);
-                });
 
                 resolve(this.roomCode);
             });
@@ -217,12 +225,6 @@ class NetworkManager {
                 }
             });
 
-            this.peer.on('disconnected', () => {
-                console.log('[Network] Disconnected, attempting reconnect...');
-                if (this.peer && !this.peer.destroyed) {
-                    this.peer.reconnect();
-                }
-            });
         });
     }
 
@@ -230,6 +232,7 @@ class NetworkManager {
 
     joinRoom(roomCode, nickname) {
         return new Promise(async (resolve, reject) => {
+            this._isDisconnecting = false;
             this.isHost = false;
             this.nickname = nickname;
             this.myColor = this._nextColor();
@@ -280,24 +283,12 @@ class NetworkManager {
                 const peerConfig = await this._getPeerConfig();
                 
                 this.peer = new Peer(myPeerId, peerConfig);
+                this._bindPeerLifecycle();
+                this._bindIncomingConnectionHandler();
 
                 this.peer.on('open', (id) => {
                     this.myPeerId = id;
                     console.log('[Network] My PeerId:', id, '→ connecting to host:', hostPeerId);
-
-                    // Allow room-capacity recovery checks to verify that this
-                    // participant is still alive without joining it to the room.
-                    this.peer.on('connection', (incomingConn) => {
-                        if (incomingConn.metadata && incomingConn.metadata.healthCheck) {
-                            incomingConn.on('open', () => {
-                                setTimeout(() => {
-                                    try { incomingConn.close(); } catch (e) {}
-                                }, 80);
-                            });
-                        } else {
-                            try { incomingConn.close(); } catch (e) {}
-                        }
-                    });
 
                     const conn = this.peer.connect(hostPeerId, {
                         reliable: true,
@@ -353,6 +344,43 @@ class NetworkManager {
 
     /* ---------- Connection Handling ---------- */
 
+    _bindPeerLifecycle() {
+        const boundPeer = this.peer;
+        if (!boundPeer) return;
+
+        boundPeer.on('disconnected', () => {
+            if (this._isDisconnecting || this.peer !== boundPeer) return;
+            console.log('[Network] Signaling disconnected, attempting reconnect...');
+            this._reconnectSignaling();
+        });
+    }
+
+    _bindIncomingConnectionHandler() {
+        if (!this.peer || this._incomingHandlerPeer === this.peer) return;
+        const boundPeer = this.peer;
+        this._incomingHandlerPeer = boundPeer;
+
+        boundPeer.on('connection', (conn) => {
+            const isHealthCheck = Boolean(conn.metadata && conn.metadata.healthCheck);
+            if (this.peer === boundPeer && (this.isHost || isHealthCheck)) {
+                this._handleIncomingConnection(conn);
+                return;
+            }
+            try { conn.close(); } catch (e) {}
+        });
+    }
+
+    _reconnectSignaling() {
+        if (!this.peer || this.peer.destroyed || this._isDisconnecting) return;
+        if (this.peer.disconnected) {
+            try {
+                this.peer.reconnect();
+            } catch (e) {
+                console.warn('[Network] Signaling reconnect attempt failed:', e);
+            }
+        }
+    }
+
     _handleIncomingConnection(conn) {
         const peerId = conn.peer;
         console.log('[Network] Incoming connection from:', peerId);
@@ -366,8 +394,28 @@ class NetworkManager {
             return;
         }
 
+        // A resumed mobile peer keeps its PeerJS ID. Let that connection replace
+        // the suspended one even while the room is otherwise at capacity.
+        const isReplacement = this.connections.has(peerId);
+
+        // If a genuinely new participant arrives while a closed connection is
+        // still in its mobile grace period, clear only the confirmed-unhealthy
+        // slot before enforcing the room limit.
+        if (this.isHost && !isReplacement && this.maxParticipants !== undefined && this.getPeerCount() >= this.maxParticipants) {
+            const stalePeerIds = [];
+            this.connections.forEach((info, connectedPeerId) => {
+                if (!this._isConnectionHealthy(info)) {
+                    stalePeerIds.push(connectedPeerId);
+                }
+            });
+            stalePeerIds.forEach(stalePeerId => {
+                this._cancelPeerLeave(stalePeerId);
+                this._finalizePeerLeave(stalePeerId);
+            });
+        }
+
         // Check if room is full
-        if (this.isHost && this.maxParticipants !== undefined && this.getPeerCount() >= this.maxParticipants) {
+        if (this.isHost && !isReplacement && this.maxParticipants !== undefined && this.getPeerCount() >= this.maxParticipants) {
             console.log('[Network] Room is full, rejecting connection from:', peerId);
             setTimeout(() => {
                 try {
@@ -383,8 +431,15 @@ class NetworkManager {
             const nickname = meta.nickname || 'Guest';
             const color = meta.color || this._nextColor();
 
+            const previous = this.connections.get(peerId);
+
             this.connections.set(peerId, { conn, nickname, color });
+            this._cancelPeerLeave(peerId);
             this._setupDataHandler(conn, peerId);
+
+            if (previous && previous.conn !== conn) {
+                try { previous.conn.close(); } catch (e) {}
+            }
 
             console.log('[Network] Peer connected:', nickname);
 
@@ -417,7 +472,9 @@ class NetworkManager {
             const pc = conn.peerConnection;
             const onStateChange = () => {
                 const state = pc.iceConnectionState;
-                if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+                if (state === 'connected' || state === 'completed') {
+                    this._cancelPeerLeave(peerId);
+                } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
                     this._handlePeerLeave(peerId);
                 }
             };
@@ -425,7 +482,9 @@ class NetworkManager {
             
             const onConnStateChange = () => {
                 const state = pc.connectionState;
-                if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+                if (state === 'connected') {
+                    this._cancelPeerLeave(peerId);
+                } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
                     this._handlePeerLeave(peerId);
                 }
             };
@@ -434,6 +493,44 @@ class NetworkManager {
     }
 
     _handlePeerLeave(peerId) {
+        if (this._isDisconnecting || this._peerLeaveTimers.has(peerId)) return;
+
+        // `disconnected` is frequently temporary on mobile. Give ICE/DataChannel
+        // time to recover, and never start host migration while this guest page
+        // itself is backgrounded.
+        const timerId = setTimeout(() => {
+            this._peerLeaveTimers.delete(peerId);
+
+            const current = this.connections.get(peerId);
+            if (this._isConnectionHealthy(current)) return;
+
+            if (!this.isHost && peerId === this.coordinatorId && document.visibilityState === 'hidden') {
+                return;
+            }
+
+            this._finalizePeerLeave(peerId);
+        }, 30000);
+
+        this._peerLeaveTimers.set(peerId, timerId);
+    }
+
+    _cancelPeerLeave(peerId) {
+        const timerId = this._peerLeaveTimers.get(peerId);
+        if (timerId) {
+            clearTimeout(timerId);
+            this._peerLeaveTimers.delete(peerId);
+        }
+    }
+
+    _isConnectionHealthy(info) {
+        if (!info || !info.conn || !info.conn.open) return false;
+        const pc = info.conn.peerConnection;
+        if (!pc) return true;
+        return !['disconnected', 'failed', 'closed'].includes(pc.connectionState)
+            && !['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState);
+    }
+
+    _finalizePeerLeave(peerId) {
         const peer = this.connections.get(peerId);
         if (peer) {
             console.log('[Network] Peer left:', peer.nickname);
@@ -1190,11 +1287,6 @@ class NetworkManager {
                 this.coordinatorId = this.myPeerId;
                 this.connections.clear();
 
-                // Re-bind connection handler for incoming guests
-                this.peer.on('connection', (conn) => {
-                    this._handleIncomingConnection(conn);
-                });
-
                 // Sync new state to DB
                 await this._syncRoomWithDb(this.getActivePeerIds());
 
@@ -1219,12 +1311,33 @@ class NetworkManager {
     }
 
     _connectToCoordinator(coordinatorId) {
+        if (!this.peer || this.peer.destroyed || this._isDisconnecting) return;
+        if (this._isConnectionHealthy(this.connections.get(coordinatorId))) return;
+        if (this._coordinatorConnectTarget === coordinatorId) return;
+
+        this._coordinatorConnectTarget = coordinatorId;
+        clearTimeout(this._coordinatorConnectTimeout);
+        this._coordinatorConnectTimeout = setTimeout(() => {
+            if (this._coordinatorConnectTarget === coordinatorId) {
+                this._coordinatorConnectTarget = null;
+            }
+        }, 12000);
+
+        const previous = this.connections.get(coordinatorId);
+        if (previous) {
+            this.connections.delete(coordinatorId);
+            try { previous.conn.close(); } catch (e) {}
+        }
+
         const conn = this.peer.connect(coordinatorId, {
             reliable: true,
             metadata: { nickname: this.nickname, color: this.myColor }
         });
 
         conn.on('open', () => {
+            clearTimeout(this._coordinatorConnectTimeout);
+            this._coordinatorConnectTarget = null;
+            this._cancelPeerLeave(coordinatorId);
             console.log('[Network] Reconnected to the new Host:', coordinatorId);
             this.connections.set(coordinatorId, {
                 conn,
@@ -1247,12 +1360,70 @@ class NetworkManager {
         });
 
         conn.on('error', (err) => {
+            clearTimeout(this._coordinatorConnectTimeout);
+            this._coordinatorConnectTarget = null;
             console.error('[Network] Failed to connect to the new Host:', err);
             // Retrying migration to find next host candidate
             setTimeout(() => {
                 this._handleHostMigration();
             }, 1000);
         });
+    }
+
+    resumeConnectivity() {
+        if (!this.peer || this.peer.destroyed || this._isDisconnecting) return;
+
+        this._reconnectSignaling();
+        clearTimeout(this._resumeTimer);
+        this._resumeTimer = setTimeout(() => {
+            this._reconcileConnectionsAfterResume();
+        }, this.peer.disconnected ? 800 : 100);
+    }
+
+    async _reconcileConnectionsAfterResume() {
+        if (!this.peer || this.peer.destroyed || this._isDisconnecting || document.visibilityState === 'hidden') {
+            return;
+        }
+
+        if (this.peer.disconnected) {
+            this._reconnectSignaling();
+            this._resumeTimer = setTimeout(() => this._reconcileConnectionsAfterResume(), 1000);
+            return;
+        }
+
+        let targetCoordinator = this.coordinatorId;
+        try {
+            const response = await fetch(`${CLOUDFLARE_WORKER_URL}/api/rooms/${this.roomCode}`);
+            if (response.ok) {
+                const data = await response.json();
+                const databaseCoordinator = Array.isArray(data.peerIds) ? data.peerIds[0] : null;
+                if (databaseCoordinator && databaseCoordinator !== this.myPeerId) {
+                    targetCoordinator = databaseCoordinator;
+                    const coordinatorChanged = this.coordinatorId !== databaseCoordinator;
+
+                    // If this page used to host the room while suspended, another
+                    // participant may already have taken over. Rejoin that host
+                    // instead of creating two independent room coordinators.
+                    if (this.isHost || coordinatorChanged) {
+                        const staleConnections = Array.from(this.connections.values());
+                        this.connections.clear();
+                        staleConnections.forEach(info => {
+                            try { info.conn.close(); } catch (e) {}
+                        });
+                    }
+                    if (this.isHost) {
+                        this.isHost = false;
+                    }
+                    this.coordinatorId = databaseCoordinator;
+                }
+            }
+        } catch (e) {
+            console.warn('[Network] Room reconciliation after resume failed:', e);
+        }
+
+        if (!this.isHost && targetCoordinator) {
+            this._connectToCoordinator(targetCoordinator);
+        }
     }
 
     /* ---------- Getters ---------- */
@@ -1318,6 +1489,13 @@ class NetworkManager {
     }
 
     disconnect() {
+        this._isDisconnecting = true;
+        clearTimeout(this._resumeTimer);
+        clearTimeout(this._coordinatorConnectTimeout);
+        this._coordinatorConnectTarget = null;
+        this._peerLeaveTimers.forEach(timerId => clearTimeout(timerId));
+        this._peerLeaveTimers.clear();
+
         if (this.roomCode && this.myPeerId) {
             try {
                 const remaining = this.getActivePeerIds().filter(id => id !== this.myPeerId);

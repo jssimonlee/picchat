@@ -603,7 +603,7 @@
             if (savedPref !== null) {
                 $chkAwayOverlay.checked = savedPref === 'true';
             } else {
-                $chkAwayOverlay.checked = true; // Default behavior: enabled (show away overlay)
+                $chkAwayOverlay.checked = false; // Default behavior: disabled
             }
 
             $chkAwayOverlay.addEventListener('change', () => {
@@ -670,6 +670,12 @@
                 awayTimer = null;
             }
 
+            // Some mobile WebViews report only focus (without pageshow or a
+            // visibility transition) when returning from the lock screen.
+            if (network && !isSelectingFile) {
+                network.resumeConnectivity();
+            }
+
             // Reset the file selection flag with a short delay to allow blur events to resolve
             setTimeout(() => {
                 isSelectingFile = false;
@@ -681,8 +687,22 @@
         });
 
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && isChatOpen) {
-                markAllUnreadMessagesAsRead();
+            if (document.visibilityState === 'visible') {
+                if (network) {
+                    network.resumeConnectivity();
+                }
+                if (isChatOpen) {
+                    markAllUnreadMessagesAsRead();
+                }
+            }
+        });
+
+        // Mobile browsers can suspend both PeerJS signaling and WebRTC while the
+        // screen is locked. Reconcile the room when the page is restored from
+        // the back-forward cache or wakes without a visibility event.
+        window.addEventListener('pageshow', () => {
+            if (network) {
+                network.resumeConnectivity();
             }
         });
 
@@ -694,6 +714,7 @@
         $btnResume.addEventListener('click', () => {
             $awayOverlay.hidden = true;
             if (network && network.myPeerId) {
+                network.resumeConnectivity();
                 network.sendPresence(false);
                 const me = knownParticipants.get(network.myPeerId);
                 if (me) {
