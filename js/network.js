@@ -56,6 +56,7 @@ class NetworkManager {
         this.myPeerId = '';
         this.coordinatorId = '';
         this.roomParticipantCount = 1;
+        this.clientId = this._getOrCreateClientId();
 
         // Mobile browsers temporarily suspend signaling and WebRTC when the
         // screen is locked. Keep transient connection state separate from an
@@ -66,6 +67,7 @@ class NetworkManager {
         this._coordinatorConnectTarget = null;
         this._coordinatorConnectTimeout = null;
         this._resumeTimer = null;
+        this._pendingJoin = null;
 
         this._peerColors = [
             '#ef4444', // Vibrant Red
@@ -87,6 +89,58 @@ class NetworkManager {
     }
 
     /* ---------- Room Code Generation ---------- */
+
+    _getOrCreateClientId() {
+        const storageKey = 'picchat-client-id';
+        try {
+            let clientId = localStorage.getItem(storageKey);
+            if (!clientId) {
+                clientId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+                    ? globalThis.crypto.randomUUID()
+                    : 'client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 11);
+                localStorage.setItem(storageKey, clientId);
+            }
+            return clientId;
+        } catch (e) {
+            return 'client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 11);
+        }
+    }
+
+    _beginJoinHandshake(resolve, reject) {
+        this._clearPendingJoin();
+        const timeoutId = setTimeout(() => {
+            if (!this._pendingJoin) return;
+            const pending = this._pendingJoin;
+            this._pendingJoin = null;
+            pending.reject(new Error('peer-unavailable'));
+            try { this.disconnect(); } catch (e) {}
+        }, 12000);
+        this._pendingJoin = { resolve, reject, timeoutId };
+    }
+
+    _acceptPendingJoin() {
+        if (!this._pendingJoin) return;
+        const pending = this._pendingJoin;
+        this._pendingJoin = null;
+        clearTimeout(pending.timeoutId);
+        this.onReady();
+        pending.resolve();
+    }
+
+    _rejectPendingJoin(error) {
+        if (!this._pendingJoin) return false;
+        const pending = this._pendingJoin;
+        this._pendingJoin = null;
+        clearTimeout(pending.timeoutId);
+        pending.reject(error);
+        return true;
+    }
+
+    _clearPendingJoin() {
+        if (!this._pendingJoin) return;
+        clearTimeout(this._pendingJoin.timeoutId);
+        this._pendingJoin = null;
+    }
 
     _generateRoomCode() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous chars
@@ -257,30 +311,9 @@ class NetworkManager {
                     return;
                 }
 
-                // A mobile browser can be terminated while selecting or receiving a file,
-                // leaving its peer ID in D1 until the host notices the dropped WebRTC link.
-                // Before rejecting a rejoin as full, remove offline non-host peers.
-                if (peerIds.length >= maxParticipants && peerIds.length > 1) {
-                    const coordinatorId = peerIds[0];
-                    const candidates = peerIds.slice(1);
-                    const activeChecks = await Promise.all(
-                        candidates.map(peerId => this._checkIfPeerIsActive(peerId))
-                    );
-                    const activeGuests = candidates.filter((peerId, index) => activeChecks[index]);
-                    const cleanedPeerIds = [coordinatorId, ...activeGuests];
-
-                    if (cleanedPeerIds.length !== peerIds.length) {
-                        peerIds = cleanedPeerIds;
-                        await this._syncRoomWithDb(peerIds);
-                    }
-                }
-
-                if (peerIds.length >= maxParticipants) {
-                    reject(new Error('room-full'));
-                    return;
-                }
-
-                // Connect to the oldest active peer (the current coordinator/host)
+                // The database can still contain a suspended mobile peer. Let the
+                // host make the authoritative capacity decision so it can replace
+                // an older connection from the same browser session first.
                 const hostPeerId = peerIds[0];
                 this.coordinatorId = hostPeerId;
 
@@ -297,7 +330,7 @@ class NetworkManager {
 
                     const conn = this.peer.connect(hostPeerId, {
                         reliable: true,
-                        metadata: { nickname: this.nickname, color: this.myColor }
+                        metadata: { nickname: this.nickname, color: this.myColor, clientId: this.clientId }
                     });
 
                     conn.on('open', () => {
@@ -309,26 +342,33 @@ class NetworkManager {
                         });
 
                         this._setupDataHandler(conn, hostPeerId);
+                        this._beginJoinHandshake(resolve, reject);
 
                         // Send join info to host
                         conn.send({
                             type: 'join',
                             nickname: this.nickname,
                             color: this.myColor,
-                            peerId: this.myPeerId
+                            peerId: this.myPeerId,
+                            clientId: this.clientId
                         });
 
                         // Request full state
                         conn.send({ type: 'state-request' });
 
-                        this.onReady();
-                        resolve();
                     });
 
                     conn.on('error', (err) => {
                         console.error('[Network] Connection error to host:', err);
-                        // Try connection recovery / migration immediately
-                        this._handleHostMigration().then(() => resolve()).catch(reject);
+                        if (this._rejectPendingJoin(new Error('peer-unavailable'))) {
+                            try { this.disconnect(); } catch (e) {}
+                        }
+                    });
+
+                    conn.on('close', () => {
+                        if (this._rejectPendingJoin(new Error('peer-unavailable'))) {
+                            try { this.disconnect(); } catch (e) {}
+                        }
                     });
                 });
 
@@ -399,6 +439,33 @@ class NetworkManager {
             return;
         }
 
+        const incomingClientId = conn.metadata && conn.metadata.clientId;
+
+        // A mobile page can be recreated with a new PeerJS ID after a long sleep.
+        // Replace the older connection from the same browser session before the
+        // room-capacity check so its ghost slot cannot block the rejoin.
+        if (this.isHost && incomingClientId) {
+            let previousSessionPeerId = null;
+            this.connections.forEach((info, connectedPeerId) => {
+                if (connectedPeerId !== peerId && info.clientId === incomingClientId) {
+                    previousSessionPeerId = connectedPeerId;
+                }
+            });
+
+            if (previousSessionPeerId) {
+                const previousSession = this.connections.get(previousSessionPeerId);
+                this._cancelPeerLeave(previousSessionPeerId);
+                this.connections.delete(previousSessionPeerId);
+                this.onPeerLeave(previousSessionPeerId, previousSession.nickname);
+                this._broadcast({
+                    type: 'user-left',
+                    peerId: previousSessionPeerId,
+                    nickname: previousSession.nickname
+                }, previousSessionPeerId);
+                try { previousSession.conn.close(); } catch (e) {}
+            }
+        }
+
         // A resumed mobile peer keeps its PeerJS ID. Let that connection replace
         // the suspended one even while the room is otherwise at capacity.
         const isReplacement = this.connections.has(peerId);
@@ -435,10 +502,11 @@ class NetworkManager {
             const meta = conn.metadata || {};
             const nickname = meta.nickname || 'Guest';
             const color = meta.color || this._nextColor();
+            const clientId = meta.clientId || '';
 
             const previous = this.connections.get(peerId);
 
-            this.connections.set(peerId, { conn, nickname, color });
+            this.connections.set(peerId, { conn, nickname, color, clientId });
             this._cancelPeerLeave(peerId);
             this._setupDataHandler(conn, peerId);
 
@@ -563,10 +631,12 @@ class NetworkManager {
             case 'assign-color':
                 this.myColor = data.color;
                 this.onPeerJoin(this.myPeerId, this.nickname, this.myColor, false);
+                this._acceptPendingJoin();
                 break;
 
             case 'reject-reason':
                 if (data.reason === 'room-full') {
+                    this._rejectPendingJoin(new Error('room-full'));
                     this.onError('방의 정원이 찼습니다. (최대 ' + data.maxParticipants + '명)');
                     try { this.disconnect(); } catch (e) {}
                 }
@@ -584,6 +654,7 @@ class NetworkManager {
                     info.nickname = data.nickname;
                     info.color = assignedColor;
                     info.isAway = false;
+                    info.clientId = data.clientId || info.clientId || '';
                 }
                 this.onPeerJoin(fromPeerId, data.nickname, assignedColor, false);
 
@@ -1373,7 +1444,7 @@ class NetworkManager {
 
         const conn = this.peer.connect(coordinatorId, {
             reliable: true,
-            metadata: { nickname: this.nickname, color: this.myColor }
+            metadata: { nickname: this.nickname, color: this.myColor, clientId: this.clientId }
         });
 
         conn.on('open', () => {
@@ -1394,7 +1465,8 @@ class NetworkManager {
                 type: 'join',
                 nickname: this.nickname,
                 color: this.myColor,
-                peerId: this.myPeerId
+                peerId: this.myPeerId,
+                clientId: this.clientId
             });
 
             // Request state-request to sync canvas
@@ -1532,6 +1604,7 @@ class NetworkManager {
 
     disconnect() {
         this._isDisconnecting = true;
+        this._rejectPendingJoin(new Error('peer-unavailable'));
         clearTimeout(this._resumeTimer);
         clearTimeout(this._coordinatorConnectTimeout);
         this._coordinatorConnectTarget = null;
