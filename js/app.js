@@ -327,6 +327,10 @@
     const $volatileDesc = document.getElementById('volatileDesc');
     const $btnChatSettings = document.getElementById('btnChatSettings');
     const $chatSettingsPanel = document.getElementById('chatSettingsPanel');
+    const $btnMaskChat = document.getElementById('btnMaskChat');
+    const $chkChatNotifications = document.getElementById('chkChatNotifications');
+    const $chatNotificationStatus = document.getElementById('chatNotificationStatus');
+    const $favicon = document.querySelector('link[rel~="icon"]');
     const $studioRoomLimitBadge = document.getElementById('studioRoomLimitBadge');
     const $chatRoomLimitSelect = document.getElementById('chatRoomLimitSelect');
     const $gridTemplate = document.getElementById('gridTemplate');
@@ -345,9 +349,16 @@
     const remoteCursors = new Map(); // peerId -> DOM element
     const knownParticipants = new Map(); // peerId -> { nickname, color }
     let chatUnreadCount = 0;
+    let backgroundChatUnreadCount = 0;
     let isChatOpen = false;
+    let isChatContentMasked = false;
     let chatScrollFrame = null;
     const volatileChatTimers = new Map(); // message element -> wall-clock timer state
+    const ORIGINAL_PAGE_TITLE = document.title;
+    const ORIGINAL_FAVICON_HREF = $favicon ? $favicon.href : '';
+    const UNREAD_FAVICON_HREF = 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#7c5cff"/><path d="M14 16h36v25H29l-10 8v-8h-5z" fill="#fff"/><circle cx="51" cy="13" r="11" fill="#ff3b30" stroke="#fff" stroke-width="4"/></svg>'
+    );
     const CHAT_FILE_LIMIT_RELAY_DESKTOP = 8 * 1024 * 1024;
     const CHAT_FILE_LIMIT_RELAY_MOBILE = 5 * 1024 * 1024;
     const CHAT_FILE_LIMIT_DIRECT_DESKTOP = 30 * 1024 * 1024;
@@ -668,6 +679,7 @@
         });
 
         window.addEventListener('focus', () => {
+            clearBackgroundChatIndicator();
             if (awayTimer) {
                 clearTimeout(awayTimer);
                 awayTimer = null;
@@ -692,6 +704,7 @@
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
+                clearBackgroundChatIndicator();
                 if (network) {
                     network.resumeConnectivity();
                 }
@@ -1096,16 +1109,25 @@
                 handleDotsBoxesNetworkMessage(fromPeerId, payload);
             },
             onChat: (fromPeerId, message, nickname, color, recipientId, isVolatile, volatileDuration, msgId) => {
-                addChatMessage(nickname, message, color, fromPeerId === network.myPeerId, recipientId, isVolatile, volatileDuration, msgId);
+                const isMine = fromPeerId === network.myPeerId;
+                addChatMessage(nickname, message, color, isMine, recipientId, isVolatile, volatileDuration, msgId, fromPeerId);
+                if (!isMine) notifyIncomingChat(nickname, message);
             },
             onFileReceived: (fromPeerId, data) => {
-                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, fromPeerId === network.myPeerId, data.recipientId, data.isVolatile, data.volatileDuration, data.msgId);
+                const isMine = fromPeerId === network.myPeerId;
+                addChatFileCard(data.nickname, data.fileName, data.fileType, data.fileData, data.color, isMine, data.recipientId, data.isVolatile, data.volatileDuration, data.msgId, fromPeerId);
+                if (!isMine) notifyIncomingChat(data.nickname, `📎 ${data.fileName}`);
             },
             onReadReceipt: (fromPeerId, msgIds) => {
                 handleIncomingReadReceipts(fromPeerId, msgIds);
             },
             onEmoji: (fromPeerId, emoji, nickname, color, isVolatile, volatileDuration) => {
-                addChatEmojiReaction(nickname, emoji, color, fromPeerId === network.myPeerId, isVolatile, volatileDuration);
+                const isMine = fromPeerId === network.myPeerId;
+                addChatEmojiReaction(nickname, emoji, color, isMine, isVolatile, volatileDuration, fromPeerId);
+                if (!isMine) notifyIncomingChat(nickname, emoji);
+            },
+            onVolatileDurationUpdate: (senderPeerId, durationSeconds) => {
+                applyVolatileDurationToMessages(senderPeerId, durationSeconds);
             },
             onLaser: (fromPeerId, points, color) => {
                 showRemoteLaser(points, color);
@@ -3526,9 +3548,18 @@
             $chatMessages.innerHTML = '';
         }
         chatUnreadCount = 0;
+        clearBackgroundChatIndicator();
         if ($chatUnread) {
             $chatUnread.hidden = true;
             $chatUnread.textContent = '0';
+        }
+        isChatContentMasked = false;
+        if ($chatMessages) $chatMessages.classList.remove('chat-content-masked');
+        if ($btnMaskChat) {
+            $btnMaskChat.classList.remove('active');
+            $btnMaskChat.setAttribute('aria-pressed', 'false');
+            $btnMaskChat.title = '채팅 내용을 가리기';
+            $btnMaskChat.setAttribute('aria-label', '채팅 내용을 가리기');
         }
 
         // Hide away overlay if active
@@ -10341,6 +10372,29 @@
             });
         }
 
+        isChatContentMasked = false;
+        if ($chatMessages) $chatMessages.classList.remove('chat-content-masked');
+        if ($btnMaskChat) {
+            $btnMaskChat.classList.remove('active');
+            $btnMaskChat.setAttribute('aria-pressed', 'false');
+            $btnMaskChat.title = '채팅 내용을 가리기';
+            $btnMaskChat.setAttribute('aria-label', '채팅 내용을 가리기');
+        }
+
+        if ($btnMaskChat && $chatMessages) {
+            $btnMaskChat.addEventListener('click', () => {
+                isChatContentMasked = !isChatContentMasked;
+                $chatMessages.classList.toggle('chat-content-masked', isChatContentMasked);
+                $btnMaskChat.classList.toggle('active', isChatContentMasked);
+                $btnMaskChat.setAttribute('aria-pressed', String(isChatContentMasked));
+                $btnMaskChat.title = isChatContentMasked ? '채팅 내용을 다시 보이기' : '채팅 내용을 가리기';
+                $btnMaskChat.setAttribute('aria-label', $btnMaskChat.title);
+                showToast(isChatContentMasked
+                    ? '🧽 채팅 내용을 가렸습니다. 텍스트를 드래그하면 선택한 부분을 볼 수 있습니다.'
+                    : '💬 채팅 내용을 다시 표시합니다.');
+            });
+        }
+
         // Send chat message
         $btnSendChat.addEventListener('click', sendChatMessage);
         let sendAfterComposition = false;
@@ -10367,15 +10421,73 @@
 
         // Toggle volatile options visibility
         if ($chkVolatileChat && $selVolatileDuration && $volatileDesc) {
+            const savedEnabled = localStorage.getItem('picchat-volatile-enabled');
+            const savedDuration = localStorage.getItem('picchat-volatile-duration');
+            if (savedEnabled !== null) {
+                $chkVolatileChat.checked = savedEnabled === 'true';
+            }
+            if (savedDuration && Array.from($selVolatileDuration.options).some(option => option.value === savedDuration)) {
+                $selVolatileDuration.value = savedDuration;
+            }
+
             const initChecked = $chkVolatileChat.checked;
             $selVolatileDuration.style.display = initChecked ? 'block' : 'none';
             $volatileDesc.style.display = initChecked ? 'block' : 'none';
 
             $chkVolatileChat.addEventListener('change', () => {
                 const isChecked = $chkVolatileChat.checked;
+                localStorage.setItem('picchat-volatile-enabled', String(isChecked));
                 $selVolatileDuration.style.display = isChecked ? 'block' : 'none';
                 $volatileDesc.style.display = isChecked ? 'block' : 'none';
             });
+
+            $selVolatileDuration.addEventListener('change', () => {
+                const durationSeconds = parseInt($selVolatileDuration.value, 10);
+                localStorage.setItem('picchat-volatile-duration', String(durationSeconds));
+                if (network && $chkVolatileChat.checked) {
+                    network.sendVolatileDurationUpdate(durationSeconds);
+                }
+                showToast(`⏳ 현재 휘발 메시지의 시간을 ${formatDuration(durationSeconds)}으로 즉시 변경했습니다.`);
+            });
+        }
+
+        if ($chkChatNotifications && $chatNotificationStatus) {
+            if (!('Notification' in window)) {
+                $chkChatNotifications.checked = false;
+                $chkChatNotifications.disabled = true;
+                $chatNotificationStatus.textContent = '이 브라우저는 알림을 지원하지 않습니다.';
+            } else {
+                const savedNotifications = localStorage.getItem('picchat-chat-notifications') === 'true';
+                $chkChatNotifications.checked = savedNotifications && Notification.permission === 'granted';
+                $chatNotificationStatus.textContent = Notification.permission === 'denied'
+                    ? '크롬에서 알림이 차단되어 있습니다. 사이트 설정에서 허용할 수 있습니다.'
+                    : $chkChatNotifications.checked
+                        ? '백그라운드 알림이 켜져 있습니다.'
+                        : '탭을 벗어났을 때 새 메시지를 알립니다.';
+
+                $chkChatNotifications.addEventListener('change', async () => {
+                    if (!$chkChatNotifications.checked) {
+                        localStorage.setItem('picchat-chat-notifications', 'false');
+                        $chatNotificationStatus.textContent = '백그라운드 알림이 꺼져 있습니다.';
+                        return;
+                    }
+
+                    let permission = Notification.permission;
+                    if (permission === 'default') {
+                        permission = await Notification.requestPermission();
+                    }
+
+                    const isGranted = permission === 'granted';
+                    $chkChatNotifications.checked = isGranted;
+                    localStorage.setItem('picchat-chat-notifications', String(isGranted));
+                    $chatNotificationStatus.textContent = isGranted
+                        ? '백그라운드 알림이 켜져 있습니다.'
+                        : '알림이 차단되었습니다. 크롬 사이트 설정에서 허용해주세요.';
+                    showToast(isGranted
+                        ? '🔔 크롬 백그라운드 알림을 켰습니다.'
+                        : '🔕 크롬에서 알림 권한이 허용되지 않았습니다.');
+                });
+            }
         }
 
         // Change room limit (Host only)
@@ -10486,7 +10598,7 @@
                     network.sendEmoji(emoji, isVolatile, volatileDuration);
                     // Local echo for non-host
                     if (!network.isHost) {
-                        addChatEmojiReaction(network.nickname, emoji, network.myColor, true, isVolatile, volatileDuration);
+                        addChatEmojiReaction(network.nickname, emoji, network.myColor, true, isVolatile, volatileDuration, network.myPeerId);
                     }
                 }
             });
@@ -10521,6 +10633,7 @@
         }, 15);
 
         if (isChatOpen) {
+            if (!isPageInBackground()) clearBackgroundChatIndicator();
             chatUnreadCount = 0;
             $chatUnread.hidden = true;
             $chatUnread.textContent = '0';
@@ -10554,7 +10667,7 @@
         const msgId = network.sendChat(msg, recipientId, isVolatile, volatileDuration);
         // Local echo for non-host
         if (!network.isHost) {
-            addChatMessage(network.nickname, msg, network.myColor, true, recipientId, isVolatile, volatileDuration, msgId);
+            addChatMessage(network.nickname, msg, network.myColor, true, recipientId, isVolatile, volatileDuration, msgId, network.myPeerId);
         }
         $chatInput.value = '';
         $chatInput.focus();
@@ -10571,7 +10684,7 @@
         return `${tens}초`;
     }
 
-    function createVolatileTimer(msgEl, volatileDuration) {
+    function createVolatileTimer(msgEl, volatileDuration, senderPeerId) {
         const badgeEl = document.createElement('span');
         badgeEl.className = 'chat-msg-volatile-badge';
         badgeEl.title = '메시지가 전송된 뒤 지난 시간';
@@ -10583,6 +10696,7 @@
         const timerState = {
             startedAt: Date.now(),
             durationSeconds: volatileDuration,
+            senderPeerId: senderPeerId || '',
             countSpan,
             timerId: null,
             removalTimerId: null,
@@ -10596,6 +10710,53 @@
         }, 1000);
 
         return badgeEl;
+    }
+
+    function isPageInBackground() {
+        return document.visibilityState !== 'visible' || !document.hasFocus();
+    }
+
+    function updateBackgroundChatIndicator() {
+        if (backgroundChatUnreadCount > 0) {
+            const displayCount = backgroundChatUnreadCount > 99 ? '99+' : backgroundChatUnreadCount;
+            document.title = `(${displayCount}) ${ORIGINAL_PAGE_TITLE}`;
+            if ($favicon) $favicon.href = UNREAD_FAVICON_HREF;
+        } else {
+            document.title = ORIGINAL_PAGE_TITLE;
+            if ($favicon && ORIGINAL_FAVICON_HREF) $favicon.href = ORIGINAL_FAVICON_HREF;
+        }
+    }
+
+    function clearBackgroundChatIndicator() {
+        if (backgroundChatUnreadCount === 0 && document.title === ORIGINAL_PAGE_TITLE) return;
+        backgroundChatUnreadCount = 0;
+        updateBackgroundChatIndicator();
+    }
+
+    function notifyIncomingChat(nickname, previewText) {
+        if (!isPageInBackground()) return;
+
+        backgroundChatUnreadCount++;
+        updateBackgroundChatIndicator();
+
+        const notificationsEnabled = $chkChatNotifications && $chkChatNotifications.checked;
+        if (!notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+        try {
+            const notification = new Notification(`PicChat · ${nickname}`, {
+                body: String(previewText || '새 메시지가 도착했습니다.').slice(0, 120),
+                icon: ORIGINAL_FAVICON_HREF || 'favicon.jpg',
+                tag: 'picchat-new-message',
+                renotify: true
+            });
+            notification.onclick = () => {
+                window.focus();
+                if ($studio && !$studio.hidden) toggleChat(true);
+                notification.close();
+            };
+        } catch (error) {
+            console.warn('[Chat] Browser notification failed:', error);
+        }
     }
 
     function updateVolatileChatTimer(msgEl, timerState) {
@@ -10623,6 +10784,17 @@
 
     function refreshVolatileChatTimers() {
         volatileChatTimers.forEach((timerState, msgEl) => {
+            updateVolatileChatTimer(msgEl, timerState);
+        });
+    }
+
+    function applyVolatileDurationToMessages(senderPeerId, durationSeconds) {
+        const normalizedDuration = Number(durationSeconds);
+        if (!senderPeerId || !Number.isFinite(normalizedDuration) || normalizedDuration <= 0) return;
+
+        volatileChatTimers.forEach((timerState, msgEl) => {
+            if (timerState.senderPeerId !== senderPeerId || timerState.expiring) return;
+            timerState.durationSeconds = normalizedDuration;
             updateVolatileChatTimer(msgEl, timerState);
         });
     }
@@ -10667,7 +10839,7 @@
         }
     }
 
-    function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null) {
+    function addChatMessage(nickname, message, color, isMine, recipientId = 'all', isVolatile = false, volatileDuration = 0, msgId = null, senderPeerId = '') {
         if (!msgId) {
             msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
@@ -10696,12 +10868,12 @@
         bubbleEl.className = 'chat-msg-bubble';
         if (recipientId !== 'all') {
             bubbleEl.style.border = '1px dashed #cbd5e1';
-            bubbleEl.style.background = isMine ? '#f3e8ff' : '#f8fafc';
+            bubbleEl.style.background = isMine ? '#fff3a0' : '#ffffff';
         }
         bubbleEl.textContent = message;
 
         const volatileBadge = isVolatile && volatileDuration > 0
-            ? createVolatileTimer(msgEl, volatileDuration)
+            ? createVolatileTimer(msgEl, volatileDuration, senderPeerId)
             : null;
 
         // Calculate unread count details
@@ -10817,7 +10989,7 @@
         }
     }
 
-    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId, isVolatile = false, volatileDuration = 0, msgId = null) {
+    function addChatFileCard(nickname, fileName, fileType, fileData, color, isMine, recipientId, isVolatile = false, volatileDuration = 0, msgId = null, senderPeerId = '') {
         if (!msgId) {
             msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
@@ -10847,7 +11019,7 @@
         bubbleEl.style.display = 'flex';
         bubbleEl.style.flexDirection = 'column';
         bubbleEl.style.gap = '8px';
-        bubbleEl.style.background = isMine ? '#e0d7ff' : '#f1f5f9';
+        bubbleEl.style.background = isMine ? '#fee500' : '#ffffff';
         bubbleEl.style.color = '#1e293b';
         bubbleEl.style.border = recipientId !== 'all' ? '1px dashed #a855f7' : '1px solid rgba(0,0,0,0.08)';
 
@@ -11095,7 +11267,7 @@
         bubbleEl.appendChild(btnRow);
 
         const volatileBadge = isVolatile && volatileDuration > 0
-            ? createVolatileTimer(msgEl, volatileDuration)
+            ? createVolatileTimer(msgEl, volatileDuration, senderPeerId)
             : null;
 
         // Calculate unread count details
@@ -11604,7 +11776,7 @@
         }
     }
 
-    function addChatEmojiReaction(nickname, emoji, color, isMine, isVolatile = false, volatileDuration = 0) {
+    function addChatEmojiReaction(nickname, emoji, color, isMine, isVolatile = false, volatileDuration = 0, senderPeerId = '') {
         const msgEl = document.createElement('div');
         msgEl.className = 'chat-msg chat-msg-emoji-reaction' + (isMine ? ' mine' : '');
 
@@ -11618,7 +11790,7 @@
         bubbleEl.textContent = emoji;
 
         const volatileBadge = isVolatile && volatileDuration > 0
-            ? createVolatileTimer(msgEl, volatileDuration)
+            ? createVolatileTimer(msgEl, volatileDuration, senderPeerId)
             : null;
 
         const msgRow = document.createElement('div');

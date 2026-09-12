@@ -39,6 +39,7 @@ class NetworkManager {
         this.onFileReceived = callbacks.onFileReceived || (() => {});
         this.onReadReceipt = callbacks.onReadReceipt || (() => {});
         this.onEmoji = callbacks.onEmoji || (() => {});
+        this.onVolatileDurationUpdate = callbacks.onVolatileDurationUpdate || (() => {});
         this.onLaser = callbacks.onLaser || (() => {});
         this.onDrawStart = callbacks.onDrawStart || (() => {});
         this.onDrawMove = callbacks.onDrawMove || (() => {});
@@ -873,6 +874,20 @@ class NetworkManager {
                 if (this.isHost) this._broadcast(data, fromPeerId);
                 break;
 
+            case 'volatile-duration-update': {
+                const durationSeconds = Number(data.durationSeconds);
+                if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) break;
+
+                if (this.isHost) {
+                    data.senderPeerId = fromPeerId;
+                    this._broadcast(data, fromPeerId);
+                    this.onVolatileDurationUpdate(fromPeerId, durationSeconds);
+                } else {
+                    this.onVolatileDurationUpdate(data.senderPeerId || fromPeerId, durationSeconds);
+                }
+                break;
+            }
+
             case 'laser':
                 if (data.action) {
                     this.onLaser(fromPeerId, data.action);
@@ -1213,6 +1228,26 @@ class NetworkManager {
         } else {
             this.connections.forEach(info => {
                 try { info.conn.send(data); } catch(e) {}
+            });
+        }
+    }
+
+    sendVolatileDurationUpdate(durationSeconds) {
+        const normalizedDuration = Number(durationSeconds);
+        if (!Number.isFinite(normalizedDuration) || normalizedDuration <= 0) return;
+
+        const data = {
+            type: 'volatile-duration-update',
+            senderPeerId: this.myPeerId,
+            durationSeconds: normalizedDuration
+        };
+
+        this.onVolatileDurationUpdate(this.myPeerId, normalizedDuration);
+        if (this.isHost) {
+            this._broadcast(data);
+        } else {
+            this.connections.forEach(info => {
+                try { info.conn.send(data); } catch (e) {}
             });
         }
     }
