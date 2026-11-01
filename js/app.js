@@ -5196,12 +5196,14 @@
         const autoVal = getSudokuAutoFillNumber(r, c);
         if (autoVal !== null) {
             inputSudokuNumber(autoVal);
-            clearSudokuSelectedNumber();
+            setSelectedSudokuNumber(autoVal);
             return true;
         }
 
-        // Do not carry the previous automatic/user-selected digit into another cell.
-        return false;
+        // Reuse an explicitly selected/previously entered digit, without inferring an answer.
+        if (sudokuState.selectedNumberSource !== 'user' || sudokuState.selectedNumber === null) return false;
+        inputSudokuNumber(sudokuState.selectedNumber);
+        return true;
     }
 
     function applySudokuShortcutInputToSelectedCell() {
