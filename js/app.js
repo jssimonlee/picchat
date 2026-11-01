@@ -338,6 +338,40 @@
 
     // Chat Sidebar Elements
     const $chatSidebar = document.getElementById('chatSidebar');
+    const chatHome = $chatSidebar.parentElement;
+    let gameChatPreviewTimer = null;
+
+    function syncPortraitGameChat() {
+        const portrait = document.body.classList.contains('sudoku-chat-layout')
+            && isMobileLayout()
+            && (window.matchMedia('(orientation: portrait)').matches
+                || (document.activeElement === $chatInput && document.body.classList.contains('sudoku-portrait-chat')));
+        document.body.classList.toggle('sudoku-portrait-chat', portrait);
+        const target = portrait ? document.getElementById('sudokuWindow') : chatHome;
+        if ($chatSidebar.parentElement !== target) target.appendChild($chatSidebar);
+        if (!portrait) {
+            document.getElementById('sudokuChatPreview')?.setAttribute('hidden', '');
+            document.getElementById('sudokuGameUpdate')?.setAttribute('hidden', '');
+        }
+    }
+
+    function showPortraitChatPreview(nickname, text) {
+        if (!document.body.classList.contains('sudoku-portrait-chat')) return;
+        const preview = document.getElementById('sudokuChatPreview');
+        if (!preview) return;
+        preview.textContent = `${nickname}: ${String(text).slice(0, 120)}`;
+        preview.hidden = false;
+        clearTimeout(gameChatPreviewTimer);
+        gameChatPreviewTimer = setTimeout(() => { preview.hidden = true; preview.textContent = ''; }, 4000);
+    }
+
+    function signalPortraitGameUpdate() {
+        if (!document.body.classList.contains('sudoku-portrait-chat')) return;
+        const board = document.getElementById('sudokuMyWrapper');
+        const notice = document.getElementById('sudokuGameUpdate');
+        if (!board || !notice || board.getBoundingClientRect().bottom > 100) return;
+        notice.hidden = false;
+    }
     const $chatMessages = document.getElementById('chatMessages');
     const $chatInput = document.getElementById('chatInput');
     const $btnSendChat = document.getElementById('btnSendChat');
@@ -408,6 +442,7 @@
 
     function syncMobileChatViewport() {
         if (!$chatSidebar) return;
+        syncPortraitGameChat();
 
         if (!isChatOpen || !isMobileLayout()) {
             document.body.style.removeProperty('--game-visible-height');
@@ -3970,6 +4005,31 @@
     }
 
     function setupSudokuEvents() {
+        const header = $sudokuWindow.querySelector('.sudoku-header');
+        if (!document.getElementById('sudokuChatPreviewSlot')) {
+            const slot = document.createElement('div');
+            slot.id = 'sudokuChatPreviewSlot';
+            const preview = document.createElement('div');
+            preview.id = 'sudokuChatPreview';
+            preview.setAttribute('role', 'status');
+            preview.hidden = true;
+            slot.appendChild(preview);
+            header.after(slot);
+            const notice = document.createElement('button');
+            notice.id = 'sudokuGameUpdate';
+            notice.type = 'button';
+            notice.textContent = '▲ 게임 상황이 바뀌었습니다 · 게임 보기';
+            notice.hidden = true;
+            notice.onclick = () => {
+                $chatInput.blur();
+                $sudokuOverlay.scrollTo({ top: 0, behavior: 'smooth' });
+                notice.hidden = true;
+            };
+            $sudokuOverlay.prepend(notice);
+            $sudokuOverlay.addEventListener('scroll', () => {
+                if (document.getElementById('sudokuMyWrapper').getBoundingClientRect().bottom > 100) notice.hidden = true;
+            }, { passive: true });
+        }
         document.getElementById('btnSudokuPause').onclick = () => requestSudokuPause(false);
         document.getElementById('btnSudokuResume').onclick = () => requestSudokuPause(true);
         window.addEventListener('blur', () => requestSudokuPause(false));
@@ -4263,6 +4323,7 @@
                 sudokuState.pausedBy = null;
             } else return;
             updateSudokuPauseUI();
+            signalPortraitGameUpdate();
             if (network.isHost && fromPeerId !== network.myPeerId) network._broadcast({ type: 'sudoku', payload }, fromPeerId);
             return;
         }
@@ -4733,6 +4794,7 @@
 
     function applySudokuMove(peerId, r, c, val, isCorrect, elapsed, sentMistakes) {
         if (sudokuState.pausedBy || sudokuState.status !== 'playing') return;
+        signalPortraitGameUpdate();
         const isSpeedMode = sudokuState.gameMode === 'speed';
         
         if (!isSpeedMode) {
@@ -5655,6 +5717,7 @@
     }
 
     function advanceSudokuTurn() {
+        signalPortraitGameUpdate();
         if (sudokuState.turnOrder.length === 0) return;
         sudokuState.currentTurnIndex = (sudokuState.currentTurnIndex + 1) % sudokuState.turnOrder.length;
         startSudokuTurn();
@@ -6271,6 +6334,7 @@
 
     function resetSudoku() {
         document.body.classList.remove('sudoku-chat-layout');
+        syncPortraitGameChat();
         sudokuState.pausedBy = null;
         updateSudokuPauseUI();
         resetSudokuTimers();
@@ -6341,6 +6405,7 @@
         if (view === 'game') setupSudokuDuelLayout();
         document.body.classList.toggle('sudoku-chat-layout', view === 'game');
         if (view === 'game' && !isChatOpen) toggleChat(true);
+        syncPortraitGameChat();
     }
 
     /* ==========================================================================
@@ -10911,6 +10976,7 @@
     }
 
     function notifyIncomingChat(nickname, previewText) {
+        showPortraitChatPreview(nickname, previewText);
         if (!isPageInBackground()) return;
 
         backgroundChatUnreadCount++;
