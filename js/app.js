@@ -5083,7 +5083,7 @@
             }
             used.add(val);
         }
-        if (emptyCount !== 1) return null;
+        if (emptyCount !== 1 || used.size !== 8) return null;
         for (let val = 1; val <= 9; val++) {
             if (!used.has(val)) return val;
         }
@@ -5131,11 +5131,9 @@
 
     function getSudokuAutoFillNumber(r, c) {
         if (sudokuState.board[r][c] !== 0 || sudokuState.initialBoard[r][c] !== 0) return null;
-        const unitCompletionVal = getSudokuLastUnitCompletionNumber(r, c);
-        if (unitCompletionVal !== null) return unitCompletionVal;
-        const candidates = getSudokuCellCandidates(r, c);
-        if (candidates.length === 1) return candidates[0];
-        return getSudokuOnlyRemainingNumber();
+        // Only complete the last empty cell of a row, column, or 3x3 box.
+        // A single inferred candidate in a less-complete unit is not a shortcut.
+        return getSudokuLastUnitCompletionNumber(r, c);
     }
 
     function setSelectedSudokuNumber(val) {
@@ -5198,13 +5196,12 @@
         const autoVal = getSudokuAutoFillNumber(r, c);
         if (autoVal !== null) {
             inputSudokuNumber(autoVal);
-            setSelectedSudokuNumber(autoVal);
+            clearSudokuSelectedNumber();
             return true;
         }
 
-        if (sudokuState.selectedNumber === null) return false;
-        inputSudokuNumber(sudokuState.selectedNumber);
-        return true;
+        // Do not carry the previous automatic/user-selected digit into another cell.
+        return false;
     }
 
     function applySudokuShortcutInputToSelectedCell() {
