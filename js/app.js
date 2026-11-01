@@ -55,7 +55,7 @@
     const $btnConfirmJoinRoom = document.getElementById('btnConfirmJoinRoom');
     const $createRoomLimit = document.getElementById('createRoomLimit');
     const $joinRoomCodeInput = document.getElementById('joinRoomCodeInput');
-    const $chkCustomCode = document.getElementById('chkCustomCode');
+    const $chkAutoCode = document.getElementById('chkAutoCode');
     const $customCodeContainer = document.getElementById('customCodeContainer');
     const $customRoomInput = document.getElementById('customRoomInput');
     const $createRoomForm = document.getElementById('createRoomForm');
@@ -340,6 +340,7 @@
     const $chatSidebar = document.getElementById('chatSidebar');
     const chatHome = $chatSidebar.parentElement;
     let gameChatPreviewTimer = null;
+    let portraitChatNeedsScroll = false;
     let sudokuMobileStatHomes = null;
 
     function syncSudokuMobileStats() {
@@ -382,7 +383,7 @@
         if (!document.body.classList.contains('sudoku-portrait-chat')) return;
         const preview = document.getElementById('sudokuChatPreview');
         if (!preview) return;
-        preview.textContent = `${nickname}: ${String(text).slice(0, 120)}`;
+        preview.textContent = `💬 ${nickname}: ${String(text).slice(0, 120)}`;
         preview.hidden = false;
         document.getElementById('sudokuChatPreviewSlot').classList.add('has-preview');
         clearTimeout(gameChatPreviewTimer);
@@ -457,6 +458,14 @@
 
     function scrollChatToLatest() {
         if (!$chatMessages) return;
+        if (document.body.classList.contains('sudoku-portrait-chat')
+            && $chatSidebar.getBoundingClientRect().top >= (window.visualViewport?.height || window.innerHeight)) {
+            if (chatScrollFrame) cancelAnimationFrame(chatScrollFrame);
+            chatScrollFrame = null;
+            portraitChatNeedsScroll = true;
+            return;
+        }
+        portraitChatNeedsScroll = false;
         if (chatScrollFrame) cancelAnimationFrame(chatScrollFrame);
         chatScrollFrame = requestAnimationFrame(() => {
             $chatMessages.scrollTop = $chatMessages.scrollHeight;
@@ -897,6 +906,9 @@
             if (!validateNickname()) return;
             closeModals();
             $createRoomModal.hidden = false;
+            $chkAutoCode.checked = false;
+            $customCodeContainer.classList.add('open');
+            $customRoomInput.focus();
         });
 
         $btnShowJoinModal.addEventListener('click', () => {
@@ -934,9 +946,9 @@
             }
         });
 
-        // 방번호 직접 지정 토글 처리
-        $chkCustomCode.addEventListener('change', () => {
-            if ($chkCustomCode.checked) {
+        // Direct entry is the default; automatic codes require opting in.
+        $chkAutoCode.addEventListener('change', () => {
+            if (!$chkAutoCode.checked) {
                 $customCodeContainer.classList.add('open');
                 $customRoomInput.focus();
             } else {
@@ -968,7 +980,7 @@
         let customCode = null;
         const maxParticipants = parseInt($createRoomLimit.value, 10);
 
-        if ($chkCustomCode.checked) {
+        if (!$chkAutoCode.checked) {
             const rawInput = $customRoomInput.value.trim();
             if (rawInput.length !== 3) {
                 showLobbyStatus('방번호를 정확히 3자리 입력해 주세요.', 'error');
@@ -3689,8 +3701,8 @@
         $btnShowJoinModal.style.display = '';
         $joinRoomCodeInput.value = '';
         $customRoomInput.value = '';
-        $chkCustomCode.checked = false;
-        $customCodeContainer.classList.remove('open');
+        $chkAutoCode.checked = false;
+        $customCodeContainer.classList.add('open');
         if ($studioRoomLimitBadge) $studioRoomLimitBadge.style.display = 'none';
 
         // Restore hidden elements
@@ -4072,6 +4084,7 @@
             $sudokuOverlay.prepend(notice);
             $sudokuOverlay.addEventListener('scroll', () => {
                 if (document.getElementById('sudokuMyWrapper').getBoundingClientRect().bottom > 100) notice.hidden = true;
+                if (portraitChatNeedsScroll && $chatSidebar.getBoundingClientRect().top < (window.visualViewport?.height || window.innerHeight)) scrollChatToLatest();
             }, { passive: true });
         }
         document.getElementById('btnSudokuPause').onclick = () => requestSudokuPause(false);
@@ -11656,7 +11669,7 @@
             $chatMessages.removeChild(oldestMessage);
         }
 
-        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+        scrollChatToLatest();
 
         if (!isChatOpen) {
             chatUnreadCount++;
@@ -12154,7 +12167,7 @@
         msgEl.className = 'chat-msg-system';
         msgEl.textContent = text;
         $chatMessages.appendChild(msgEl);
-        $chatMessages.scrollTop = $chatMessages.scrollHeight;
+        scrollChatToLatest();
     }
 
     /* ==============================================

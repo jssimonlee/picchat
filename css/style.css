@@ -79,7 +79,7 @@ body.sudoku-chat-layout #btnCloseChat { display: none; }
 .sudoku-life-square { width: 11px; height: 16px; border: 2px solid #16a34a; border-radius: 3px; background: transparent; }
 .sudoku-life-square.lost { border-color: #ef4444; background: #ef4444; }
 #sudokuGame .sudoku-turn-card.my-turn { animation: none; }
-#sudokuGame #sudokuMyWrapper.my-turn { animation: sudoku-board-turn-pulse 1.2s ease-in-out infinite; }
+#sudokuGame #sudokuMyWrapper.my-turn { animation: sudoku-board-turn-pulse 1s ease-in-out 3; }
 @keyframes sudoku-board-turn-pulse {
     0%, 100% { box-shadow: 0 0 4px #16a34a; border-color: #16a34a; }
     50% { box-shadow: 0 0 26px #39ff14, inset 0 0 10px #bbf7d0; border-color: #39ff14; }
@@ -4268,7 +4268,7 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
     body.sudoku-portrait-chat #studio.chat-open ~ #sudokuOverlay {
         display: block; width: 100%; right: 0; top: 0;
         height: 100dvh; overflow-y: auto; overflow-x: hidden;
-        overscroll-behavior: contain; scroll-padding-top: 44px;
+        overscroll-behavior: contain; scroll-padding-top: 44px; overflow-anchor: none;
     }
     body.sudoku-portrait-chat #sudokuWindow {
         width: 100%; height: auto; min-height: 100%; max-height: none;
@@ -4296,8 +4296,9 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
         overflow: hidden; padding: 3px 8px; border-radius: 8px;
         width: 100%; height: 100%; text-align: left; cursor: pointer; pointer-events: auto;
-        background: #e3f2ff; color: #1e3a5f; font-size: 16px; line-height: 20px;
+        background: #b2c7d9; color: #1e3a5f; font-size: 16px; line-height: 20px;
         box-shadow: 0 2px 6px #0001;
+        animation: sudoku-chat-notice 1s ease-in-out 4;
     }
     body.sudoku-portrait-chat #sudokuGameUpdate:not([hidden]) {
         display: block; position: sticky; top: 0; width: 100%;
@@ -4307,9 +4308,11 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
         animation: sudoku-game-notice 1s ease-in-out infinite;
     }
     @keyframes sudoku-game-notice { 50% { background: #16a34a; } }
+    @keyframes sudoku-chat-notice { 50% { box-shadow: inset 0 0 0 3px #5b8def; } }
 }
 @media (prefers-reduced-motion: reduce) {
     body.sudoku-portrait-chat #sudokuGameUpdate:not([hidden]) { animation: none; }
+    body.sudoku-portrait-chat #sudokuChatPreview:not([hidden]) { animation: none; }
 }
 
 #sudokuGame .sudoku-stats-bar[hidden], #sudokuHeaderClock[hidden] { display: none !important; }
