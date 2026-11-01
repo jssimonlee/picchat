@@ -1256,6 +1256,7 @@
                     players: sudokuState.players,
                     turnOrder: sudokuState.turnOrder,
                     currentTurnIndex: sudokuState.currentTurnIndex,
+                    turnRevision: sudokuState.turnRevision || 0,
                     pausedBy: sudokuState.pausedBy || null,
                     secondsRemaining: sudokuState.secondsRemaining,
                     elapsedSeconds: sudokuState.gameSecondsElapsed
@@ -3988,7 +3989,17 @@
         if (resume ? sudokuState.pausedBy !== network.myPeerId : Boolean(sudokuState.pausedBy)) return;
         const payload = { action: resume ? 'resume' : 'pause', peerId: network.myPeerId };
         network.sendSudoku(payload);
-        if (!network.isHost) handleSudokuNetworkMessage(network.myPeerId, payload);
+    }
+
+    function submitSudokuTurnAction(payload) {
+        payload.turnRevision = sudokuState.turnRevision || 0;
+        if (network.isHost) handleSudokuNetworkMessage(network.myPeerId, payload);
+        else network.sendSudoku(payload);
+    }
+
+    function requestSudokuTurnSync() {
+        const host = network.connections.get(network.getHostPeerId());
+        if (host && host.conn.open) host.conn.send({ type: 'state-request' });
     }
 
     function updateSudokuPauseUI() {
@@ -4036,12 +4047,18 @@
         if (!document.getElementById('sudokuChatPreviewSlot')) {
             const slot = document.createElement('div');
             slot.id = 'sudokuChatPreviewSlot';
-            const preview = document.createElement('div');
+            const preview = document.createElement('button');
             preview.id = 'sudokuChatPreview';
-            preview.setAttribute('role', 'status');
+            preview.type = 'button';
+            preview.title = '채팅으로 이동';
+            preview.onclick = () => {
+                $chatSidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                preview.hidden = true;
+                slot.classList.remove('has-preview');
+            };
             preview.hidden = true;
             slot.appendChild(preview);
-            header.querySelector('.sudoku-title').appendChild(slot);
+            header.appendChild(slot);
             const notice = document.createElement('button');
             notice.id = 'sudokuGameUpdate';
             notice.type = 'button';
@@ -4351,7 +4368,45 @@
             } else return;
             updateSudokuPauseUI();
             signalPortraitGameUpdate();
-            if (network.isHost && fromPeerId !== network.myPeerId) network._broadcast({ type: 'sudoku', payload }, fromPeerId);
+            if (network.isHost && fromPeerId !== network.myPeerId) network._broadcast({ type: 'sudoku', payload });
+            return;
+        }
+
+        if (action === 'turn-commit') {
+            if (network.isHost || fromPeerId !== network.getHostPeerId()) return;
+            const revision = sudokuState.turnRevision || 0;
+            if (payload.turnRevision <= revision) return;
+            if (payload.turnRevision !== revision + 1 || sudokuState.pausedBy) {
+                requestSudokuTurnSync();
+                return;
+            }
+            sudokuState.turnRevision = payload.turnRevision;
+            const move = payload.move;
+            if (move.action === 'move') applySudokuMove(move.peerId, move.r, move.c, move.val, move.isCorrect, move.elapsedSecs, move.mistakes);
+            else applySudokuSkipTurn(move.peerId, move.elapsedSecs);
+            return;
+        }
+
+        if ((action === 'move' || action === 'skip-turn') && sudokuState.gameMode !== 'speed' && !sudokuState.isSolo) {
+            if (!network.isHost || sudokuState.status !== 'playing') return;
+            const revision = sudokuState.turnRevision || 0;
+            const activePeerId = sudokuState.turnOrder[sudokuState.currentTurnIndex];
+            if (sudokuState.pausedBy || payload.turnRevision !== revision || payload.peerId !== activePeerId) {
+                const sender = network.connections.get(fromPeerId);
+                if (sender && sender.conn.open) sender.conn.send({ type: 'state', state: network.getCanvasState() });
+                return;
+            }
+            if (fromPeerId !== payload.peerId && !(action === 'skip-turn' && fromPeerId === network.myPeerId)) return;
+            if (action === 'move') {
+                const { r, c, val } = payload;
+                if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || r > 8 || c < 0 || c > 8 || !Number.isInteger(val) || val < 1 || val > 9) return;
+                if (sudokuState.initialBoard[r][c] !== 0 || sudokuState.board[r][c] !== 0) return;
+                payload.isCorrect = sudokuState.solution[r][c] === val;
+            }
+            sudokuState.turnRevision = revision + 1;
+            if (action === 'move') applySudokuMove(payload.peerId, payload.r, payload.c, payload.val, payload.isCorrect, payload.elapsedSecs, payload.mistakes);
+            else applySudokuSkipTurn(payload.peerId, payload.elapsedSecs);
+            network._broadcast({ type: 'sudoku', payload: { action: 'turn-commit', turnRevision: revision + 1, move: payload } });
             return;
         }
 
@@ -4480,6 +4535,8 @@
 
             sudokuState.turnOrder = payload.players.map(p => p.peerId);
             sudokuState.currentTurnIndex = 0;
+
+            sudokuState.turnRevision = 0;
 
             showSudokuSubView('game');
             $sudokuGameDiff.textContent = payload.difficulty.toUpperCase();
@@ -4804,14 +4861,20 @@
 
         const nextMyMistakes = sudokuState.myMistakes + (isCorrect ? 0 : 1);
 
-        network.sendSudoku({
+        const move = {
             action: 'move',
             peerId: network.myPeerId,
             r, c, val,
             isCorrect,
             elapsedSecs: elapsed,
             mistakes: nextMyMistakes
-        });
+        };
+
+        if (!isSpeedMode) {
+            submitSudokuTurnAction(move);
+            return;
+        }
+        network.sendSudoku(move);
 
         // 게스트는 로컬 에코가 없으므로 수동으로 적용
         if (!network.isHost) {
@@ -5647,6 +5710,10 @@
             sudokuState.secondsRemaining = Math.max(5, sudokuState.turnTimeLimit - activePlayer.penaltySeconds);
             activePlayer.penaltySeconds = 0;
         }
+        if (Number.isFinite(sudokuState.restoredTurnSeconds)) {
+            sudokuState.secondsRemaining = sudokuState.restoredTurnSeconds;
+            delete sudokuState.restoredTurnSeconds;
+        }
         const nameText = activePlayer ? activePlayer.nickname : '알 수 없음';
 
         const $boardWrapper = $sudokuBoard.parentElement;
@@ -5708,21 +5775,17 @@
             if (sudokuState.secondsRemaining <= 0) {
                 clearInterval(sudokuState.turnTimerInterval);
                 
-                if (isMyTurn) {
+                if (network.isHost || sudokuState.isSolo) {
                     if (sudokuState.isSolo) {
                         applySudokuSkipTurn(network.myPeerId, sudokuState.turnTimeLimit);
                         return;
                     }
 
-                    network.sendSudoku({
+                    submitSudokuTurnAction({
                         action: 'skip-turn',
-                        peerId: network.myPeerId,
+                        peerId: activePeerId,
                         elapsedSecs: sudokuState.turnTimeLimit
                     });
-                    // 게스트는 로컬 에코가 없으므로 수동으로 적용
-                    if (!network.isHost) {
-                        applySudokuSkipTurn(network.myPeerId, sudokuState.turnTimeLimit);
-                    }
                 }
             }
         }, 1000);
@@ -6256,6 +6319,10 @@
         }));
         sudokuState.turnOrder = hostState.turnOrder;
         sudokuState.currentTurnIndex = hostState.currentTurnIndex;
+        sudokuState.turnRevision = hostState.turnRevision || 0;
+        sudokuState.restoredTurnSeconds = hostState.secondsRemaining;
+        const me = sudokuState.players.find(p => p.peerId === network.myPeerId);
+        if (sudokuState.gameMode !== 'speed') sudokuState.myMistakes = me ? (me.mistakes || 0) : 0;
 
         $sudokuOverlay.hidden = false;
         showSudokuSubView('game');
