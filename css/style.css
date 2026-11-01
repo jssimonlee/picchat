@@ -46,12 +46,69 @@
 }
 
 /* ========== RESET ========== */
+body.sudoku-chat-layout { --game-chat-width: clamp(230px, 27vw, 340px); }
+body.sudoku-chat-layout #studio .chat-sidebar {
+    inset: 0 0 0 auto; width: var(--game-chat-width); height: 100dvh;
+    z-index: 1100;
+}
+body.sudoku-chat-layout #studio.chat-open ~ #sudokuOverlay {
+    right: var(--game-chat-width); width: calc(100vw - var(--game-chat-width));
+}
+body.sudoku-chat-layout #btnCloseChat { display: none; }
+#sudokuOverlay .sudoku-header {
+    padding: 8px 14px; gap: 8px; flex: 0 0 auto; min-height: 48px;
+}
+#sudokuOverlay .sudoku-title { min-width: 0; gap: 6px; }
+#sudokuOverlay .sudoku-header h2 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sudokuOverlay .sudoku-header-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; margin-left: auto; }
+#sudokuOverlay #btnSudokuPause { width: auto; padding: 7px 10px; font-size: 12px; white-space: nowrap; }
+#sudokuOverlay #btnSudokuClose { width: 30px; height: 30px; flex: 0 0 30px; }
+#sudokuGame .sudoku-game-right { min-width: 0; }
+#sudokuGame .sudoku-stat-item[hidden] { display: none !important; }
+#sudokuGame .sudoku-numpad { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#sudokuGame .sudoku-action-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#sudokuGame .sudoku-action-btn { min-width: 0; }
+#sudokuGame #sudokuPeerBoardArea { display: none !important; }
+.sudoku-player-life-icons { display: inline-flex; gap: 4px; flex: 0 0 auto; }
+.sudoku-life-square { width: 11px; height: 16px; border: 2px solid #16a34a; border-radius: 3px; background: transparent; }
+.sudoku-life-square.lost { border-color: #ef4444; background: #ef4444; }
+#sudokuGame .sudoku-turn-card.my-turn { animation: none; }
+#sudokuGame #sudokuMyWrapper.my-turn { animation: sudoku-board-turn-pulse 1.2s ease-in-out infinite; }
+@keyframes sudoku-board-turn-pulse {
+    0%, 100% { box-shadow: 0 0 4px #16a34a; border-color: #16a34a; }
+    50% { box-shadow: 0 0 26px #39ff14, inset 0 0 10px #bbf7d0; border-color: #39ff14; }
+}
+@media (max-width: 768px) {
+    body.sudoku-chat-layout { --game-chat-width: clamp(130px, 34vw, 240px); }
+    body.sudoku-chat-layout #studio .chat-header { padding: 6px; min-height: 44px; }
+    body.sudoku-chat-layout #studio .chat-title-row { gap: 0; }
+    body.sudoku-chat-layout #studio .chat-header h3 { font-size: 12px; }
+    body.sudoku-chat-layout #studio .chat-settings-btn,
+    body.sudoku-chat-layout #studio .chat-mask-btn { width: 26px; height: 30px; }
+    body.sudoku-chat-layout #studio .chat-header > div { gap: 0 !important; }
+    body.sudoku-chat-layout #studio .chat-messages { padding: 8px 5px; }
+    body.sudoku-chat-layout #studio .chat-msg-bubble { max-width: 100%; padding: 6px; font-size: 12px; }
+    body.sudoku-chat-layout #studio .chat-input-area { padding: 6px; }
+    body.sudoku-chat-layout #studio .chat-input-area > div:last-child { flex-wrap: wrap; }
+    body.sudoku-chat-layout #studio #chatInput { flex-basis: 100%; width: 100%; padding: 6px; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-header { padding: 5px; gap: 3px; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-header h2 { font-size: 12px; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-logo-icon { display: none; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-header-actions { gap: 5px; }
+    body.sudoku-chat-layout #sudokuOverlay #btnSudokuPause { padding: 5px; font-size: 10px; }
+    #sudokuGame #sudokuDuelStatus { max-width: 384px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #sudokuGame #sudokuMyWrapper.my-turn { animation: none; border-color: #16a34a; }
+}
+
 #sudokuDuelStatus {
     display: grid;
-    grid-template-columns: 3fr 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     width: 100%;
     align-items: stretch;
+    max-width: 504px;
 }
 #sudokuDuelStatus[hidden], #sudokuPauseCover[hidden] { display: none; }
 #sudokuDuelStatus .sudoku-turn-card { margin: 0; padding: 12px; }

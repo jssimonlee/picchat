@@ -3917,12 +3917,15 @@
         const right = $sudokuGame.querySelector('.sudoku-game-right');
         const life = $sudokuHealthBars.parentElement;
         if (duel) {
-            row.append($sudokuTurnCard, life);
+            row.append($sudokuTurnCard);
+            stats.append(life);
+            life.hidden = true;
             right.prepend(stats);
             $sudokuWindow.style.maxWidth = '1060px';
-            $sudokuGame.querySelector('.sudoku-game-layout').style.gridTemplateColumns = '1.55fr 1fr';
+            $sudokuGame.querySelector('.sudoku-game-layout').style.gridTemplateColumns = 'minmax(0, 1.8fr) minmax(0, 1fr)';
             $sudokuPeerBoardArea.hidden = true;
         } else {
+            life.hidden = false;
             right.prepend($sudokuTurnCard);
             stats.append(life);
             $sudokuGame.querySelector('.sudoku-game-left').prepend(stats);
@@ -3935,7 +3938,6 @@
     function setupSudokuEvents() {
         document.getElementById('btnSudokuPause').onclick = () => requestSudokuPause(false);
         document.getElementById('btnSudokuResume').onclick = () => requestSudokuPause(true);
-        document.getElementById('btnSudokuChat').onclick = () => toggleChat(true);
         window.addEventListener('blur', () => requestSudokuPause(false));
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') requestSudokuPause(false);
@@ -5684,8 +5686,13 @@
                 pName.className = 'player-name';
                 
                 const dot = document.createElement('span');
-                dot.className = 'player-color-dot';
-                dot.style.background = p.color;
+                dot.className = 'sudoku-player-life-icons';
+                dot.setAttribute('aria-label', `실수 ${p.mistakes || 0}회, 생명 ${Math.max(0, 2 - (p.mistakes || 0))}개`);
+                for (let i = 0; i < 2; i++) {
+                    const life = document.createElement('span');
+                    life.className = 'sudoku-life-square' + (i < (p.mistakes || 0) ? ' lost' : '');
+                    dot.appendChild(life);
+                }
                 pName.appendChild(dot);
                 
                 const nameTxt = document.createTextNode(`${idx + 1}. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`);
@@ -6229,6 +6236,7 @@
     }
 
     function resetSudoku() {
+        document.body.classList.remove('sudoku-chat-layout');
         sudokuState.pausedBy = null;
         updateSudokuPauseUI();
         resetSudokuTimers();
@@ -6297,6 +6305,8 @@
         $sudokuGame.hidden = (view !== 'game');
         $sudokuResult.hidden = (view !== 'result');
         if (view === 'game') setupSudokuDuelLayout();
+        document.body.classList.toggle('sudoku-chat-layout', view === 'game');
+        if (view === 'game' && !isChatOpen) toggleChat(true);
     }
 
     /* ==========================================================================
@@ -10738,6 +10748,7 @@
     }
 
     function toggleChat(forceState) {
+        if (document.body.classList.contains('sudoku-chat-layout')) forceState = true;
         isChatOpen = typeof forceState === 'boolean' ? forceState : !isChatOpen;
         $chatSidebar.hidden = !isChatOpen;
         $btnToggleChat.classList.toggle('active', isChatOpen);
@@ -10903,7 +10914,16 @@
             msgEl.style.opacity = '0';
             msgEl.style.transform = 'translateY(-10px)';
             timerState.removalTimerId = setTimeout(() => {
-                msgEl.remove();
+                // Keep the layout slot while removing the expired content itself.
+                // Collapsing this row would pull all newer messages upward.
+                const height = msgEl.getBoundingClientRect().height;
+                msgEl.style.height = `${height}px`;
+                msgEl.style.minHeight = `${height}px`;
+                msgEl.style.flexShrink = '0';
+                msgEl.style.visibility = 'hidden';
+                msgEl.replaceChildren();
+                delete msgEl.dataset.msgId;
+                msgEl.classList.remove('unread-message');
             }, 500);
             return;
         }
