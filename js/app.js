@@ -340,6 +340,28 @@
     const $chatSidebar = document.getElementById('chatSidebar');
     const chatHome = $chatSidebar.parentElement;
     let gameChatPreviewTimer = null;
+    let sudokuMobileStatHomes = null;
+
+    function syncSudokuMobileStats() {
+        const mobile = document.body.classList.contains('sudoku-chat-layout') && isMobileLayout();
+        const clock = document.getElementById('sudokuHeaderClock');
+        const heading = $sudokuGame.querySelector('.sudoku-leaderboard-card h4');
+        if (!sudokuMobileStatHomes) {
+            sudokuMobileStatHomes = [$sudokuGameDiff, $sudokuGameTimer].map(element => {
+                const marker = document.createComment('original sudoku stat');
+                element.before(marker);
+                return { element, marker, item: element.parentElement };
+            });
+        }
+        sudokuMobileStatHomes.forEach(({ element, marker, item }, index) => {
+            if (mobile) (index === 0 ? heading : clock).appendChild(element);
+            else marker.after(element);
+            item.hidden = mobile;
+        });
+        clock.hidden = !mobile;
+        const stats = $sudokuGame.querySelector('.sudoku-stats-bar');
+        stats.hidden = mobile && sudokuState.gameMode !== 'speed' && !sudokuState.isSolo;
+    }
 
     function syncPortraitGameChat() {
         const portrait = document.body.classList.contains('sudoku-chat-layout')
@@ -353,6 +375,7 @@
             document.getElementById('sudokuChatPreview')?.setAttribute('hidden', '');
             document.getElementById('sudokuGameUpdate')?.setAttribute('hidden', '');
         }
+        syncSudokuMobileStats();
     }
 
     function showPortraitChatPreview(nickname, text) {
@@ -361,8 +384,12 @@
         if (!preview) return;
         preview.textContent = `${nickname}: ${String(text).slice(0, 120)}`;
         preview.hidden = false;
+        document.getElementById('sudokuChatPreviewSlot').classList.add('has-preview');
         clearTimeout(gameChatPreviewTimer);
-        gameChatPreviewTimer = setTimeout(() => { preview.hidden = true; preview.textContent = ''; }, 4000);
+        gameChatPreviewTimer = setTimeout(() => {
+            preview.hidden = true; preview.textContent = '';
+            document.getElementById('sudokuChatPreviewSlot').classList.remove('has-preview');
+        }, 4000);
     }
 
     function signalPortraitGameUpdate() {
@@ -4014,7 +4041,7 @@
             preview.setAttribute('role', 'status');
             preview.hidden = true;
             slot.appendChild(preview);
-            header.after(slot);
+            header.querySelector('.sudoku-title').appendChild(slot);
             const notice = document.createElement('button');
             notice.id = 'sudokuGameUpdate';
             notice.type = 'button';
