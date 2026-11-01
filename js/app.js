@@ -5373,6 +5373,19 @@
         }
     }
 
+    function getSudokuTurnStandings() {
+        return sudokuState.players.map(p => ({
+            ...p,
+            avg: p.correctCount > 0 ? p.totalTime / p.correctCount : Infinity
+        })).sort((a, b) => {
+            const eliminated = Number((a.mistakes || 0) >= 2) - Number((b.mistakes || 0) >= 2);
+            if (eliminated) return eliminated;
+            if (a.avg !== b.avg) return a.avg < b.avg ? -1 : 1;
+            if ((a.mistakes || 0) !== (b.mistakes || 0)) return (a.mistakes || 0) - (b.mistakes || 0);
+            return b.correctCount - a.correctCount;
+        });
+    }
+
     function endSudokuGame(isWin, reason) {
         sudokuState.pausedBy = null;
         updateSudokuPauseUI();
@@ -5404,6 +5417,25 @@
         }
 
         // Set up in-game overlay texts
+        const isTurnDuel = !isSpeedMode && !sudokuState.isSolo;
+        let duelSummary = '';
+        if (isTurnDuel) {
+            const standings = getSudokuTurnStandings();
+            const mine = standings.find(p => p.peerId === network.myPeerId);
+            const opponent = standings.find(p => p.peerId !== network.myPeerId);
+            const lost = reason === 'turn-me-fail' || reason === 'turn-me-quit';
+            const won = reason === 'turn-peer-fail' || reason === 'turn-peer-quit';
+            const tied = !lost && !won && standings.length > 1
+                && standings[0].avg === standings[1].avg
+                && (standings[0].mistakes || 0) === (standings[1].mistakes || 0)
+                && standings[0].correctCount === standings[1].correctCount;
+            sudokuState.winnerId = lost ? opponent?.peerId : won ? network.myPeerId : tied ? null : standings[0]?.peerId;
+            sudokuState.isDrawResult = tied;
+            isWin = !tied && sudokuState.winnerId === network.myPeerId;
+            const average = p => p && Number.isFinite(p.avg) ? `${p.avg.toFixed(2)}초` : '정답 기록 없음';
+            duelSummary = `내 평균 입력 시간: ${average(mine)} · 상대 평균: ${average(opponent)}`;
+        }
+
         let overlayBadgeValue = '🏆';
         let overlayTitleValue = '승리!';
         let overlayTitleClass = 'win';
@@ -5451,6 +5483,13 @@
             overlaySubtitleValue = isWin ? '상대방이 두 번 실수하여 승리했습니다.' : '두 번 실수하여 생명을 모두 잃었습니다.';
         }
 
+        if (isTurnDuel) {
+            overlayBadgeValue = sudokuState.isDrawResult ? '🤝' : isWin ? '🏆' : '💀';
+            overlayTitleValue = sudokuState.isDrawResult ? '무승부' : isWin ? '승리' : '패배';
+            overlayTitleClass = sudokuState.isDrawResult ? '' : isWin ? 'win' : 'lose';
+            overlaySubtitleValue = duelSummary;
+        }
+
         // Apply to overlay
         const overlay = document.getElementById('sudokuGameOverlay');
         const badge = document.getElementById('sudokuOverlayBadge');
@@ -5471,7 +5510,7 @@
             // Win: Confetti / Lose: Screen Shake
             if (overlayTitleClass === 'win') {
                 triggerSudokuConfetti(overlay);
-            } else {
+            } else if (overlayTitleClass === 'lose') {
                 $sudokuGame.classList.add('sudoku-shake');
                 setTimeout(() => {
                     $sudokuGame.classList.remove('sudoku-shake');
@@ -5513,6 +5552,12 @@
         if (reason === 'turn-me-fail' || reason === 'turn-peer-fail') {
             $sudokuResultTitle.textContent = isWin ? '🏆 승리!' : '💀 패배';
             $sudokuResultMsg.textContent = overlaySubtitleValue;
+        }
+
+        if (isTurnDuel) {
+            $sudokuResultTitle.textContent = overlayTitleValue;
+            $sudokuResultTitle.className = isWin ? '' : sudokuState.isDrawResult ? '' : 'error-title';
+            $sudokuResultMsg.textContent = duelSummary;
         }
 
         // Wait 3 seconds, then transition to result screen
@@ -5817,6 +5862,8 @@
         if (player) {
             player.totalTime += elapsed;
         }
+        const stats = sudokuState.players.find(p => p.peerId === peerId);
+        if (stats && stats !== player) stats.totalTime += elapsed;
 
         showToast(`⏰ 시간 초과! 다음 턴으로 넘어갑니다.`);
 
@@ -6146,18 +6193,8 @@
             item.appendChild(scoreDiv);
             $sudokuFinalLeaderboardList.appendChild(item);
         } else {
-            const sorted = [...sudokuState.players].map(p => {
-                const match = sudokuState.participants.find(x => x.peerId === p.peerId) || sudokuState.participants[0];
-                const totalTime = match ? match.totalTime : 0;
-                const correctCount = match ? match.correctCount : 0;
-                const avg = correctCount > 0 ? (totalTime / correctCount) : Infinity;
-                return {
-                    ...p,
-                    totalTime,
-                    correctCount,
-                    avg
-                };
-            }).sort((a, b) => a.avg - b.avg);
+            const sorted = getSudokuTurnStandings().sort((a, b) =>
+                Number(b.peerId === sudokuState.winnerId) - Number(a.peerId === sudokuState.winnerId));
 
             sorted.forEach((p, idx) => {
                 const item = document.createElement('div');
@@ -6176,7 +6213,8 @@
 
                 const medal = idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : '';
                 const nameSpan = document.createElement('span');
-                nameSpan.textContent = `${medal}${idx + 1}위. ${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname}`;
+                const outcome = sudokuState.isDrawResult ? '무승부' : p.peerId === sudokuState.winnerId ? '승리' : '패배';
+                nameSpan.textContent = `${medal}${p.peerId === network.myPeerId ? `${p.nickname} (나)` : p.nickname} · ${outcome}`;
                 nameRow.appendChild(nameSpan);
                 infoDiv.appendChild(nameRow);
 
@@ -6420,6 +6458,10 @@
     }
 
     function applySudokuQuit(quitterId) {
+        if (!sudokuState.isSolo && sudokuState.gameMode !== 'speed') {
+            endSudokuGame(quitterId !== network.myPeerId, quitterId === network.myPeerId ? 'turn-me-quit' : 'turn-peer-quit');
+            return;
+        }
         clearInterval(sudokuState.turnTimerInterval);
         clearInterval(sudokuState.gameTimerInterval);
 
