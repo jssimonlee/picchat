@@ -2771,9 +2771,26 @@ input, button, textarea {
 }
 
 .sudoku-num-btn.completed {
+    position: relative;
     background: rgba(16, 185, 129, 0.15);
     color: #10b981;
     border-color: rgba(16, 185, 129, 0.2);
+}
+.sudoku-num-btn.completed::after {
+    content: '✓';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #15803d;
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 11px;
+    text-align: center;
+    pointer-events: none;
 }
 
 .sudoku-num-btn.disabled {

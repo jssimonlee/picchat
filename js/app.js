@@ -5224,6 +5224,8 @@
 
         document.querySelectorAll('.sudoku-num-btn').forEach(btn => {
             const val = parseInt(btn.getAttribute('data-val'));
+            btn.setAttribute('aria-label', counts[val] >= 9 ? `${val}, 완료` : String(val));
+            btn.title = counts[val] >= 9 ? `${val}: 9개 모두 입력 완료` : `${val} 입력`;
             if (counts[val] >= 9) {
                 btn.classList.add('completed');
                 btn.classList.remove('disabled');
