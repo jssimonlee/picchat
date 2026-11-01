@@ -46,6 +46,48 @@
 }
 
 /* ========== RESET ========== */
+#sudokuDuelStatus {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    gap: 12px;
+    width: 100%;
+    align-items: stretch;
+}
+#sudokuDuelStatus[hidden], #sudokuPauseCover[hidden] { display: none; }
+#sudokuDuelStatus .sudoku-turn-card { margin: 0; padding: 12px; }
+#sudokuDuelStatus .sudoku-stat-item { background: #f1f5f9; border-radius: 12px; padding: 8px; min-width: 0; }
+#sudokuDuelStatus .sudoku-health-bars { flex-direction: column; font-size: 11px; color: #b4233b; }
+.sudoku-turn-duel #sudokuMyWrapper { max-width: 504px; }
+.sudoku-turn-duel .sudoku-game-left { min-width: 0; }
+.sudoku-turn-duel .sudoku-stats-bar { max-width: 100%; }
+#sudokuPauseCover {
+    position: absolute; inset: 0; z-index: 150;
+    background: #e8eef5; color: #1e293b;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; padding: 24px; text-align: center;
+}
+.sudoku-is-paused > .sudoku-game-layout { visibility: hidden; }
+#studio.chat-open ~ #sudokuOverlay { right: 340px; width: calc(100vw - 340px); }
+#studio.chat-open .chat-sidebar { z-index: 1100; }
+.sudoku-cell.opponent-last-move {
+    position: relative; z-index: 20;
+    outline: 4px solid #39ff14; outline-offset: -2px;
+    box-shadow: 0 0 24px #39ff14; background: #d1ffb8 !important;
+    animation: sudoku-opponent-focus 2s ease-out !important;
+}
+@keyframes sudoku-opponent-focus {
+    0%, 25% { transform: scale(1.4); }
+    45%, 80% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+@media (max-width: 768px) {
+    .sudoku-turn-duel .sudoku-game-layout { grid-template-columns: 1fr !important; }
+    .sudoku-turn-duel #sudokuMyWrapper { max-width: 384px; }
+    #sudokuDuelStatus { gap: 6px; }
+    #sudokuDuelStatus .sudoku-turn-status { font-size: 12px; }
+    #studio.chat-open ~ #sudokuOverlay { right: 0; width: 100vw; }
+}
+
 *, *::before, *::after {
     margin: 0;
     padding: 0;
