@@ -46,6 +46,12 @@
 }
 
 /* ========== RESET ========== */
+#appUpdateButton {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 10000; padding: 12px 18px; border-radius: 24px;
+    background: #2563eb; color: white; font-size: 13px; font-weight: 700;
+    box-shadow: 0 4px 16px #0004; cursor: pointer; white-space: nowrap;
+}
 body.sudoku-chat-layout { --game-chat-width: clamp(230px, 27vw, 340px); }
 body.sudoku-chat-layout #studio .chat-sidebar {
     inset: 0 0 0 auto; width: var(--game-chat-width); height: 100dvh;
@@ -4227,5 +4233,30 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
 @media (max-width: 520px) {
     .top-bar-center {
         display: none;
+    }
+}
+
+/* Keep the game and chat in the same visible viewport when a phone keyboard opens. */
+@media (max-width: 768px) {
+    body.sudoku-chat-layout #studio .chat-sidebar {
+        top: var(--game-visible-top, 0px);
+        height: var(--game-visible-height, 100dvh);
+        bottom: auto;
+    }
+    body.sudoku-chat-layout #studio.chat-open ~ #sudokuOverlay {
+        top: var(--game-visible-top, 0px);
+        height: var(--game-visible-height, 100dvh);
+    }
+    body.sudoku-chat-layout #sudokuWindow {
+        height: 100%; min-width: 0;
+    }
+    body.sudoku-chat-layout #sudokuGame { padding: 8px; }
+    body.sudoku-chat-layout #sudokuDuelStatus .sudoku-turn-card { padding: 8px 5px; }
+    body.sudoku-chat-layout #sudokuDuelStatus .sudoku-turn-status { font-size: 11px; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-title { flex: 1; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-header h2 { font-size: 11px; }
+    body.sudoku-chat-layout #sudokuOverlay .sudoku-header-actions { gap: 4px; }
+    body.sudoku-chat-layout #sudokuLeaderboardList .sudoku-leaderboard-item {
+        flex-wrap: wrap; gap: 4px; padding: 6px; font-size: 11px;
     }
 }

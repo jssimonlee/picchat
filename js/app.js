@@ -5,6 +5,32 @@
 
 (function () {
     'use strict';
+    const loadedAppUrl = document.currentScript ? document.currentScript.src : '';
+    let lastVersionCheck = 0;
+
+    async function checkForAppUpdate() {
+        if (!loadedAppUrl || document.visibilityState === 'hidden' || Date.now() - lastVersionCheck < 60000) return;
+        lastVersionCheck = Date.now();
+        try {
+            const response = await fetch(new URL('index.html', location.href), { cache: 'no-store' });
+            if (!response.ok) return;
+            const latest = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const script = latest.querySelector('script[src*="js/app.js?v="]');
+            if (!script || new URL(script.getAttribute('src'), location.href).href === loadedAppUrl) return;
+            if (document.getElementById('appUpdateButton')) return;
+            const button = document.createElement('button');
+            button.id = 'appUpdateButton';
+            button.textContent = '새 버전이 있습니다 · 새로고침';
+            button.title = '새로고침하면 진행 중인 게임에서 나가게 됩니다.';
+            button.onclick = () => {
+                if (sudokuState.status === 'playing' && !window.confirm('새 버전을 적용하려면 게임에서 나가고 새로고침해야 합니다. 적용할까요?')) return;
+                location.reload();
+            };
+            document.body.appendChild(button);
+        } catch (error) {
+            console.debug('[App] Version check unavailable');
+        }
+    }
 
     /* ---------- DOM Elements ---------- */
 
@@ -384,6 +410,8 @@
         if (!$chatSidebar) return;
 
         if (!isChatOpen || !isMobileLayout()) {
+            document.body.style.removeProperty('--game-visible-height');
+            document.body.style.removeProperty('--game-visible-top');
             $chatSidebar.style.removeProperty('--mobile-chat-height');
             $chatSidebar.style.removeProperty('--mobile-chat-top');
             return;
@@ -392,6 +420,8 @@
         const viewport = window.visualViewport;
         const visibleHeight = Math.round(viewport ? viewport.height : window.innerHeight);
         const visibleTop = Math.round(viewport ? viewport.offsetTop : 0);
+        document.body.style.setProperty('--game-visible-height', `${visibleHeight}px`);
+        document.body.style.setProperty('--game-visible-top', `${visibleTop}px`);
         $chatSidebar.style.setProperty('--mobile-chat-height', `${visibleHeight}px`);
         $chatSidebar.style.setProperty('--mobile-chat-top', `${visibleTop}px`);
         scrollChatToLatest();
@@ -590,6 +620,10 @@
     /* ---------- Initialize ---------- */
 
     function init() {
+        checkForAppUpdate();
+        window.addEventListener('pageshow', checkForAppUpdate);
+        window.addEventListener('focus', checkForAppUpdate);
+        document.addEventListener('visibilitychange', checkForAppUpdate);
         setupLobbyEvents();
         setupPresenceTracking();
         // Auto-fill nickname from localStorage
