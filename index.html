@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20261101-9">
+    <link rel="stylesheet" href="css/style.css?v=20261101-10">
 </head>
 <body>
     <!-- ===== LOBBY SCREEN ===== -->
@@ -469,6 +469,11 @@
                     <h3 id="sudokuPauseText">일시정지</h3>
                     <p>시작한 참가자만 재개할 수 있습니다. 채팅은 계속 사용할 수 있습니다.</p>
                     <button id="btnSudokuResume" class="btn btn-primary" type="button">▶ 게임 재개</button>
+                    <div class="sudoku-pause-chat-hint">
+                        <p>💬 일시정지 중에도 아래 채팅창에서 대화할 수 있습니다.</p>
+                        <small>아래로 스크롤하거나 버튼을 눌러 이용하세요.</small>
+                        <button id="btnSudokuPauseChat" class="btn btn-secondary" type="button">↓ 채팅으로 이동</button>
+                    </div>
                 </div>
                 <!-- Game result overlay (for dramatic transitions) -->
                 <div id="sudokuGameOverlay" class="sudoku-game-overlay">
@@ -1491,6 +1496,6 @@
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="js/canvas.js?v=20260808-4"></script>
     <script src="js/network.js?v=20260912-1"></script>
-    <script src="js/app.js?v=20261101-9"></script>
+    <script src="js/app.js?v=20261101-10"></script>
 </body>
 </html>

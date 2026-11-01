@@ -4093,6 +4093,9 @@
         }
         document.getElementById('btnSudokuPause').onclick = () => requestSudokuPause(false);
         document.getElementById('btnSudokuResume').onclick = () => requestSudokuPause(true);
+        document.getElementById('btnSudokuPauseChat').onclick = () => {
+            $chatSidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
         window.addEventListener('blur', () => requestSudokuPause(false));
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') requestSudokuPause(false);
