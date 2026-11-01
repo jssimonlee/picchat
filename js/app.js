@@ -384,13 +384,17 @@
         const preview = document.getElementById('sudokuChatPreview');
         if (!preview) return;
         preview.textContent = `💬 ${nickname}: ${String(text).slice(0, 120)}`;
+        const progress = document.createElement('span');
+        progress.className = 'sudoku-chat-preview-progress';
+        progress.setAttribute('aria-hidden', 'true');
+        preview.appendChild(progress);
         preview.hidden = false;
         document.getElementById('sudokuChatPreviewSlot').classList.add('has-preview');
         clearTimeout(gameChatPreviewTimer);
         gameChatPreviewTimer = setTimeout(() => {
             preview.hidden = true; preview.textContent = '';
             document.getElementById('sudokuChatPreviewSlot').classList.remove('has-preview');
-        }, 4000);
+        }, 10000);
     }
 
     function signalPortraitGameUpdate() {

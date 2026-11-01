@@ -4294,6 +4294,7 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
         padding: 0; pointer-events: none; z-index: 2; overflow: hidden;
     }
     body.sudoku-portrait-chat #sudokuChatPreview:not([hidden]) {
+        position: relative;
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
         overflow: hidden; padding: 3px 8px; border-radius: 8px;
         width: 100%; height: 100%; text-align: left; cursor: pointer; pointer-events: auto;
@@ -4301,6 +4302,13 @@ input[type="checkbox"]:checked + .custom-switch .custom-switch-handle {
         box-shadow: 0 2px 6px #0001;
         animation: sudoku-chat-notice 1s ease-in-out 4;
     }
+    .sudoku-chat-preview-progress {
+        position: absolute; left: 0; bottom: 0; width: 100%; height: 3px;
+        background: #2563eb; transform-origin: left;
+        animation: sudoku-chat-preview-time 10s linear forwards;
+        pointer-events: none;
+    }
+    @keyframes sudoku-chat-preview-time { to { transform: scaleX(0); } }
     body.sudoku-portrait-chat #sudokuGameUpdate:not([hidden]) {
         display: block; position: sticky; top: 0; width: 100%;
         height: 40px; margin-bottom: -40px; z-index: 160;
